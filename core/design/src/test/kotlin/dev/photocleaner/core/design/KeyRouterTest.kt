@@ -75,4 +75,13 @@ class KeyRouterTest {
         router.setTyping(true)
         assertFalse(router.dispatch(down(Key.Spacebar)))
     }
+
+    @Test
+    fun `space goes to the screen's shortcuts`() {
+        val router = KeyRouter()
+        val keys = mutableListOf<Key>()
+        router.register(Any()) { keys += it; true }
+        router.tap(Key.Spacebar)
+        assertEquals(listOf(Key.Spacebar), keys)
+    }
 }

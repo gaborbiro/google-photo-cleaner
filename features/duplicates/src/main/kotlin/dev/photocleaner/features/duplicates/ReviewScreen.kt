@@ -48,7 +48,8 @@ import dev.photocleaner.core.design.Banner
 import dev.photocleaner.core.design.HoverExpandButton
 import dev.photocleaner.core.design.NewBadge
 import dev.photocleaner.core.design.KeyShortcuts
-import dev.photocleaner.core.design.Notice
+import dev.photocleaner.core.design.ActionBar
+import dev.photocleaner.core.design.focusPop
 import dev.photocleaner.core.design.StatusTone
 import dev.photocleaner.core.design.color
 import dev.photocleaner.core.design.noKeyboardFocus
@@ -57,7 +58,7 @@ import dev.photocleaner.features.shared.viewer.PhotoViewerOverlay
 /**
  * Window-wide, so the keys keep working wherever keyboard focus went.
  * Left hand on A S D F, Z below; K and U remain as aliases from the original layout.
- * Arrows move the focus ring, Enter views large, Del switches keep/trash.
+ * Arrows move the focus ring, Enter views large, Space switches keep/trash.
  */
 @Composable
 internal fun ReviewShortcuts(viewModel: ReviewViewModel) {
@@ -66,43 +67,47 @@ internal fun ReviewShortcuts(viewModel: ReviewViewModel) {
             Key.D -> viewModel.onApprove()
             Key.F, Key.K -> viewModel.onKeep()
             Key.S -> viewModel.onDefer()
-            Key.A -> viewModel.onSelectAll()
+            Key.A -> viewModel.onFocusAll()
             Key.Z, Key.U -> viewModel.onUndo()
             Key.DirectionLeft -> viewModel.onFocusMove(-1, 0)
             Key.DirectionRight -> viewModel.onFocusMove(1, 0)
             Key.DirectionUp -> viewModel.onFocusMove(0, -1)
             Key.DirectionDown -> viewModel.onFocusMove(0, 1)
             Key.Enter -> viewModel.onOpenFocused()
-            Key.Delete -> viewModel.onToggleFocused()
+            Key.Spacebar -> viewModel.onToggleFocused()
             else -> return@KeyShortcuts false
         }
         true
     }
 }
 
-/** Pinned above the photos: what the group is, the actions, and feedback for the last key. */
+/** Pinned above the photos: the actions, with the group's selection count on their right. */
 @Composable
 internal fun ReviewBar(state: ReviewUiState, viewModel: ReviewViewModel, onOpenScan: () -> Unit) {
     Column(Modifier.padding(top = 12.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Every reason groups cannot be shown is fixed on the Scan library tab.
         state.blockedText?.let { Banner(it, StatusTone.CAUTION, actionLabel = "Open Scan library", onAction = onOpenScan) }
-        state.group?.let { group ->
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(group.selectionText, fontWeight = FontWeight.SemiBold)
-                group.warningText?.let { Text(it, color = StatusTone.NEGATIVE.color(), fontWeight = FontWeight.Bold) }
+        ActionBar(
+            status = {
+                state.group?.let { group ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        group.warningText?.let { Text(it, color = StatusTone.NEGATIVE.color(), fontWeight = FontWeight.Bold) }
+                        Text(group.selectionText, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            },
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onApprove) { Text("D · Trash selected") }
+                OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onKeep) { Text("F · Keep all") }
+                OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onDefer) { Text("S · Skip") }
+                OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onFocusAll) { Text("A · Focus all") }
+                OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onToggleFocused) { Text("Space · Toggle trash") }
+                OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onUndo) { Text("Z · Undo") }
+                OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onSearchMoreLike) { Text("Search more like these") }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onApprove) { Text("D · Trash selected") }
-            OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onKeep) { Text("F · Keep all") }
-            OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onDefer) { Text("S · Skip") }
-            OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onSelectAll) { Text("A · Select all") }
-            OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onToggleFocused) { Text("Del · Toggle trash") }
-            OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onUndo) { Text("Z · Undo") }
-            OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onSearchMoreLike) { Text("Search more like these") }
-        }
         state.previewsPausedText?.let { Text(it, color = StatusTone.CAUTION.color(), fontWeight = FontWeight.SemiBold) }
-        state.notice?.let { Notice(it) }
     }
 }
 
@@ -158,14 +163,16 @@ private fun GroupTiles(group: GroupUi, viewModel: ReviewViewModel) {
                     Box(
                         Modifier
                             .size(300.dp)
+                            .focusPop(tile.focusRingDp > 0)
                             .focusRing(tile.focusRingDp)
                             .border(BorderStroke(3.dp, tile.tone.color()))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .hoverable(hover)
                             .noKeyboardFocus()
-                            .clickable(enabled = tile.selectable) {
+                            // Any photo can be focused; only those that may go are switched (others are kept by rule).
+                            .clickable {
                                 viewModel.onTileFocused(tile.mediaKey)
-                                viewModel.onToggle(tile.mediaKey)
+                                if (tile.selectable) viewModel.onToggle(tile.mediaKey)
                             },
                         contentAlignment = Alignment.Center,
                     ) {

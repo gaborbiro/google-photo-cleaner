@@ -99,43 +99,61 @@ class SweepViewModel(
         columns = count.coerceAtLeast(1)
     }
 
-    /** The white outline shows only while the user steers with the arrow keys; a click hides it. */
+    /** The white outline shows once the user clicks a photo or uses the arrow keys. */
     private var ringVisible = false
 
     /** Whether the user has picked the focused photo (click or arrows) since these results appeared. */
     private var focusChosen = false
+
+    /** After A, every photo shown is focused (outline on all) until an arrow key or a click. */
+    private var allFocused = false
 
     /** New results, or the same ones re-sorted: start at the top with nothing focused yet. */
     private fun resetFocus() {
         focusedIndex = 0
         ringVisible = false
         focusChosen = false
+        allFocused = false
         anchor = null
     }
 
     fun onFocusMove(dx: Int, dy: Int) {
         if (noResultsSaid()) return
-        // Nothing picked yet: the first arrow press shows where the outline is, on the first photo.
-        if (focusChosen) {
-            val moved = (focusedIndex + dx + dy * columns).coerceIn(0, hits.size - 1)
-            if (ringVisible && moved == focusedIndex) {
-                say(if (dx < 0 || dy < 0) "Already at the first photo." else "Already at the last photo.", StatusTone.NEUTRAL)
-            }
-            focusedIndex = moved
+        when {
+            // The first arrow press returns to the single outline where the user was.
+            allFocused -> allFocused = false
+            // Nothing picked yet: the first arrow press shows where the outline is, on the first photo.
+            !focusChosen -> Unit
+            // At the first or last photo the outline simply stays: it is visibly there.
+            else -> focusedIndex = (focusedIndex + dx + dy * columns).coerceIn(0, hits.size - 1)
         }
         ringVisible = true
         focusChosen = true
         publish()
     }
 
-    /** Del: switch the focused photo between keep and trash. */
+    /** A: focuses every photo shown, without marking anything; Space then marks or unmarks them all. */
+    fun onFocusAll() {
+        if (noResultsSaid()) return
+        allFocused = true
+        focusChosen = true
+        publish()
+    }
+
+    /** Space: switch the focused photo between keep and trash; with everything focused (A), all of them. */
     fun onToggleFocused() {
         if (noResultsSaid()) return
+        if (allFocused) {
+            val shown = hits.map { it.item.mediaKey }
+            if (selected.containsAll(shown)) selected.removeAll(shown.toSet()) else selected += shown
+            anchor = null
+            publish()
+            return
+        }
         if (!focusChosen) {
-            // Never act on a photo the user cannot see marked: show the outline first.
+            // Never act on a photo the user cannot see marked: the first press shows the outline.
             ringVisible = true
             focusChosen = true
-            say("Del switches the outlined photo between keep and trash. Press it again, or move with the arrows first.", StatusTone.NEUTRAL)
             publish()
             return
         }
@@ -238,9 +256,10 @@ class SweepViewModel(
     fun onTileClicked(index: Int, shift: Boolean) {
         val key = hits.getOrNull(index)?.item?.mediaKey ?: return
         focusedIndex = index
-        // A click focuses the photo: the outline shows it is the one Del and Enter act on.
+        // A click focuses the photo: the outline shows it is the one Space and Enter act on.
         ringVisible = true
         focusChosen = true
+        allFocused = false
         val from = anchor
         if (shift && from != null) {
             (minOf(from, index)..maxOf(from, index)).forEach { selected += hits[it].item.mediaKey }
@@ -248,21 +267,6 @@ class SweepViewModel(
             selected.remove(key)
         }
         anchor = index
-        publish()
-    }
-
-    /** A: selects everything shown; when everything shown is already selected, deselects it all. */
-    fun onSelectOrDeselectAll() {
-        if (noResultsSaid()) return
-        val shown = hits.map { it.item.mediaKey }
-        if (selected.containsAll(shown)) {
-            selected.removeAll(shown.toSet())
-            anchor = null
-            say("Deselected all ${shown.size} photo(s) shown.", StatusTone.NEUTRAL)
-        } else {
-            selected += shown
-            say("Selected all ${shown.size} photo(s) shown for the trash. D trashes them; A again deselects them.", StatusTone.NEUTRAL)
-        }
         publish()
     }
 
@@ -286,7 +290,7 @@ class SweepViewModel(
 
     fun onApproveClicked() {
         when {
-            selected.isEmpty() -> say("Nothing is selected for the trash. Click photos, or press A to select all shown.", StatusTone.CAUTION)
+            selected.isEmpty() -> say("Nothing is selected for the trash.", StatusTone.CAUTION)
             // Pressing D again while asking: the card is already there, so point at it.
             confirming -> say("Press Enter to move them to the trash, or Esc to cancel.", StatusTone.CAUTION)
             else -> confirming = true
@@ -409,7 +413,7 @@ class SweepViewModel(
                     // Only photos marked for the trash have a border; the rest show the photo alone.
                     borderDp = if (hit.item.mediaKey in selected) 4 else 0,
                     borderTone = if (hit.item.mediaKey in selected) StatusTone.NEGATIVE else StatusTone.NEUTRAL,
-                    focusRingDp = if (ringVisible && index == focusedIndex) FOCUS_RING_DP else 0,
+                    focusRingDp = if (allFocused || (ringVisible && index == focusedIndex)) FOCUS_RING_DP else 0,
                     caption = captionOf(hit),
                     link = linkOf(hit),
                 )

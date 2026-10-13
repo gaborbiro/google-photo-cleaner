@@ -48,7 +48,7 @@ import dev.photocleaner.core.design.color
 
 /**
  * Full-window photo viewer. Esc or right-click closes, ←/→ step through the list,
- * Del switches the photo between keep and trash when [onToggle] is given.
+ * Space switches the photo between keep and trash when [onToggle] is given.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -69,7 +69,7 @@ fun PhotoViewerOverlay(
             Key.Escape -> onClose()
             Key.DirectionLeft -> onPrevious()
             Key.DirectionRight -> onNext()
-            Key.Delete -> onToggle?.invoke()
+            Key.Spacebar -> onToggle?.invoke()
             // Every other key is swallowed while the viewer is open, so the grid underneath stays put.
             else -> Unit
         }
@@ -136,7 +136,7 @@ private fun ViewerContent(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = onPrevious) { Text("← Previous") }
             OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = onNext) { Text("Next →") }
-            onToggle?.let { Button(modifier = Modifier.noKeyboardFocus(), onClick = it) { Text("Del · Toggle trash") } }
+            onToggle?.let { Button(modifier = Modifier.noKeyboardFocus(), onClick = it) { Text("Space · Toggle trash") } }
             OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = { uriHandler.openUri(ui.link) }) { Text("Open in Google Photos") }
             Button(modifier = Modifier.noKeyboardFocus(), onClick = onClose) { Text("Esc · Close") }
         }

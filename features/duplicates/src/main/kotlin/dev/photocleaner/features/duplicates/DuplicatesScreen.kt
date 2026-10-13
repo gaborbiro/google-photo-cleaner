@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.photocleaner.core.design.CollapsingHeaderLayout
+import dev.photocleaner.core.design.NoticeToast
+import androidx.compose.foundation.layout.Box
 import dev.photocleaner.core.design.color
 import dev.photocleaner.core.design.noKeyboardFocus
 
@@ -42,12 +44,16 @@ fun DuplicatesScreen(
     LaunchedEffect(review) { review.searchMoreLike.collect(onSearchMoreLike) }
     ReviewShortcuts(review)
 
-    CollapsingHeaderLayout(
-        modifier = Modifier.fillMaxSize(),
-        header = { ScanSection(scan, state, embedding::onStartOrPauseClicked) },
-        pinned = { ReviewBar(state, review, onOpenScan) },
-    ) {
-        ReviewContent(state, review)
+    Box(Modifier.fillMaxSize()) {
+        CollapsingHeaderLayout(
+            modifier = Modifier.fillMaxSize(),
+            header = { ScanSection(scan, state, embedding::onStartOrPauseClicked) },
+            pinned = { ReviewBar(state, review, onOpenScan) },
+        ) {
+            ReviewContent(state, review)
+        }
+        // Feedback floats over the photos instead of pushing them down.
+        NoticeToast(state.notice)
     }
     ReviewViewer(state, review)
 }

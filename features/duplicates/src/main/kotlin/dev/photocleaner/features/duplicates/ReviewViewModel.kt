@@ -136,20 +136,15 @@ class ReviewViewModel(
             allFocused -> allFocused = false
             // Nothing picked yet: the first arrow press shows where the outline is, on the first photo.
             !focusChosen -> Unit
-            else -> {
-                val moved = (focusedIndex + dx + dy * columns).coerceIn(0, count - 1)
-                if (ringVisible && moved == focusedIndex) {
-                    say(if (dx < 0 || dy < 0) "Already at the first photo." else "Already at the last photo.", StatusTone.NEUTRAL)
-                }
-                focusedIndex = moved
-            }
+            // At the first or last photo the outline simply stays: it is visibly there.
+            else -> focusedIndex = (focusedIndex + dx + dy * columns).coerceIn(0, count - 1)
         }
         ringVisible = true
         focusChosen = true
         publish()
     }
 
-    /** A click focuses the photo: the outline shows it is the one Del and Enter act on. */
+    /** A click focuses the photo: the outline shows it is the one Space and Enter act on. */
     fun onTileFocused(mediaKey: String) {
         val index = pending.firstOrNull()?.members?.indexOfFirst { it.photo.item.mediaKey == mediaKey } ?: return
         if (index >= 0) focusedIndex = index
@@ -159,7 +154,10 @@ class ReviewViewModel(
         publish()
     }
 
-    /** Del: switch the focused photo between keep and trash; with the whole group focused, flip them all. */
+    /**
+     * Space: switch the focused photo between keep and trash. With the whole group focused (A),
+     * mark every photo that can go for the trash, or, when they all are already, keep them all.
+     */
     fun onToggleFocused() {
         val group = currentGroupOrSay() ?: return
         if (allFocused) {
@@ -170,10 +168,9 @@ class ReviewViewModel(
             return
         }
         if (!focusChosen) {
-            // Never act on a photo the user cannot see marked: show the outline first.
+            // Never act on a photo the user cannot see marked: the first press shows the outline.
             ringVisible = true
             focusChosen = true
-            say("Del switches the outlined photo between keep and trash. Press it again, or move with the arrows first.", StatusTone.NEUTRAL)
             publish()
             return
         }
@@ -323,21 +320,13 @@ class ReviewViewModel(
     }
 
     /**
-     * A: selects every photo that can go (the keeper too, when it is not protected) and
-     * outlines the whole group. D still confirms; Del then flips them all.
+     * A: focuses the whole group (outline on every photo) without marking anything; Space then
+     * marks or unmarks them all, and an arrow key goes back to single-select.
      */
-    fun onSelectAll() {
-        val group = currentGroupOrSay() ?: return
-        val selectable = group.selectableMembers().map { it.photo.item.mediaKey }
-        selectionOf(group).addAll(selectable)
+    fun onFocusAll() {
+        currentGroupOrSay() ?: return
         allFocused = true
-        val keeperStays = group.keeper.photo.item.mediaKey !in selectable
-        say(
-            "Selected all ${selectable.size} photo(s) that can go for the trash" +
-                (if (keeperStays) ". The keeper ${whyKept(group.keeper)}, so it always stays" else ", the keeper included") +
-                ". D trashes them; Del flips them all; arrows go back to single photos.",
-            StatusTone.NEUTRAL,
-        )
+        focusChosen = true
         publish()
     }
 

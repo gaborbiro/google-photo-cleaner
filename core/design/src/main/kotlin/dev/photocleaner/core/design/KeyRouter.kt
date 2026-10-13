@@ -31,11 +31,11 @@ class KeyRouter {
         if (typing) return false
         // Every event goes through the guard so key-ups are always seen.
         val pressed = guard.press(event)
-        // No shortcut uses Space, and it must never "press" whatever kept keyboard focus (a tab, a button).
-        if (event.key == Key.Spacebar) return true
-        val key = pressed ?: return false
-        if (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return false
-        return handlers.lastOrNull()?.second?.invoke(key) ?: false
+        val modified = event.isCtrlPressed || event.isAltPressed || event.isMetaPressed
+        val handled = pressed != null && !modified && handlers.lastOrNull()?.second?.invoke(pressed) == true
+        // Space is a shortcut (toggle trash); unhandled, it must still never "press" whatever
+        // kept keyboard focus (a tab, a button).
+        return handled || event.key == Key.Spacebar
     }
 
     /** Forget held keys, e.g. when the window loses focus and key-ups may be missed. */

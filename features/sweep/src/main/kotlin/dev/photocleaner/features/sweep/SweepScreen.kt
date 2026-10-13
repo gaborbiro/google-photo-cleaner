@@ -69,7 +69,9 @@ import dev.photocleaner.core.design.focusRing
 import dev.photocleaner.core.design.optionalBorder
 import dev.photocleaner.core.design.HoverExpandButton
 import dev.photocleaner.core.design.KeyShortcuts
-import dev.photocleaner.core.design.Notice
+import dev.photocleaner.core.design.NoticeToast
+import dev.photocleaner.core.design.ActionBar
+import dev.photocleaner.core.design.focusPop
 import dev.photocleaner.core.design.StatusTone
 import dev.photocleaner.core.design.color
 import dev.photocleaner.core.design.noKeyboardFocus
@@ -105,10 +107,10 @@ fun SweepScreen(viewModel: SweepViewModel, onOpenScan: () -> Unit) {
     // Window-wide, so the keys keep working wherever keyboard focus went (except while typing a search).
     KeyShortcuts { key ->
         when (key) {
-            Key.A -> viewModel.onSelectOrDeselectAll()
+            Key.A -> viewModel.onFocusAll()
             Key.D -> viewModel.onApproveClicked()
             Key.Enter -> viewModel.onEnter()
-            Key.Delete -> viewModel.onToggleFocused()
+            Key.Spacebar -> viewModel.onToggleFocused()
             Key.DirectionLeft -> viewModel.onFocusMove(-1, 0)
             Key.DirectionRight -> viewModel.onFocusMove(1, 0)
             Key.DirectionUp -> viewModel.onFocusMove(0, -1)
@@ -119,67 +121,72 @@ fun SweepScreen(viewModel: SweepViewModel, onOpenScan: () -> Unit) {
         true
     }
 
-    CollapsingHeaderLayout(
-        modifier = Modifier.fillMaxSize(),
-        header = { SearchInputs(state, viewModel) },
-        pinned = {
-            // Clicking here takes the keyboard away from the search box, so letters act as shortcuts again.
-            Box(Modifier.onPointerEvent(PointerEventType.Press, PointerEventPass.Initial) { gridFocus.requestFocus() }) {
-                SearchBar(state, viewModel, onOpenScan)
-            }
-        },
-    ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .focusRequester(gridFocus)
-                .focusable()
-                .onPointerEvent(PointerEventType.Press, PointerEventPass.Initial) { gridFocus.requestFocus() },
+    Box(Modifier.fillMaxSize()) {
+        CollapsingHeaderLayout(
+            modifier = Modifier.fillMaxSize(),
+            header = { SearchInputs(state, viewModel) },
+            pinned = {
+                // Clicking here takes the keyboard away from the search box, so letters act as shortcuts again.
+                Box(Modifier.onPointerEvent(PointerEventType.Press, PointerEventPass.Initial) { gridFocus.requestFocus() }) {
+                    SearchBar(state, viewModel, onOpenScan)
+                }
+            },
         ) {
-            LazyVerticalGrid(
-                state = gridState,
-                modifier = Modifier.fillMaxSize().padding(end = 14.dp),
-                columns = GridCells.Adaptive(160.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .focusRequester(gridFocus)
+                    .focusable()
+                    .onPointerEvent(PointerEventType.Press, PointerEventPass.Initial) { gridFocus.requestFocus() },
             ) {
-                items(state.tiles, key = { it.mediaKey }) { tile ->
-                    LaunchedEffect(tile.mediaKey) { viewModel.onTileVisible(tile.index) }
-                    val hover = remember { MutableInteractionSource() }
-                    val hovered by hover.collectIsHoveredAsState()
-                    Column {
-                        Box(
-                            Modifier
-                                .size(160.dp)
-                                .focusRing(tile.focusRingDp)
-                                .optionalBorder(tile.borderDp, tile.borderTone.color())
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .hoverable(hover)
-                                .noKeyboardFocus()
-                                .clickable { viewModel.onTileClicked(tile.index, windowInfo.keyboardModifiers.isShiftPressed) },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            tile.image?.let { Image(it, contentDescription = tile.caption, modifier = Modifier.size(150.dp), contentScale = ContentScale.Crop) }
-                                ?: Text("…")
-                            HoverExpandButton(visible = hovered) { viewModel.onOpenViewer(tile.index) }
+                LazyVerticalGrid(
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize().padding(end = 14.dp),
+                    columns = GridCells.Adaptive(160.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(state.tiles, key = { it.mediaKey }) { tile ->
+                        LaunchedEffect(tile.mediaKey) { viewModel.onTileVisible(tile.index) }
+                        val hover = remember { MutableInteractionSource() }
+                        val hovered by hover.collectIsHoveredAsState()
+                        Column {
+                            Box(
+                                Modifier
+                                    .size(160.dp)
+                                    .focusPop(tile.focusRingDp > 0)
+                                    .focusRing(tile.focusRingDp)
+                                    .optionalBorder(tile.borderDp, tile.borderTone.color())
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .hoverable(hover)
+                                    .noKeyboardFocus()
+                                    .clickable { viewModel.onTileClicked(tile.index, windowInfo.keyboardModifiers.isShiftPressed) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                tile.image?.let { Image(it, contentDescription = tile.caption, modifier = Modifier.size(150.dp), contentScale = ContentScale.Crop) }
+                                    ?: Text("…")
+                                HoverExpandButton(visible = hovered) { viewModel.onOpenViewer(tile.index) }
+                            }
+                            Text(
+                                tile.caption,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.noKeyboardFocus().clickable { uriHandler.openUri(tile.link) },
+                            )
                         }
-                        Text(
-                            tile.caption,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.noKeyboardFocus().clickable { uriHandler.openUri(tile.link) },
-                        )
+                    }
+                    if (state.showMoreVisible) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                                OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onShowMore, enabled = !state.searching) { Text("Show more") }
+                            }
+                        }
                     }
                 }
-                if (state.showMoreVisible) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
-                            OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onShowMore, enabled = !state.searching) { Text("Show more") }
-                        }
-                    }
-                }
+                VerticalScrollbar(adapter = rememberScrollbarAdapter(gridState), modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight())
             }
-            VerticalScrollbar(adapter = rememberScrollbarAdapter(gridState), modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight())
         }
+        // Feedback floats over the photos instead of pushing them down.
+        NoticeToast(state.notice)
     }
 
     viewer?.let { ui ->
@@ -230,7 +237,7 @@ private fun SearchInputs(state: SweepUiState, viewModel: SweepViewModel) {
     }
 }
 
-/** Pinned above the photos: how many matched, their order, the actions, and feedback for the last key. */
+/** Pinned above the photos: the actions, with how many matched and their order on the right. */
 @Composable
 private fun SearchBar(state: SweepUiState, viewModel: SweepViewModel, onOpenScan: () -> Unit) {
     Column(Modifier.padding(top = 12.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -238,28 +245,32 @@ private fun SearchBar(state: SweepUiState, viewModel: SweepViewModel, onOpenScan
             if (state.blockedByScan) Banner(text, StatusTone.CAUTION, actionLabel = "Open Scan library", onAction = onOpenScan)
             else Banner(text, StatusTone.CAUTION)
         }
-        state.resultText?.let { text ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(text, fontWeight = FontWeight.SemiBold)
-                Text("Order:", style = MaterialTheme.typography.bodyMedium)
-                SingleChoiceSegmentedButtonRow {
-                    SweepSort.entries.forEachIndexed { index, sort ->
-                        SegmentedButton(
-                            selected = state.sort == sort,
-                            onClick = { viewModel.onSortSelected(sort) },
-                            shape = SegmentedButtonDefaults.itemShape(index, SweepSort.entries.size),
-                            modifier = Modifier.noKeyboardFocus(),
-                            // No checkmark: the filled segment already shows the choice, and labels stay on one line.
-                            icon = {},
-                        ) { Text(sort.label, maxLines = 1, softWrap = false) }
+        ActionBar(
+            status = {
+                state.resultText?.let { text ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text(text, fontWeight = FontWeight.SemiBold)
+                        SingleChoiceSegmentedButtonRow {
+                            SweepSort.entries.forEachIndexed { index, sort ->
+                                SegmentedButton(
+                                    selected = state.sort == sort,
+                                    onClick = { viewModel.onSortSelected(sort) },
+                                    shape = SegmentedButtonDefaults.itemShape(index, SweepSort.entries.size),
+                                    modifier = Modifier.noKeyboardFocus(),
+                                    // No checkmark: the filled segment already shows the choice, and labels stay on one line.
+                                    icon = {},
+                                ) { Text(sort.label, maxLines = 1, softWrap = false) }
+                            }
+                        }
                     }
                 }
+            },
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onApproveClicked) { Text("D · Trash selected") }
+                OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onFocusAll) { Text("A · Focus all") }
+                OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onToggleFocused) { Text("Space · Toggle trash") }
             }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onApproveClicked) { Text("D · Trash selected") }
-            OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onSelectOrDeselectAll) { Text("A · Select / deselect all") }
-            OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = viewModel::onToggleFocused) { Text("Del · Toggle trash") }
         }
         state.confirmText?.let { text ->
             Card {
@@ -271,6 +282,5 @@ private fun SearchBar(state: SweepUiState, viewModel: SweepViewModel, onOpenScan
             }
         }
         state.previewsPausedText?.let { Text(it, color = StatusTone.CAUTION.color(), fontWeight = FontWeight.SemiBold) }
-        state.notice?.let { Notice(it) }
     }
 }

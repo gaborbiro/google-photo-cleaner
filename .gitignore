@@ -1,0 +1,34 @@
+# Gradle and Kotlin build output
+.gradle/
+.kotlin/
+build/
+
+# IDE (machine-specific)
+.idea/
+*.iml
+local.properties
+
+# JVM crash dumps and stray logs (the app writes its logs to %LOCALAPPDATA%\PhotoCleaner)
+hs_err_pid*.log
+*.log
+*logDir_IS_UNDEFINED/
+
+# Chrome extension: dependencies and build output (also in extension/.gitignore)
+extension/node_modules/
+extension/dist/
+
+# Python worker: environment, caches, packaging metadata
+worker/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Never commit model weights or local secrets
+*.safetensors
+*.onnx
+.env
+
+# OS clutter
+.DS_Store
+Thumbs.db

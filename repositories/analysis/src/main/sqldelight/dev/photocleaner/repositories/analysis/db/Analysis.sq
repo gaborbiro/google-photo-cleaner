@@ -1,0 +1,61 @@
+CREATE TABLE embedding (
+    media_key TEXT NOT NULL,
+    model_key TEXT NOT NULL,
+    dedup_key TEXT NOT NULL,
+    vector BLOB NOT NULL,
+    sharpness REAL NOT NULL,
+    brightness REAL NOT NULL,
+    clipped_dark REAL NOT NULL,
+    clipped_bright REAL NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (media_key, model_key)
+);
+
+CREATE TABLE calibration_pair (
+    pair_id TEXT NOT NULL PRIMARY KEY,
+    media_key_a TEXT NOT NULL,
+    media_key_b TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    taken_gap_ms INTEGER NOT NULL,
+    display_order INTEGER NOT NULL,
+    label TEXT,
+    labelled_at INTEGER
+);
+
+CREATE TABLE photo_info (
+    media_key TEXT NOT NULL PRIMARY KEY,
+    uploaded_at INTEGER,
+    width INTEGER,
+    height INTEGER
+);
+
+upsertPhotoInfo:
+INSERT OR REPLACE INTO photo_info (media_key, uploaded_at, width, height) VALUES (?, ?, ?, ?);
+
+selectPhotoInfo:
+SELECT * FROM photo_info WHERE media_key IN ?;
+
+upsertEmbedding:
+INSERT OR REPLACE INTO embedding (media_key, model_key, dedup_key, vector, sharpness, brightness, clipped_dark, clipped_bright, width, height, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectEmbeddings:
+SELECT * FROM embedding WHERE model_key = ? AND media_key IN ?;
+
+selectStoredKeys:
+SELECT media_key FROM embedding WHERE model_key = ?;
+
+deletePairs:
+DELETE FROM calibration_pair;
+
+insertPair:
+INSERT INTO calibration_pair (pair_id, media_key_a, media_key_b, kind, taken_gap_ms, display_order, label, labelled_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+selectPairs:
+SELECT * FROM calibration_pair ORDER BY display_order;
+
+updateLabel:
+UPDATE calibration_pair SET label = ?, labelled_at = ? WHERE pair_id = ?;

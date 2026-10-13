@@ -1,0 +1,186 @@
+import kotlin.Boolean;
+
+CREATE TABLE scan_run (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_fingerprint TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    status TEXT NOT NULL,
+    status_reason TEXT
+);
+
+CREATE TABLE phase_cursor (
+    run_id INTEGER NOT NULL,
+    phase TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    next_page_token TEXT,
+    pages_done INTEGER NOT NULL,
+    entries_seen INTEGER NOT NULL,
+    duplicate_entries INTEGER NOT NULL,
+    completed INTEGER AS Boolean NOT NULL,
+    PRIMARY KEY (run_id, phase, scope)
+);
+
+CREATE TABLE media_item (
+    run_id INTEGER NOT NULL,
+    media_key TEXT NOT NULL,
+    dedup_key TEXT NOT NULL,
+    taken_at INTEGER NOT NULL,
+    media_type TEXT,
+    is_favourite INTEGER AS Boolean,
+    is_archived INTEGER AS Boolean,
+    is_owned INTEGER AS Boolean,
+    width INTEGER,
+    height INTEGER,
+    thumb_url TEXT,
+    PRIMARY KEY (run_id, media_key)
+);
+
+CREATE INDEX media_item_dedup ON media_item(run_id, dedup_key);
+
+CREATE TABLE favourite_entry (
+    run_id INTEGER NOT NULL,
+    media_key TEXT NOT NULL,
+    dedup_key TEXT NOT NULL,
+    PRIMARY KEY (run_id, media_key)
+);
+
+CREATE TABLE archive_entry (
+    run_id INTEGER NOT NULL,
+    media_key TEXT NOT NULL,
+    dedup_key TEXT NOT NULL,
+    PRIMARY KEY (run_id, media_key)
+);
+
+CREATE TABLE album (
+    run_id INTEGER NOT NULL,
+    album_key TEXT NOT NULL,
+    title TEXT,
+    owner_actor_id TEXT,
+    is_shared INTEGER AS Boolean,
+    kind_code INTEGER,
+    reported_count INTEGER,
+    auth_key TEXT,
+    failure_reason TEXT,
+    PRIMARY KEY (run_id, album_key)
+);
+
+CREATE TABLE album_member (
+    run_id INTEGER NOT NULL,
+    album_key TEXT NOT NULL,
+    media_key TEXT NOT NULL,
+    dedup_key TEXT NOT NULL,
+    PRIMARY KEY (run_id, album_key, media_key)
+);
+
+-- runs
+
+insertRun:
+INSERT INTO scan_run (account_fingerprint, started_at, status) VALUES (?, ?, ?);
+
+lastInsertedId:
+SELECT last_insert_rowid();
+
+changes:
+SELECT changes();
+
+selectRun:
+SELECT * FROM scan_run WHERE id = ?;
+
+selectLatestRun:
+SELECT * FROM scan_run ORDER BY id DESC LIMIT 1;
+
+updateRunStatus:
+UPDATE scan_run SET status = ?, status_reason = ?, finished_at = ? WHERE id = ?;
+
+-- cursors
+
+selectCursor:
+SELECT * FROM phase_cursor WHERE run_id = ? AND phase = ? AND scope = ?;
+
+selectCursors:
+SELECT * FROM phase_cursor WHERE run_id = ?;
+
+upsertCursor:
+INSERT OR REPLACE INTO phase_cursor (run_id, phase, scope, next_page_token, pages_done, entries_seen, duplicate_entries, completed)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteCursor:
+DELETE FROM phase_cursor WHERE run_id = ? AND phase = ? AND scope = ?;
+
+deleteCursorsOfPhase:
+DELETE FROM phase_cursor WHERE run_id = ? AND phase = ?;
+
+-- entries
+
+insertItem:
+INSERT OR IGNORE INTO media_item (run_id, media_key, dedup_key, taken_at, media_type, is_favourite, is_archived, is_owned, width, height, thumb_url)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectItems:
+SELECT * FROM media_item WHERE run_id = ?;
+
+deleteItems:
+DELETE FROM media_item WHERE run_id = ?;
+
+insertFavourite:
+INSERT OR IGNORE INTO favourite_entry (run_id, media_key, dedup_key) VALUES (?, ?, ?);
+
+selectFavouriteDedupKeys:
+SELECT DISTINCT dedup_key FROM favourite_entry WHERE run_id = ?;
+
+deleteFavourites:
+DELETE FROM favourite_entry WHERE run_id = ?;
+
+insertArchived:
+INSERT OR IGNORE INTO archive_entry (run_id, media_key, dedup_key) VALUES (?, ?, ?);
+
+selectArchivedDedupKeys:
+SELECT DISTINCT dedup_key FROM archive_entry WHERE run_id = ?;
+
+deleteArchived:
+DELETE FROM archive_entry WHERE run_id = ?;
+
+selectOldestTakenAt:
+SELECT min(taken_at) AS oldest FROM media_item WHERE run_id = ?;
+
+insertAlbum:
+INSERT OR IGNORE INTO album (run_id, album_key, title, owner_actor_id, is_shared, kind_code, reported_count, auth_key)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+selectAlbums:
+SELECT album.*, (SELECT count(*) FROM album_member m WHERE m.run_id = album.run_id AND m.album_key = album.album_key) AS members_seen
+FROM album WHERE run_id = ? ORDER BY album_key;
+
+markAlbumFailed:
+UPDATE album SET failure_reason = ? WHERE run_id = ? AND album_key = ?;
+
+clearAlbumFailure:
+UPDATE album SET failure_reason = NULL WHERE run_id = ? AND album_key = ?;
+
+deleteAlbums:
+DELETE FROM album WHERE run_id = ?;
+
+insertAlbumMember:
+INSERT OR IGNORE INTO album_member (run_id, album_key, media_key, dedup_key) VALUES (?, ?, ?, ?);
+
+selectMembership:
+SELECT DISTINCT dedup_key, album_key FROM album_member WHERE run_id = ?;
+
+deleteAlbumMembers:
+DELETE FROM album_member WHERE run_id = ? AND album_key = ?;
+
+deleteAllAlbumMembers:
+DELETE FROM album_member WHERE run_id = ?;
+
+-- housekeeping
+
+deleteOtherRuns {
+    DELETE FROM media_item WHERE run_id != :keep;
+    DELETE FROM favourite_entry WHERE run_id != :keep;
+    DELETE FROM archive_entry WHERE run_id != :keep;
+    DELETE FROM album WHERE run_id != :keep;
+    DELETE FROM album_member WHERE run_id != :keep;
+    DELETE FROM phase_cursor WHERE run_id != :keep;
+    DELETE FROM scan_run WHERE id != :keep;
+}

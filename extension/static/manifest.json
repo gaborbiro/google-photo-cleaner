@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Photo Cleaner Connector",
+  "description": "Read-only bridge between photos.google.com and the local Photo Cleaner desktop app.",
+  "version": "0.3.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2DQcb8WHix7nVyvOdkCBZwoH3IzdgfWudVg+mxB2FhqBZhcksAvfy/BdBB9MlxrUGCGGhzyx45aWjaMSXRO+HPAdMtXDDUo0pdiTKTFqJRgy1tMr76LnM3vG0DcLbAsCbPZCRFXL2JQfWMKbT1nQvJeEbhpspRGigOtajiMhHO7raE/J3LutFe0JovRFBIV7u9sQt1aIdWApQq6PdYzebcXjemhT4sQO7vUEXT4jTUbE9Bc6VxoZZCtyJmGzGpcjd6u7kSJJl/BYuMbc3SjqTwzzRDR1in0iX1KNdxgVSZlIhXqxjt2V/AUPc1yDWt8RrgkoPn+sEWzmNQ7umVxXowIDAQAB",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "alarms", "scripting"],
+  "host_permissions": [
+    "https://photos.google.com/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://photos.google.com/*"],
+      "js": ["page.js"],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://photos.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Photo Cleaner Connector",
+    "default_popup": "popup.html"
+  }
+}

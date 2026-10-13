@@ -1,0 +1,27 @@
+[project]
+name = "photocleaner-worker"
+version = "0.1.0"
+description = "Local inference worker for Photo Cleaner (image embeddings and quality metrics)"
+requires-python = ">=3.12"
+# torch / torchvision come from the CUDA 13.0 index; see README.
+dependencies = [
+    "sentence-transformers>=6.1",
+    "transformers>=5.19",
+    "accelerate>=1.15",
+    "pillow>=12.3",
+    "opencv-python-headless>=5.0",
+    "numpy>=2.5",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=78"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["photocleaner_worker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

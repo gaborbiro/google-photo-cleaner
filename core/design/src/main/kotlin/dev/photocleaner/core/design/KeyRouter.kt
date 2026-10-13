@@ -11,6 +11,7 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
 
 /**
  * Window-wide keyboard shortcuts. The window passes every key event here, and the
@@ -29,7 +30,10 @@ class KeyRouter {
     fun dispatch(event: KeyEvent): Boolean {
         if (typing) return false
         // Every event goes through the guard so key-ups are always seen.
-        val key = guard.press(event) ?: return false
+        val pressed = guard.press(event)
+        // No shortcut uses Space, and it must never "press" whatever kept keyboard focus (a tab, a button).
+        if (event.key == Key.Spacebar) return true
+        val key = pressed ?: return false
         if (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return false
         return handlers.lastOrNull()?.second?.invoke(key) ?: false
     }

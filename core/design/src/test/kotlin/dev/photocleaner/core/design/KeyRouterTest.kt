@@ -65,4 +65,14 @@ class KeyRouterTest {
         assertTrue(router.tap(Key.D))
         assertEquals(1, presses)
     }
+
+    @Test
+    fun `space never reaches a focused tab or button, except while typing`() {
+        val router = KeyRouter()
+        router.register(Any()) { false }
+        assertTrue(router.dispatch(down(Key.Spacebar)))
+        assertTrue(router.dispatch(up(Key.Spacebar)))
+        router.setTyping(true)
+        assertFalse(router.dispatch(down(Key.Spacebar)))
+    }
 }

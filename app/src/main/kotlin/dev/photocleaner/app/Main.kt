@@ -24,6 +24,7 @@ import androidx.compose.ui.window.WindowExceptionHandlerFactory
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.text.selection.DisableSelection
 import dev.photocleaner.core.design.SelectableContent
+import dev.photocleaner.core.design.noKeyboardFocus
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
@@ -181,6 +182,8 @@ fun main() {
                                         PrimaryTabRow(selectedTabIndex = selectedTab.ordinal) {
                                             AppTab.entries.forEach { tab ->
                                                 Tab(
+                                                    // Tabs never keep keyboard focus, so keys go to the shortcuts, not to the last tab clicked.
+                                                    modifier = Modifier.noKeyboardFocus(),
                                                     selected = selectedTab == tab,
                                                     onClick = { openTab(tab) },
                                                     text = {

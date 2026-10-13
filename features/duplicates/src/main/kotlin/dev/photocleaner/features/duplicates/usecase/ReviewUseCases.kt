@@ -2,6 +2,7 @@ package dev.photocleaner.features.duplicates.usecase
 
 import dev.photocleaner.features.duplicates.model.DuplicateGroup
 import dev.photocleaner.features.duplicates.model.GroupMember
+import dev.photocleaner.features.duplicates.model.GroupingSettings
 import dev.photocleaner.features.duplicates.model.MemberRole
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.repositories.review.domain.Decision
@@ -18,9 +19,11 @@ data class ReviewQueue(
     val decidedGroups: Int,
     /** When the photos were last analysed for duplicates; null before the first analysis. */
     val analysedAtMs: Long?,
-    /** Photos in the library scan that the duplicate scan has analysed, and those it has not (yet). */
+    /** Photos in the library scan that have been analysed for duplicates, and those not (yet). */
     val photosAnalysed: Int,
     val photosNotAnalysed: Int,
+    /** What counts as a duplicate: similarity threshold and time window. */
+    val settings: GroupingSettings,
 )
 
 /**
@@ -59,6 +62,7 @@ class LoadReviewQueueUseCase(
             analysedAtMs = result.analysedAtMs,
             photosAnalysed = result.photosCompared,
             photosNotAnalysed = result.photosWithoutEmbedding,
+            settings = result.settings,
         )
     }
 

@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -122,7 +124,9 @@ private fun ViewerContent(
                         .border(BorderStroke(2.dp, selectionTone.color())),
                     contentScale = ContentScale.Fit,
                 )
-            } ?: Text("Loading…", color = Color.White)
+            }
+            // Over the thumbnail (or the empty frame) until the large version arrives.
+            if (ui.loading) CircularProgressIndicator(Modifier.size(48.dp), color = Color.White, strokeWidth = 4.dp)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("${ui.positionText} · ${ui.caption}", color = Color.White)
@@ -132,7 +136,7 @@ private fun ViewerContent(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = onPrevious) { Text("← Previous") }
             OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = onNext) { Text("Next →") }
-            onToggle?.let { Button(modifier = Modifier.noKeyboardFocus(), onClick = it) { Text("Del · Keep / trash") } }
+            onToggle?.let { Button(modifier = Modifier.noKeyboardFocus(), onClick = it) { Text("Del · Toggle trash") } }
             OutlinedButton(modifier = Modifier.noKeyboardFocus(), onClick = { uriHandler.openUri(ui.link) }) { Text("Open in Google Photos") }
             Button(modifier = Modifier.noKeyboardFocus(), onClick = onClose) { Text("Esc · Close") }
         }

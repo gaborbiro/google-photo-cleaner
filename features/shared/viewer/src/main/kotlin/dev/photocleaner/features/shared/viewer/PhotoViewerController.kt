@@ -22,6 +22,8 @@ data class PhotoViewerUi(
     val image: ImageBitmap?,
     /** Width / height of [image], so the frame can hug the photo. */
     val aspectRatio: Float?,
+    /** The large version is still on its way (the thumbnail, if any, is shown meanwhile). */
+    val loading: Boolean,
     val statusText: String?,
     val caption: String,
     val positionText: String,
@@ -46,7 +48,9 @@ class PhotoViewerController(
     private var placeholder: (String) -> ImageBitmap? = { null }
     private val large = LinkedHashMap<String, ImageBitmap>()
     private val failed = mutableSetOf<String>()
-    private var loadJob: Job? = null
+
+    /** One load per photo; moving on does not cancel them, so neighbours keep arriving in the background. */
+    private val loading = mutableMapOf<String, Job>()
 
     val isOpen: Boolean get() = mutableState.value != null
 
@@ -68,7 +72,8 @@ class PhotoViewerController(
     }
 
     fun close() {
-        loadJob?.cancel()
+        loading.values.forEach { it.cancel() }
+        loading.clear()
         mutableState.value = null
     }
 
@@ -80,18 +85,23 @@ class PhotoViewerController(
 
     private fun show() {
         publish()
-        loadJob?.cancel()
-        val current = photos[index]
-        loadJob = scope.launch {
-            load(current.item)
-            // The neighbours, so stepping through is instant.
-            photos.getOrNull(index + 1)?.let { load(it.item) }
-            photos.getOrNull(index - 1)?.let { load(it.item) }
+        // The current photo first, then its neighbours, so stepping through is instant.
+        NEIGHBOURS.mapNotNull { photos.getOrNull(index + it) }.forEach { ensureLoading(it.item) }
+    }
+
+    private fun ensureLoading(item: InventoryItem) {
+        val key = item.mediaKey
+        if (key in large || key in failed || loading[key]?.isActive == true) return
+        loading[key] = scope.launch {
+            try {
+                load(item)
+            } finally {
+                loading.remove(key)
+            }
         }
     }
 
     private suspend fun load(item: InventoryItem) {
-        if (item.mediaKey in large || item.mediaKey in failed) return
         try {
             val bytes = fetchPreview.execute(item, LARGE_PX).image.bytes
             large[item.mediaKey] = Image.makeFromEncoded(bytes).toComposeImageBitmap()
@@ -116,6 +126,7 @@ class PhotoViewerController(
             mediaKey = key,
             image = image,
             aspectRatio = image?.let { it.width.toFloat() / it.height.coerceAtLeast(1) },
+            loading = key !in large && key !in failed,
             statusText = when {
                 key in large -> null
                 key in failed -> "The large preview could not be loaded; showing the thumbnail."
@@ -131,5 +142,8 @@ class PhotoViewerController(
         /** The largest size the extension serves. */
         const val LARGE_PX = 1024
         const val CACHE = 12
+
+        /** Offsets from the current photo to load: itself first, then forward (the usual direction) and back. */
+        val NEIGHBOURS = listOf(0, 1, -1, 2)
     }
 }

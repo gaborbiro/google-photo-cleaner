@@ -88,8 +88,7 @@ internal fun ReviewBar(state: ReviewUiState, viewModel: ReviewViewModel, onOpenS
         state.blockedText?.let { Banner(it, StatusTone.CAUTION, actionLabel = "Open Scan library", onAction = onOpenScan) }
         state.group?.let { group ->
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(group.title, fontWeight = FontWeight.SemiBold)
-                Text(group.selectionText)
+                Text(group.selectionText, fontWeight = FontWeight.SemiBold)
                 group.warningText?.let { Text(it, color = StatusTone.NEGATIVE.color(), fontWeight = FontWeight.Bold) }
             }
         }

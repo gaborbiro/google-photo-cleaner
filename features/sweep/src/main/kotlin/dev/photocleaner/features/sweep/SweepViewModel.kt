@@ -238,8 +238,8 @@ class SweepViewModel(
     fun onTileClicked(index: Int, shift: Boolean) {
         val key = hits.getOrNull(index)?.item?.mediaKey ?: return
         focusedIndex = index
-        // A click picks the photo for Del and Enter, without the keyboard outline.
-        ringVisible = false
+        // A click focuses the photo: the outline shows it is the one Del and Enter act on.
+        ringVisible = true
         focusChosen = true
         val from = anchor
         if (shift && from != null) {
@@ -406,7 +406,8 @@ class SweepViewModel(
                     mediaKey = hit.item.mediaKey,
                     image = previews[hit.item.mediaKey],
                     selected = hit.item.mediaKey in selected,
-                    borderDp = if (hit.item.mediaKey in selected) 4 else 1,
+                    // Only photos marked for the trash have a border; the rest show the photo alone.
+                    borderDp = if (hit.item.mediaKey in selected) 4 else 0,
                     borderTone = if (hit.item.mediaKey in selected) StatusTone.NEGATIVE else StatusTone.NEUTRAL,
                     focusRingDp = if (ringVisible && index == focusedIndex) FOCUS_RING_DP else 0,
                     caption = captionOf(hit),

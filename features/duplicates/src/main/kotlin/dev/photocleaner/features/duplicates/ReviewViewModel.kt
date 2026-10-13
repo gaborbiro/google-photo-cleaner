@@ -10,6 +10,7 @@ import dev.photocleaner.core.design.PhotoDateFormat
 import dev.photocleaner.core.design.StatusTone
 import dev.photocleaner.features.duplicates.model.DuplicateGroup
 import dev.photocleaner.features.duplicates.model.GroupMember
+import dev.photocleaner.features.duplicates.model.GroupingSettings
 import dev.photocleaner.features.duplicates.model.MemberRole
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.model.ProtectionReason
@@ -69,6 +70,7 @@ class ReviewViewModel(
     private var analysedAtMs: Long? = null
     private var photosAnalysed = 0
     private var photosNotAnalysed = 0
+    private var settings: GroupingSettings? = null
     private var handledScans = 0
     private val notices = NoticeSource()
     private var notice: NoticeUi? = null
@@ -147,12 +149,12 @@ class ReviewViewModel(
         publish()
     }
 
-    /** A click picks the photo for Del and Enter, without the keyboard outline. */
+    /** A click focuses the photo: the outline shows it is the one Del and Enter act on. */
     fun onTileFocused(mediaKey: String) {
         val index = pending.firstOrNull()?.members?.indexOfFirst { it.photo.item.mediaKey == mediaKey } ?: return
         if (index >= 0) focusedIndex = index
         allFocused = false
-        ringVisible = false
+        ringVisible = true
         focusChosen = true
         publish()
     }
@@ -277,7 +279,7 @@ class ReviewViewModel(
      */
     fun onShown() = refresh()
 
-    /** A duplicate scan finished ([count] so far this session): rebuild the groups once per finished scan. */
+    /** An analysis finished ([count] so far this session): rebuild the groups once per finished analysis. */
     fun onScansFinished(count: Int) {
         if (count <= handledScans) return
         handledScans = count
@@ -442,6 +444,7 @@ class ReviewViewModel(
         analysedAtMs = queue.analysedAtMs
         photosAnalysed = queue.photosAnalysed
         photosNotAnalysed = queue.photosNotAnalysed
+        settings = queue.settings
         loaded = true
         publish()
         preload()
@@ -484,13 +487,18 @@ class ReviewViewModel(
                 (analysedAtMs?.let { " · last analysed ${timeFormat.format(it)}" } ?: ""),
             progressText = if (!loaded) null else "%,d decided · %,d to go".format(decidedGroups, pending.size) +
                 if (deferredIds.isNotEmpty()) " (%,d skipped)".format(deferredIds.size) else "",
-            // Answers "do I need to scan for duplicates again?" after a new library scan.
+            // Answers "do I need to analyse again?" after a new library scan.
             analysisText = when {
                 !loaded || blockedReason != null -> null
-                photosNotAnalysed == 0 -> "All %,d photos are analysed. A duplicate scan is only needed after new photos are added.".format(photosAnalysed)
-                else -> "%,d photos are not analysed yet: new since the last duplicate scan, or their preview could not be loaded. Scan for duplicates to include them.".format(photosNotAnalysed)
+                photosNotAnalysed == 0 -> "All %,d photos are analysed. Analysing is only needed after a library scan finds new photos.".format(photosAnalysed)
+                else -> "%,d photos are not analysed yet: new since the last analysis, or their preview could not be loaded. Analyse photos to include them.".format(photosNotAnalysed)
             },
             analysisTone = if (photosNotAnalysed > 0) StatusTone.CAUTION else StatusTone.POSITIVE,
+            // What counts as a duplicate, in the same terms as each photo's "% similar".
+            ruleText = settings?.let {
+                "Photos count as duplicates when they are at least %.1f%% similar and taken within %d minutes of each other. ".format(it.threshold * 100, it.windowMs / 60_000) +
+                    "The threshold was chosen from your calibration labels."
+            },
             blockedText = blockedReason,
             emptyText = if (loaded && blockedReason == null && group == null) "No groups left to review." else null,
             queueText = queueText(queue),
@@ -516,14 +524,13 @@ class ReviewViewModel(
     private fun groupUi(group: DuplicateGroup): GroupUi {
         val selected = selectionOf(group)
         val selectable = group.selectableMembers().map { it.photo.item.mediaKey }.toSet()
-        // A moment decided before that gained photos: the new ones carry a badge.
+        // A group decided before that gained photos: the new ones carry a badge.
         val returning = group.members.any { it.previouslyReviewed }
         val newCount = group.members.count { !it.previouslyReviewed }
         return GroupUi(
-            title = "${timeFormat.format(group.takenAtMs)} · ${group.members.size} photos" +
-                (if (returning) " · $newCount new since you decided this moment" else "") +
+            selectionText = "${selected.size} of ${group.members.size} photo(s) selected for the trash" +
+                (if (returning) " · $newCount new since your last decision" else "") +
                 if (group.id in deferredIds) " · skipped earlier" else "",
-            selectionText = "${selected.size} of ${group.members.size} photo(s) selected for the trash",
             warningText = if (selected.size == group.members.size) "No photo of this moment will be kept." else null,
             tiles = group.members.mapIndexed { index, member ->
                 tileUi(
@@ -596,9 +603,11 @@ data class ReviewUiState(
     val groupsText: String?,
     /** "386 decided · 1,731 to go" */
     val progressText: String?,
-    /** Whether a duplicate scan is needed: all photos analysed, or how many are not. */
+    /** Whether analysing is needed: all photos analysed, or how many are not. */
     val analysisText: String?,
     val analysisTone: StatusTone,
+    /** What counts as a duplicate (similarity threshold, time window). */
+    val ruleText: String?,
     val blockedText: String?,
     val emptyText: String?,
     val queueText: String?,
@@ -611,11 +620,16 @@ data class ReviewUiState(
     val viewerSelectionTone: StatusTone,
 ) {
     companion object {
-        val Initial = ReviewUiState(null, null, null, null, StatusTone.NEUTRAL, null, null, null, null, null, null, null, null, StatusTone.NEUTRAL)
+        val Initial = ReviewUiState(null, null, null, null, StatusTone.NEUTRAL, null, null, null, null, null, null, null, null, null, StatusTone.NEUTRAL)
     }
 }
 
-data class GroupUi(val title: String, val selectionText: String, val warningText: String?, val tiles: List<TileUi>)
+data class GroupUi(
+    /** "1 of 2 photo(s) selected for the trash", plus whether photos are new or the group was skipped. */
+    val selectionText: String,
+    val warningText: String?,
+    val tiles: List<TileUi>,
+)
 
 data class TileUi(
     val mediaKey: String,

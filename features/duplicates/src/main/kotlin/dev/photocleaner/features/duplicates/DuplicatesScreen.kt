@@ -21,7 +21,7 @@ import dev.photocleaner.core.design.color
 import dev.photocleaner.core.design.noKeyboardFocus
 
 /**
- * The duplicate scan on top, which folds away as the group scrolls; the current group's
+ * The photo analysis on top, which folds away as the group scrolls; the current group's
  * status, the action buttons and feedback stay pinned above the photos.
  */
 @Composable
@@ -36,7 +36,7 @@ fun DuplicatesScreen(
     val scan by embedding.state.collectAsState()
     val state by review.state.collectAsState()
     // Groups are built when the tab opens (so trashing from Search shows here), when a library scan
-    // finishes, and after each duplicate scan.
+    // finishes, and after each analysis.
     LaunchedEffect(libraryScans) { review.onShown() }
     LaunchedEffect(scan.finishedScans) { review.onScansFinished(scan.finishedScans) }
     LaunchedEffect(review) { review.searchMoreLike.collect(onSearchMoreLike) }
@@ -55,22 +55,24 @@ fun DuplicatesScreen(
 @Composable
 private fun ScanSection(scan: EmbeddingPanelUiState, review: ReviewUiState, onStartOrPause: () -> Unit) {
     Column(Modifier.padding(top = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // "Analyse" is the AI step that finds duplicates; "scan" is reading the library from Google.
         Text(
-            "Analyses every photo with the GPU (EmbeddingGemma 2, detail 280). Previews are fetched a few at a time, " +
-                "analysed in memory and discarded; only the numeric fingerprint and quality measurements are kept.",
+            "Finds duplicates by analysing every photo with the GPU (EmbeddingGemma 2, detail 280). Previews are fetched " +
+                "a few at a time, analysed in memory and discarded; only the numeric fingerprint and quality measurements are kept.",
             style = MaterialTheme.typography.bodyMedium,
         )
         Text(
-            "Pause and resume at any time; later scans only analyse new photos.",
+            "Pause and resume at any time; later analyses only cover new photos.",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            "Rescanning preserves past decisions. Your decided groups don’t rebuild, except when a new photo matches " +
-                "an already-decided moment. Then the group reappears with the previously kept photos and the newcomer(s). " +
+            "Analysing new photos preserves past decisions. Your decided groups don’t rebuild, except when a new photo matches " +
+                "an already-decided moment. Then the group reappears with the previously kept photos plus the newcomer(s). " +
                 "Trashed photos stay trashed.",
             style = MaterialTheme.typography.bodyMedium,
         )
+        review.ruleText?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(modifier = Modifier.noKeyboardFocus(), onClick = onStartOrPause) { Text(scan.buttonLabel) }
             scan.progressText?.let { Text(it) }

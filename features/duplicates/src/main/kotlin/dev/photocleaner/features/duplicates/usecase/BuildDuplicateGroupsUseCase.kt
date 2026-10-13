@@ -33,11 +33,11 @@ class BuildDuplicateGroupsUseCase(
 
     suspend fun execute(): DuplicateGroupsResult {
         val classification = classify.execute()
-            ?: return DuplicateGroupsResult("The library has not been scanned yet. Start on the Scan library tab.", emptyList(), 0, 0, null)
+            ?: return DuplicateGroupsResult("The library has not been scanned yet. Start on the Scan library tab.", emptyList(), 0, 0, null, settings)
         val coverage = classification.report.coverage
         when {
-            !coverage.isComplete -> return DuplicateGroupsResult("The library scan is unfinished, so no photo can be proposed. Finish it on the Scan library tab.", emptyList(), 0, 0, null)
-            coverage.isStale -> return DuplicateGroupsResult("The library scan is more than a day old. Scan again on the Scan library tab (about 2–3 minutes).", emptyList(), 0, 0, null)
+            !coverage.isComplete -> return DuplicateGroupsResult("The library scan is unfinished, so no photo can be proposed. Finish it on the Scan library tab.", emptyList(), 0, 0, null, settings)
+            coverage.isStale -> return DuplicateGroupsResult("The library scan is more than a day old. Scan again on the Scan library tab (about 2–3 minutes).", emptyList(), 0, 0, null, settings)
         }
         val photos = classification.items.filter { it.item.mediaType == StoredMediaType.PHOTO }
         val keys = photos.map { it.item.mediaKey }
@@ -69,6 +69,7 @@ class BuildDuplicateGroupsUseCase(
             photosCompared = facts.size,
             photosWithoutEmbedding = photos.size - facts.size,
             analysedAtMs = stored.values.maxOfOrNull { it.createdAtMs },
+            settings = settings,
         )
     }
 

@@ -71,7 +71,7 @@ class SearchPhotosUseCase(
         val target = when (query) {
             is SweepQuery.Text -> worker.embedText(listOf(query.text)).single()
             is SweepQuery.LikePhotos -> mean(query.mediaKeys.mapNotNull { vectors[it]?.vector })
-                ?: return SweepResult("None of the chosen photos has been analysed yet (run the duplicate scan).", scanNeeded = false, emptyList(), 0, 0)
+                ?: return SweepResult("None of the chosen photos has been analysed yet. Analyse photos on the Duplicates tab first.", scanNeeded = false, emptyList(), 0, 0)
         }
         val approved = review.approvedMediaKeys()
         return withContext(Dispatchers.Default) {

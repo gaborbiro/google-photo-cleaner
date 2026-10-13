@@ -44,7 +44,7 @@ class EmbeddingPanelViewModel(private val embedLibrary: EmbedLibraryUseCase) : V
             buttonLabel = when {
                 running -> "Pause"
                 p == null || p.state == LibraryEmbedProgress.State.FINISHED -> START_LABEL
-                else -> "Resume scan"
+                else -> "Resume analysis"
             },
             progressText = p?.let {
                 buildString {
@@ -67,7 +67,7 @@ class EmbeddingPanelViewModel(private val embedLibrary: EmbedLibraryUseCase) : V
             notice = when {
                 p?.reason != null -> p.reason
                 !running && p?.state == LibraryEmbedProgress.State.RUNNING -> "Paused. Resume to continue where it stopped."
-                p?.state == LibraryEmbedProgress.State.FINISHED -> "Duplicate scan complete."
+                p?.state == LibraryEmbedProgress.State.FINISHED -> "Analysis complete."
                 else -> null
             },
             finishedScans = finishedScans,
@@ -75,7 +75,7 @@ class EmbeddingPanelViewModel(private val embedLibrary: EmbedLibraryUseCase) : V
     }
 
     private companion object {
-        const val START_LABEL = "Scan for duplicates"
+        const val START_LABEL = "Analyse photos"
 
         /** Busy at least this share of the time: the model, not the downloads, sets the pace. */
         const val COMPUTER_BOUND_SHARE = 0.7

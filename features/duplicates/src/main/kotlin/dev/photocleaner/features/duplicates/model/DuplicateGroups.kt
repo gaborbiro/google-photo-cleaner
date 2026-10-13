@@ -68,4 +68,6 @@ data class DuplicateGroupsResult(
     val photosWithoutEmbedding: Int,
     /** When the most recently analysed photo was analysed; null when none is. */
     val analysedAtMs: Long?,
+    /** The rules the groups were built with, so the screen can say what counts as a duplicate. */
+    val settings: GroupingSettings,
 )

@@ -13,6 +13,13 @@ CREATE TABLE decision_item (
     PRIMARY KEY (decision_id, media_key)
 );
 
+-- Every photo a decision covered: the whole group as shown, not just the selection.
+CREATE TABLE decision_member (
+    decision_id INTEGER NOT NULL,
+    media_key TEXT NOT NULL,
+    PRIMARY KEY (decision_id, media_key)
+);
+
 CREATE TABLE trash_job (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     decision_id INTEGER NOT NULL,
@@ -34,6 +41,12 @@ SELECT last_insert_rowid();
 
 insertDecisionItem:
 INSERT INTO decision_item (decision_id, media_key, dedup_key) VALUES (?, ?, ?);
+
+insertDecisionMember:
+INSERT OR IGNORE INTO decision_member (decision_id, media_key) VALUES (?, ?);
+
+selectDecisionMembers:
+SELECT media_key FROM decision_member WHERE decision_id = ?;
 
 insertJob:
 INSERT INTO trash_job (decision_id, media_key, dedup_key, state, attempts, updated_at) VALUES (?, ?, ?, 'QUEUED', 0, ?);

@@ -23,9 +23,10 @@ class SqlReviewRepository(
 
     private val q: ReviewQueries = database.reviewQueries
 
-    override suspend fun recordDecision(groupId: String, kind: DecisionKind, items: List<DecisionItem>, atMs: Long): Long = withContext(io) {
+    override suspend fun recordDecision(groupId: String, kind: DecisionKind, items: List<DecisionItem>, members: Set<String>, atMs: Long): Long = withContext(io) {
         require(kind == DecisionKind.APPROVED || items.isEmpty()) { "Only approvals carry a selection" }
         require(kind != DecisionKind.APPROVED || items.isNotEmpty()) { "An approval needs at least one selected photo" }
+        require(members.containsAll(items.map { it.mediaKey })) { "The selected photos must be among the decision's photos" }
         q.transactionWithResult {
             q.insertDecision(groupId, kind.name, atMs)
             val id = q.lastInsertedId().executeAsOne()
@@ -33,12 +34,17 @@ class SqlReviewRepository(
                 q.insertDecisionItem(id, item.mediaKey, item.dedupKey)
                 if (kind == DecisionKind.APPROVED) q.insertJob(id, item.mediaKey, item.dedupKey, atMs)
             }
+            members.forEach { q.insertDecisionMember(id, it) }
             id
         }
     }
 
     override suspend fun activeDecisions(): List<Decision> = withContext(io) {
         q.selectActiveDecisions().executeAsList().map { it.toDomain() }
+    }
+
+    override suspend fun addDecisionMembers(decisionId: Long, members: Set<String>) = withContext(io) {
+        q.transaction { members.forEach { q.insertDecisionMember(decisionId, it) } }
     }
 
     override suspend fun undoDecision(decisionId: Long, atMs: Long): Decision? = withContext(io) {
@@ -74,6 +80,7 @@ class SqlReviewRepository(
         groupId = group_id,
         kind = DecisionKind.valueOf(kind),
         items = q.selectDecisionItems(id).executeAsList().map { DecisionItem(it.media_key, it.dedup_key) },
+        members = q.selectDecisionMembers(id).executeAsList().toSet(),
         createdAtMs = created_at,
         undoneAtMs = undone_at,
     )

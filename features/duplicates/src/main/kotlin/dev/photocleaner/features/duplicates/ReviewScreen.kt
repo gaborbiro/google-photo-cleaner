@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import dev.photocleaner.core.design.focusRing
 import dev.photocleaner.core.design.Banner
 import dev.photocleaner.core.design.HoverExpandButton
+import dev.photocleaner.core.design.NewBadge
 import dev.photocleaner.core.design.KeyShortcuts
 import dev.photocleaner.core.design.Notice
 import dev.photocleaner.core.design.StatusTone
@@ -174,6 +175,7 @@ private fun GroupTiles(group: GroupUi, viewModel: ReviewViewModel) {
                             tile.error != null -> Text(tile.error)
                             else -> Text("Loading…")
                         }
+                        if (tile.newBadge) NewBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
                         HoverExpandButton(visible = hovered) { viewModel.onOpenViewer(tile.mediaKey) }
                     }
                     Text(tile.label, color = tile.tone.color(), fontWeight = FontWeight.Bold)

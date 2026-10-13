@@ -6,11 +6,17 @@ package dev.photocleaner.repositories.review.domain
  */
 interface ReviewRepository {
 
-    /** Records a decision; for APPROVED, also queues one trash job per item. Returns the decision id. */
-    suspend fun recordDecision(groupId: String, kind: DecisionKind, items: List<DecisionItem>, atMs: Long): Long
+    /**
+     * Records a decision on [members] (every photo shown, which must include the [items]); for
+     * APPROVED, also queues one trash job per item. Returns the decision id.
+     */
+    suspend fun recordDecision(groupId: String, kind: DecisionKind, items: List<DecisionItem>, members: Set<String>, atMs: Long): Long
 
     /** Decisions that have not been undone, newest first. */
     suspend fun activeDecisions(): List<Decision>
+
+    /** Fills in the photos of a decision recorded before members were stored. */
+    suspend fun addDecisionMembers(decisionId: Long, members: Set<String>)
 
     /**
      * Undoes a decision: queued jobs are cancelled, trashed ones are marked for

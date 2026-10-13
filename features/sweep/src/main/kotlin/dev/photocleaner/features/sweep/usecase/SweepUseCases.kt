@@ -121,7 +121,7 @@ class ApproveSweepUseCase(
         require(refused.isEmpty()) { "${refused.size} selected photo(s) are no longer eligible or are already in the trash queue; search again" }
         val now = clock()
         val id = MessageDigest.getInstance("SHA-256").digest("$label|$now".toByteArray()).take(8).joinToString("") { "%02x".format(it) }
-        review.recordDecision("sweep:$id", DecisionKind.APPROVED, mediaKeys.sorted().map { DecisionItem(it, items.getValue(it).item.dedupKey) }, now)
+        review.recordDecision("sweep:$id", DecisionKind.APPROVED, mediaKeys.sorted().map { DecisionItem(it, items.getValue(it).item.dedupKey) }, mediaKeys, now)
         return mediaKeys.size
     }
 }

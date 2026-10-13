@@ -66,8 +66,9 @@ private fun ScanSection(scan: EmbeddingPanelUiState, review: ReviewUiState, onSt
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            "Your decisions stay: photos sent to the trash stay there, and a group you have decided only comes back " +
-                "if a newly found photo belongs to the same moment. It then shows the new photo with the ones you kept.",
+            "Rescanning preserves past decisions. Your decided groups don’t rebuild, except when a new photo matches " +
+                "an already-decided moment. Then the group reappears with the previously kept photos and the newcomer(s). " +
+                "Trashed photos stay trashed.",
             style = MaterialTheme.typography.bodyMedium,
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

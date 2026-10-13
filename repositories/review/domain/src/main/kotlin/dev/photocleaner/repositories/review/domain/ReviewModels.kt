@@ -19,6 +19,11 @@ data class Decision(
     val kind: DecisionKind,
     /** Exactly the photos selected when approving (empty for other kinds). */
     val items: List<DecisionItem>,
+    /**
+     * Every photo the decision covered: the whole group as shown. Empty for decisions recorded
+     * before this was stored, until [ReviewRepository.addDecisionMembers] fills it in.
+     */
+    val members: Set<String>,
     val createdAtMs: Long,
     val undoneAtMs: Long?,
 )

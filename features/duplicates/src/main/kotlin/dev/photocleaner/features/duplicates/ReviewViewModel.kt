@@ -471,8 +471,9 @@ class ReviewViewModel(
         publish()
     }
 
+    /** Starts with the proposals, except photos the user already decided on in an earlier version of this moment. */
     private fun selectionOf(group: DuplicateGroup): MutableSet<String> = selections.getOrPut(group.id) {
-        group.members.filter { it.role == MemberRole.PROPOSED }.map { it.photo.item.mediaKey }.toMutableSet()
+        group.members.filter { it.role == MemberRole.PROPOSED && !it.previouslyReviewed }.map { it.photo.item.mediaKey }.toMutableSet()
     }
 
     private fun publish() {
@@ -515,24 +516,35 @@ class ReviewViewModel(
     private fun groupUi(group: DuplicateGroup): GroupUi {
         val selected = selectionOf(group)
         val selectable = group.selectableMembers().map { it.photo.item.mediaKey }.toSet()
+        // A moment decided before that gained photos: the new ones carry a badge.
+        val returning = group.members.any { it.previouslyReviewed }
+        val newCount = group.members.count { !it.previouslyReviewed }
         return GroupUi(
             title = "${timeFormat.format(group.takenAtMs)} · ${group.members.size} photos" +
+                (if (returning) " · $newCount new since you decided this moment" else "") +
                 if (group.id in deferredIds) " · skipped earlier" else "",
             selectionText = "${selected.size} of ${group.members.size} photo(s) selected for the trash",
             warningText = if (selected.size == group.members.size) "No photo of this moment will be kept." else null,
             tiles = group.members.mapIndexed { index, member ->
-                tileUi(member, member.photo.item.mediaKey in selected, member.photo.item.mediaKey in selectable, allFocused || (ringVisible && index == focusedIndex))
+                tileUi(
+                    member,
+                    selected = member.photo.item.mediaKey in selected,
+                    selectable = member.photo.item.mediaKey in selectable,
+                    focused = allFocused || (ringVisible && index == focusedIndex),
+                    newBadge = returning && !member.previouslyReviewed,
+                )
             },
         )
     }
 
-    private fun tileUi(member: GroupMember, selected: Boolean, selectable: Boolean, focused: Boolean): TileUi {
+    private fun tileUi(member: GroupMember, selected: Boolean, selectable: Boolean, focused: Boolean, newBadge: Boolean): TileUi {
         val item = member.photo.item
         val (label, tone) = when {
             !selectable -> "KEEP · ${keepReasonLabel(member)}" to StatusTone.NEUTRAL
             member.role == MemberRole.KEEPER && selected -> "TRASH (was the recommended keeper)" to StatusTone.NEGATIVE
             member.role == MemberRole.KEEPER -> "KEEP (recommended)" to StatusTone.POSITIVE
             selected -> "TRASH" to StatusTone.NEGATIVE
+            member.previouslyReviewed -> "KEEP (you kept it before)" to StatusTone.POSITIVE
             // Colour says what will happen: green is kept, whoever decided it.
             else -> "KEEP (your choice)" to StatusTone.POSITIVE
         }
@@ -544,6 +556,7 @@ class ReviewViewModel(
             tone = tone,
             selectable = selectable,
             focusRingDp = if (focused) FOCUS_RING_DP else 0,
+            newBadge = newBadge,
             similarityText = if (member.role == MemberRole.KEEPER) null else "%.1f%% similar".format(member.similarity * 100),
             reasons = member.reasons,
             caption = timeFormat.format(item.takenAtMs) +
@@ -613,6 +626,8 @@ data class TileUi(
     val selectable: Boolean,
     /** 0 when not focused. */
     val focusRingDp: Int,
+    /** A photo new to a moment the user decided before. */
+    val newBadge: Boolean,
     val similarityText: String?,
     val reasons: List<String>,
     val caption: String,

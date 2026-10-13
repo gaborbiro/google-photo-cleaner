@@ -31,7 +31,7 @@ enum class MemberRole {
     /** The recommended photo to keep. */
     KEEPER,
 
-    /** Eligible and proposed for deletion. */
+    /** Eligible and proposed for the trash. */
     PROPOSED,
 
     /** Protected or of unknown status: always kept, shown for reference. */
@@ -44,6 +44,11 @@ data class GroupMember(
     /** Similarity to the keeper (1.0 for the keeper itself). */
     val similarity: Double,
     val reasons: List<String>,
+    /**
+     * Already part of a decision the user made (kept, or trashed from). Set by the review
+     * queue; grouping itself knows nothing of decisions.
+     */
+    val previouslyReviewed: Boolean = false,
 )
 
 data class DuplicateGroup(

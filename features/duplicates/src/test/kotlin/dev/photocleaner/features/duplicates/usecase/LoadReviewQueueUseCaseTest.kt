@@ -1,6 +1,6 @@
 package dev.photocleaner.features.duplicates.usecase
 
-import dev.photocleaner.features.duplicates.model.MemberRole
+import dev.photocleaner.features.shared.duplicates.model.MemberRole
 import dev.photocleaner.features.shared.embeddings.EmbeddingSettings
 import dev.photocleaner.features.shared.protection.usecase.ClassifyInventoryUseCase
 import dev.photocleaner.repositories.analysis.SqlAnalysisRepository

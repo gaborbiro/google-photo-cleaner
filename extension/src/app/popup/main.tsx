@@ -3,7 +3,7 @@
 import { createRoot } from 'react-dom/client';
 import { accountLabel } from '../shared/jobView';
 import { send, useAccount, useAnalysisJob, useReport, useScanJob } from '../ui/hooks';
-import { AnalysisCard, JobCard, ReportSummary, StorageProblem } from '../ui/JobCard';
+import { ScanCard, StorageProblem } from '../ui/JobCard';
 
 function Popup() {
   const { answer } = useAccount();
@@ -26,12 +26,10 @@ function Popup() {
       {account && (
         <>
           <p className="mono">Account: {accountLabel(account.fingerprint, account.email)}</p>
-          {job !== undefined && <JobCard account={account.fingerprint} job={job} />}
-          {report && <ReportSummary report={report} />}
-          {analysis !== undefined && <AnalysisCard account={account.fingerprint} job={analysis} scanFinished={job?.status === 'finished'} />}
+          {job !== undefined && analysis !== undefined && <ScanCard account={account.fingerprint} scan={job} analysis={analysis} report={report} />}
           <div className="row">
             <button onClick={() => void send({ kind: 'app-show-panel' })}>Show panel in Google Photos</button>
-            <button onClick={() => void send({ kind: 'app-open-review', account: account.fingerprint })}>Open review tab</button>
+            <button onClick={() => void send({ kind: 'app-open-review', account: account.fingerprint })}>Open review tab <span aria-hidden="true">⤢</span></button>
           </div>
         </>
       )}

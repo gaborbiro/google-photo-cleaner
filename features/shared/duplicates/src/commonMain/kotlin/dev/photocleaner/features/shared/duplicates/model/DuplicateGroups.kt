@@ -1,4 +1,4 @@
-package dev.photocleaner.features.duplicates.model
+package dev.photocleaner.features.shared.duplicates.model
 
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.model.ProtectionReason
@@ -15,6 +15,20 @@ data class GroupingSettings(
     val editedCopyMinUploadGapMs: Long = 60_000,
     val editedCopyMaxTakenGapMs: Long = 2_000,
     val editedCopyMinSimilarity: Double = 0.95,
+)
+
+/** What the analysis measured for one photo, with what the library listing says about the original file. */
+class PhotoAnalysis(
+    /** L2-normalised. */
+    val vector: FloatArray,
+    val sharpness: Double,
+    /** Share of clipped pixels, dark plus bright. */
+    val clipped: Double,
+    val analysedAtMs: Long,
+    val uploadedAtMs: Long?,
+    /** The original's size; null when the listing didn't say. */
+    val width: Int?,
+    val height: Int?,
 )
 
 data class PhotoFacts(
@@ -60,9 +74,16 @@ data class DuplicateGroup(
     val keeper: GroupMember get() = members.first { it.role == MemberRole.KEEPER }
 }
 
+/** Why no photo can be proposed yet; each app says it in its own words. */
+enum class GroupsBlocked {
+    NOT_SCANNED,
+    SCAN_UNFINISHED,
+    SCAN_STALE,
+}
+
 data class DuplicateGroupsResult(
-    /** Null when groups are available; otherwise why not (e.g. the inventory is incomplete or stale). */
-    val blockedReason: String?,
+    /** Null when groups are available; otherwise why not. */
+    val blocked: GroupsBlocked?,
     val groups: List<DuplicateGroup>,
     val photosCompared: Int,
     val photosWithoutEmbedding: Int,

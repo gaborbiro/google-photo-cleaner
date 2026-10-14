@@ -8,10 +8,7 @@ kotlin {
     jvm()
     js {
         browser()
-        // An ES module with TypeScript types, bundled into the extension (see exportToExtension).
-        useEsModules()
-        binaries.library()
-        generateTypeScriptDefinitions()
+        // Exported to the extension by features:shared:duplicates, the one entry point.
     }
 
     sourceSets {
@@ -19,13 +16,4 @@ kotlin {
             api(project(":repositories:inventory:domain"))
         }
     }
-}
-
-/** Copies the JavaScript build into the extension, which bundles it (extension/generated is git-ignored). */
-tasks.register<Copy>("exportToExtension") {
-    description = "Builds the protection rules for JavaScript and copies them into extension/generated/protection."
-    group = "photo cleaner"
-    dependsOn("jsProductionLibraryCompileSync")
-    from(layout.buildDirectory.dir("compileSync/js/main/productionLibrary/kotlin"))
-    into(rootProject.layout.projectDirectory.dir("extension/generated/protection"))
 }

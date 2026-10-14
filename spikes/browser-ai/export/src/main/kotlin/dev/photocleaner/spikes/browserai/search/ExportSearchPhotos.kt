@@ -2,7 +2,7 @@ package dev.photocleaner.spikes.browserai.search
 
 import dev.photocleaner.app.StableSqliteLibrary
 import dev.photocleaner.core.storage.AppPaths
-import dev.photocleaner.features.duplicates.model.GroupingSettings
+import dev.photocleaner.features.shared.duplicates.model.GroupingSettings
 import dev.photocleaner.features.shared.embeddings.EmbeddingSettings
 import dev.photocleaner.features.shared.protection.usecase.ClassifyInventoryUseCase
 import dev.photocleaner.repositories.analysis.SqlAnalysisRepository

@@ -11,15 +11,22 @@ declare global {
 }
 
 const PANEL_WIDTH_PX = 400;
+/** Marks our elements on Google's page, so a later copy of this script can find them. */
+const OWN_ELEMENT = 'data-photo-cleaner';
 const PANEL_URL = chrome.runtime.getURL('panel.html');
 
 function install(): void {
   installRelay(APP_PAGE_CHANNEL);
 
+  // After an extension update or reload, Chrome cuts the old copy of this script off but leaves
+  // its panel and button on the page; without this the tab would show two of each.
+  for (const leftover of document.querySelectorAll(`[${OWN_ELEMENT}]`)) leftover.remove();
+
   // The panel is an extension page in a frame: Google's styles and scripts can't reach it.
   const panel = document.createElement('iframe');
   panel.src = PANEL_URL;
   panel.title = 'Photo Cleaner';
+  panel.setAttribute(OWN_ELEMENT, 'panel');
   Object.assign(panel.style, {
     position: 'fixed', top: '0', right: '0', width: `${PANEL_WIDTH_PX}px`, height: '100vh',
     border: 'none', borderLeft: '1px solid rgba(128,128,128,0.4)', zIndex: '2147483646',
@@ -29,6 +36,7 @@ function install(): void {
   const handle = document.createElement('button');
   handle.textContent = 'Photo Cleaner';
   handle.title = 'Open the Photo Cleaner panel';
+  handle.setAttribute(OWN_ELEMENT, 'handle');
   Object.assign(handle.style, {
     position: 'fixed', right: '0', top: '50%', transform: 'translateY(-50%) rotate(180deg)', writingMode: 'vertical-rl',
     zIndex: '2147483647', border: 'none', borderRadius: '0 6px 6px 0', padding: '12px 6px', cursor: 'pointer',
@@ -57,10 +65,13 @@ function install(): void {
   });
 
   document.documentElement.append(panel, handle);
+
+  // A scan or analysis that paused because Google Photos was closed or signed out carries on now.
+  chrome.runtime.sendMessage({ kind: 'app-photos-ready' }).catch((error: unknown) => console.warn('Photo Cleaner: could not announce this tab', error));
 }
 
 // The manifest injects this into new tabs and the service worker into tabs that were open
-// before an install or update; only the first copy installs.
+// before an install or update; within one extension version only the first copy installs.
 if (!globalThis.__photoCleanerAppContentInstalled) {
   globalThis.__photoCleanerAppContentInstalled = true;
   install();

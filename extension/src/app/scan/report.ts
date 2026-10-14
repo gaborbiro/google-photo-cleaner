@@ -2,7 +2,7 @@
 // rules (features/shared/protection, compiled to JavaScript), so the browser and the desktop app
 // can't disagree on what is protected. The wording follows the desktop's Scan library tab.
 
-import { classifyInventoryJson, defaultMaxAgeMs } from '../../../generated/protection/PhotoCleaner-features-shared-protection.mjs';
+import { classifyInventoryJson, defaultMaxAgeMs } from '../../../generated/kotlin/PhotoCleaner-features-shared-duplicates.mjs';
 import { count, n } from '../shared/format';
 import type { InventorySnapshot } from './model';
 
@@ -46,6 +46,9 @@ export interface Classification {
   items: { mediaKey: string; eligibility: Eligibility; protectionReasons: string[]; unknownReasons: UnknownReason[] }[];
 }
 
+/** How old a scan may be before it no longer proves what is protected (the shared rules' limit: a day). */
+export const SCAN_MAX_AGE_MS = defaultMaxAgeMs();
+
 /** Applies the shared protection rules to a snapshot. */
 export function classify(snapshot: InventorySnapshot, nowMs: number, maxAgeMs: number = defaultMaxAgeMs()): Classification {
   return JSON.parse(classifyInventoryJson(JSON.stringify(snapshot), nowMs, maxAgeMs)) as Classification;
@@ -60,6 +63,8 @@ export interface ReportView {
   tone: Tone;
   /** One line for the panel and popup: "17,196 photos · 3,021 protected · …". */
   summary: string;
+  /** "Scan started 14 Oct 2026, 18:52, finished 14 Oct 2026, 18:56". */
+  timesLine: string;
   coverageLines: string[];
   issueLines: string[];
   tables: { title: string; rows: { label: string; value: string; indent: boolean }[] }[];
@@ -93,11 +98,12 @@ function table(c: TypeCounts) {
     title,
     rows: [
       row('Enumerated', c.total),
-      row('Protected (each counted once)', c.protectedTotal),
+      row('Protected', c.protectedTotal),
       row('favourite', c.protectedByFavourite, true),
       row('in an album', c.protectedByAlbum, true),
       row('archived', c.protectedByArchive, true),
-      row('favourite and in an album', c.protectedByFavouriteAndAlbum, true),
+      // The reasons overlap: this row shows by how much, so they can add up to more than the total.
+      row('both favourite and in an album', c.protectedByFavouriteAndAlbum, true),
       row('Eligible', c.eligible),
       row('Unknown (excluded)', c.unknown),
       ...Object.entries(c.unknownByReason).map(([reason, count]) => row(REASON_LABELS[reason as UnknownReason], count ?? 0, true)),
@@ -110,7 +116,7 @@ export function reportView(classification: Classification): ReportView {
   const [title, tone]: [string, Tone] = !coverage.isComplete
     ? ['Protection coverage incomplete: no photo can be trashed', 'bad']
     : coverage.isStale
-      ? ['The last scan is more than a day old: no photo can be trashed until you scan again', 'warn']
+      ? ['The last scan is more than a day old: no photo can be trashed until you check for new photos', 'warn']
       : ['Protection coverage complete', 'good'];
   const coverageLines = [
     `Scan started ${time(coverage.startedAtMs)}` + (coverage.finishedAtMs !== null ? `, finished ${time(coverage.finishedAtMs)}` : ', not finished'),
@@ -136,5 +142,5 @@ export function reportView(classification: Classification): ReportView {
     ...(issueLines.length > 0 ? [`${issueLines.length} album issue(s)`] : []),
     ...tables.flatMap((t) => [t.title, ...t.rows.map((r) => `${r.indent ? '    ' : '  '}${r.label}: ${r.value}`)]),
   ].join('\n');
-  return { title, tone, summary, coverageLines, issueLines, tables, copyText };
+  return { title, tone, summary, timesLine: coverageLines[0]!, coverageLines, issueLines, tables, copyText };
 }

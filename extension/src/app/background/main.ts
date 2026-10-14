@@ -3,6 +3,7 @@
 // Photos tabs, and opens the app's tabs. Job state lives in the job store.
 
 import type { OpResult, ReadOp, TabCommand } from '../../shared/protocol';
+import { resumeWaitingForPhotos } from '../shared/actions';
 import { IndexedDbJobStore } from '../shared/store';
 import { isAppRequest, type AccountAnswer, type AppRequest, type TabRequest } from '../shared/messages';
 
@@ -148,6 +149,30 @@ async function closeEngineIfIdle(): Promise<void> {
   if (!jobs.some((job) => job.status === 'running') && (await engineRunning())) await chrome.offscreen.closeDocument();
 }
 
+/** A Photos tab signed in to [account] answered: jobs that paused for want of one carry on. */
+async function carryOn(account: string): Promise<void> {
+  if (await resumeWaitingForPhotos(store, account, Date.now())) {
+    console.info(`Photo Cleaner: Google Photos is back for account ${account.slice(0, 8)}…; carrying on`);
+    await wakeEngine();
+  }
+}
+
+const READY_ATTEMPTS = 3;
+const READY_RETRY_MS = 2_000;
+
+/**
+ * A Photos page has just loaded. Google's page may not be able to say which account it is signed in
+ * to straight away, so it is asked a few times, briefly, before giving up (the panel asks again later).
+ */
+async function photosReady(tab: chrome.tabs.Tab | undefined): Promise<void> {
+  for (let attempt = 1; attempt <= READY_ATTEMPTS; attempt++) {
+    const answer = await accountOf(tab);
+    if (answer.account) return carryOn(answer.account.fingerprint);
+    console.info(`Photo Cleaner: a Photos page loaded but its account is not known yet (${answer.problem}); attempt ${attempt} of ${READY_ATTEMPTS}`);
+    if (attempt < READY_ATTEMPTS) await new Promise((resolve) => setTimeout(resolve, READY_RETRY_MS));
+  }
+}
+
 // --- tabs ---
 
 async function openPhotos(): Promise<void> {
@@ -180,8 +205,15 @@ async function showPanel(): Promise<void> {
 
 async function handle(request: AppRequest, sender: chrome.runtime.MessageSender): Promise<unknown> {
   switch (request.kind) {
-    case 'app-account':
-      return accountOf(sender.tab);
+    case 'app-account': {
+      // The panel and popup ask this as they open: a good moment to carry on, too.
+      const answer = await accountOf(sender.tab);
+      if (answer.account) await carryOn(answer.account.fingerprint);
+      return answer;
+    }
+    case 'app-photos-ready':
+      await photosReady(sender.tab);
+      return true;
     case 'app-wake-engine':
       await wakeEngine();
       return true;

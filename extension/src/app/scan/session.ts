@@ -5,7 +5,7 @@
 
 import type { IndexedDbInventoryStore } from './inventoryStore';
 import type { AlbumStatus, ScanPhase, ScanRun } from './model';
-import { SourceError, type PhotosSource } from './source';
+import { SourceError, waitingForPhotosText, waitsForPhotos, type PhotosSource } from './source';
 
 export interface ScanPolicy {
   pacingMs: number;
@@ -41,14 +41,17 @@ export interface ScanProgress {
 
 export type ScanOutcome =
   | { kind: 'completed' }
-  /** Stopped by a problem the user can fix (session, tab, network, rate limit); resumable. */
-  | { kind: 'paused'; reason: string }
+  /**
+   * Stopped by a problem the user can fix (session, tab, network, rate limit); resumable. When only
+   * Google Photos was missing ([untilPhotosOpen]), it continues by itself once it is back.
+   */
+  | { kind: 'paused'; reason: string; untilPhotosOpen: boolean }
   /** Stopped by something that needs an update of the extension; not resumable. */
   | { kind: 'failed'; reason: string }
   /** The user paused it. */
   | { kind: 'stopped' }
-  /** Could not even start (no Photos tab, signed out, other account). */
-  | { kind: 'not-started'; reason: string };
+  /** Could not even start (no Photos tab, signed out, other account); [untilPhotosOpen] as for paused. */
+  | { kind: 'not-started'; reason: string; untilPhotosOpen: boolean };
 
 export interface ScanDeps {
   account: string;
@@ -103,12 +106,12 @@ class ScanSession {
     try {
       signedIn = (await this.request('session check', () => this.deps.source.status())).accountFingerprint;
     } catch (e) {
-      if (e instanceof ScanStop) return { kind: 'not-started', reason: e.message };
+      if (e instanceof ScanStop) return { kind: 'not-started', reason: e.message, untilPhotosOpen: waitsForPhotos(e.cause) };
       if (e instanceof UserStop) return { kind: 'stopped' };
       throw e;
     }
     if (signedIn !== account) {
-      return { kind: 'not-started', reason: 'The Google Photos tab is signed in to a different account. Switch it to this account, then scan.' };
+      return { kind: 'not-started', reason: 'The Google Photos tab is signed in to a different account. Switch it to this account, then scan.', untilPhotosOpen: false };
     }
 
     const latest = await store.latestRun(account);
@@ -140,7 +143,7 @@ class ScanSession {
         await store.updateRunStatus(this.run.id, failed ? 'FAILED' : 'PAUSED', e.message, failed ? this.now() : null);
         this.notice = e.message;
         await this.emitProgress();
-        return { kind: e.outcome, reason: e.message };
+        return e.outcome === 'paused' ? { kind: 'paused', reason: e.message, untilPhotosOpen: waitsForPhotos(e.cause) } : { kind: 'failed', reason: e.message };
       }
       throw e;
     }
@@ -298,9 +301,8 @@ class ScanSession {
             await this.sleep(this.policy.transientBaseDelayMs);
             break;
           case 'SESSION':
-            throw new ScanStop('paused', 'The Google Photos session ended. Reload photos.google.com, check you are signed in, then resume.', e);
           case 'NO_PHOTOS_TAB':
-            throw new ScanStop('paused', `${e.message} Then resume the scan.`, e);
+            throw new ScanStop('paused', waitingForPhotosText(e), e);
           case 'PROTOCOL':
             throw new ScanStop('failed', `Google's response to the ${label} request was not understood (${e.message}). The extension needs updating.`, e);
           case 'BAD_REQUEST':

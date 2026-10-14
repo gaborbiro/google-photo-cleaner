@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { decidePace } from '../../src/app/ai/gentle';
 import { chooseDetail, modelKey } from '../../src/app/ai/model';
-import { mostSimilar, newestAnalysed } from '../../src/app/ai/similar';
+import { mostSimilar } from '../../src/app/ai/similar';
 import { speedCheckText } from '../../src/app/ai/analysis';
 
 describe('choosing the detail', () => {
@@ -64,10 +64,5 @@ describe('similar photos', () => {
 
   it('refuses to compare fingerprints of different kinds', () => {
     expect(() => mostSimilar({ mediaKey: 'x', vector: v(1, 0) }, all, 1)).toThrow();
-  });
-
-  it('starting points are the newest analysed photos', () => {
-    const items = [{ mediaKey: 'a', takenAtMs: 1 }, { mediaKey: 'b', takenAtMs: 3 }, { mediaKey: 'c', takenAtMs: 2 }];
-    expect(newestAnalysed(items, new Set(['a', 'b']), 5).map((i) => i.mediaKey)).toEqual(['b', 'a']);
   });
 });

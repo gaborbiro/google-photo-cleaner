@@ -28,10 +28,11 @@ function sourceFor(account: string) {
 const isRunning = async (id: string) => (await jobs.get(id))?.status === 'running';
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-async function finish(job: Job, outcome: { kind: string; reason?: string }): Promise<void> {
+async function finish(job: Job, outcome: { kind: string; reason?: string; untilPhotosOpen?: boolean }): Promise<void> {
   if (outcome.kind === 'stopped') return; // the user's pause is already saved
   const result = outcome.kind === 'completed' ? 'completed' : outcome.kind === 'failed' ? 'failed' : 'paused';
-  await jobs.update(job.id, (j) => (j ? endJob(j, result, outcome.reason ?? null, Date.now()) : null));
+  await jobs.update(job.id, (j) => (j ? endJob(j, result, outcome.reason ?? null, Date.now(), outcome.untilPhotosOpen === true) : null));
+  if (outcome.untilPhotosOpen) console.info(`Photo Cleaner: ${job.kind} paused until Google Photos is back: ${outcome.reason}`);
 }
 
 async function runScanJob(job: ScanJob): Promise<void> {

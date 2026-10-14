@@ -1,9 +1,10 @@
 package dev.photocleaner.features.duplicates.usecase
 
-import dev.photocleaner.features.duplicates.model.DuplicateGroup
-import dev.photocleaner.features.duplicates.model.GroupMember
-import dev.photocleaner.features.duplicates.model.MemberRole
-import dev.photocleaner.features.duplicates.model.PhotoFacts
+import dev.photocleaner.features.shared.duplicates.model.DuplicateGroup
+import dev.photocleaner.features.shared.duplicates.selectableMembers
+import dev.photocleaner.features.shared.duplicates.model.GroupMember
+import dev.photocleaner.features.shared.duplicates.model.MemberRole
+import dev.photocleaner.features.shared.duplicates.model.PhotoFacts
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.usecase.ClassifyInventoryUseCase
 import dev.photocleaner.repositories.inventory.SqlInventoryRepository

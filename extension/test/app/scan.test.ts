@@ -135,7 +135,7 @@ describe('library scan', () => {
     const source = standardAccount();
     source.failure = (op, call) => (op === 'favourites' && call < 12 ? new SourceError('RATE_LIMIT', '429', 429) : null);
     const paused = await scan(source, store);
-    expect(paused.outcome).toEqual({ kind: 'paused', reason: 'Google is limiting requests. Resume the scan later.' });
+    expect(paused.outcome).toEqual({ kind: 'paused', reason: 'Google is limiting requests. Resume the scan later.', untilPhotosOpen: false });
     expect((await store.latestRun('account-a'))!.status).toBe('PAUSED');
     expect(eligibleIndexes(await classifyLatest(store))).toEqual([]); // a paused scan proves nothing
 
@@ -148,12 +148,23 @@ describe('library scan', () => {
     expect(eligibleIndexes(await classifyLatest(store))).toEqual([0, 6, 7, 8, 9]);
   });
 
+  it('a closed Photos tab pauses until Google Photos is open again', async () => {
+    const store = newStore();
+    const source = standardAccount();
+    source.failure = (op, call) => (op === 'library' && call === 3 ? new SourceError('NO_PHOTOS_TAB', 'no tab') : null);
+    const paused = await scan(source, store);
+    expect(paused.outcome).toEqual({
+      kind: 'paused', reason: 'Google Photos was closed. Open photos.google.com, signed in to this account; the scan continues by itself.', untilPhotosOpen: true,
+    });
+  });
+
   it('after a lost session a new scan resumes from the saved page', async () => {
     const store = newStore();
     const source = standardAccount();
     source.failure = (op, call) => (op === 'library' && call === 3 ? new SourceError('SESSION', 'signed out', 401) : null);
     const paused = await scan(source, store);
-    expect(paused.outcome.kind).toBe('paused');
+    // It waits for Google Photos: signed in again, the scan carries on by itself.
+    expect(paused.outcome).toEqual({ kind: 'paused', reason: 'Google Photos is signed out. Sign in again at photos.google.com; the scan continues by itself.', untilPhotosOpen: true });
     expect(paused.progress.at(-1)!.libraryEntries).toBe(6);
 
     source.failure = () => null;

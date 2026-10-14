@@ -1,7 +1,7 @@
 package dev.photocleaner.features.sweep.usecase
 
 import dev.photocleaner.features.shared.embeddings.EmbeddingSettings
-import dev.photocleaner.features.shared.embeddings.Vectors
+import dev.photocleaner.features.shared.duplicates.Vectors
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.model.InventoryClassification
 import dev.photocleaner.features.shared.protection.usecase.ClassifyInventoryUseCase

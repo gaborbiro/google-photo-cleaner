@@ -8,17 +8,18 @@ import dev.photocleaner.core.design.NoticeSource
 import dev.photocleaner.core.design.NoticeUi
 import dev.photocleaner.core.design.PhotoDateFormat
 import dev.photocleaner.core.design.StatusTone
-import dev.photocleaner.features.duplicates.model.DuplicateGroup
-import dev.photocleaner.features.duplicates.model.GroupMember
-import dev.photocleaner.features.duplicates.model.GroupingSettings
-import dev.photocleaner.features.duplicates.model.MemberRole
+import dev.photocleaner.features.shared.duplicates.model.DuplicateGroup
+import dev.photocleaner.features.shared.duplicates.model.GroupMember
+import dev.photocleaner.features.shared.duplicates.model.GroupingSettings
+import dev.photocleaner.features.shared.duplicates.model.MemberRole
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.model.ProtectionReason
 import dev.photocleaner.features.duplicates.usecase.DecideGroupUseCase
 import dev.photocleaner.features.duplicates.usecase.LoadReviewQueueUseCase
 import dev.photocleaner.features.duplicates.usecase.TrashQueueStatus
 import dev.photocleaner.features.duplicates.usecase.UndoLastDecisionUseCase
-import dev.photocleaner.features.duplicates.usecase.selectableMembers
+import dev.photocleaner.features.shared.duplicates.defaultSelection
+import dev.photocleaner.features.shared.duplicates.selectableMembers
 import dev.photocleaner.features.shared.previews.FetchPreviewUseCase
 import dev.photocleaner.features.shared.previews.PhotosAvailability
 import dev.photocleaner.features.shared.previews.isTransient
@@ -429,7 +430,7 @@ class ReviewViewModel(
         deferredIds = queue.deferredIds
         totalGroups = queue.totalGroups
         decidedGroups = queue.decidedGroups
-        blockedReason = queue.blockedReason
+        blockedReason = queue.blocked?.text()
         analysedAtMs = queue.analysedAtMs
         photosAnalysed = queue.photosAnalysed
         photosNotAnalysed = queue.photosNotAnalysed
@@ -464,9 +465,7 @@ class ReviewViewModel(
     }
 
     /** Starts with the proposals, except photos the user already decided on in an earlier version of this moment. */
-    private fun selectionOf(group: DuplicateGroup): MutableSet<String> = selections.getOrPut(group.id) {
-        group.members.filter { it.role == MemberRole.PROPOSED && !it.previouslyReviewed }.map { it.photo.item.mediaKey }.toMutableSet()
-    }
+    private fun selectionOf(group: DuplicateGroup): MutableSet<String> = selections.getOrPut(group.id) { group.defaultSelection().toMutableSet() }
 
     private fun publish() {
         val group = pending.firstOrNull()

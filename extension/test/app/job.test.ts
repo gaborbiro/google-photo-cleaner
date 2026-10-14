@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
-import { endJob, jobId, NO_PROGRESS, pauseJob, reportProgress, resumeJob, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
+import { endJob, jobId, NO_PROGRESS, pauseJob, reportProgress, resumeIfWaitingForPhotos, resumeJob, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 
 const progress = { ...NO_PROGRESS, phase: 'LIBRARY' as const, libraryEntries: 500 };
 
@@ -31,6 +31,18 @@ describe('job life cycle', () => {
   it("resuming clears the last stop's notice", () => {
     const paused = endJob(started, 'paused', 'The session ended.', 3_000);
     expect(resumeJob(paused, 4_000)).toMatchObject({ status: 'running', progress: { notice: null } });
+  });
+
+  it('a job paused for want of Google Photos carries on when Photos of its account is back, and only then', () => {
+    const waiting = endJob(started, 'paused', 'Google Photos was closed.', 3_000, true);
+    expect(waiting).toMatchObject({ status: 'paused', resumeWhenPhotosOpen: true });
+    expect(resumeIfWaitingForPhotos(waiting, 'acc2', 4_000)).toBe(waiting); // another account's Photos
+    expect(resumeIfWaitingForPhotos(waiting, waiting.account, 4_000)).toMatchObject({ status: 'running', resumeWhenPhotosOpen: false, progress: { notice: null } });
+    // Paused by the user, or by anything else (e.g. rate limits): it waits for the user.
+    expect(resumeIfWaitingForPhotos(pauseJob(started, 3_000), started.account, 4_000).status).toBe('paused');
+    expect(resumeIfWaitingForPhotos(endJob(started, 'paused', 'Google is limiting requests.', 3_000), started.account, 4_000).status).toBe('paused');
+    // The user pausing a waiting job keeps it paused even when Photos comes back.
+    expect(resumeIfWaitingForPhotos(pauseJob(waiting, 3_500), waiting.account, 4_000).status).toBe('paused');
   });
 
   it('refuses a job without an account', () => {

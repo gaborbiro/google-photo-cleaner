@@ -18,6 +18,12 @@ export const STORES = {
   photoInfo: 'photoInfo',
   /** Per account: the detail its library is analysed at, chosen once by the speed check. */
   analysisSettings: 'analysisSettings',
+  /** Review decisions (approve, keep, skip), per account; undone ones stay with their undo time. */
+  decisions: 'decisions',
+  /** One job per photo approved for the trash, with its state. */
+  trashJobs: 'trashJobs',
+  /** What the simulated trash holds: [account, dedupKey]. Nothing is sent to Google before M6. */
+  simulatedTrash: 'simulatedTrash',
 } as const;
 
 export function request<T>(req: IDBRequest<T>): Promise<T> {
@@ -77,6 +83,11 @@ function upgrade(open: IDBOpenDBRequest): void {
     create(STORES.embeddings, { keyPath: ['modelKey', 'mediaKey'] })?.createIndex('account', 'account');
     create(STORES.photoInfo, { keyPath: ['account', 'mediaKey'] });
     create(STORES.analysisSettings, { keyPath: 'account' });
+    create(STORES.decisions, { keyPath: 'id', autoIncrement: true })?.createIndex('account', 'account');
+    const jobs = create(STORES.trashJobs, { keyPath: 'id', autoIncrement: true });
+    jobs?.createIndex('account', 'account');
+    jobs?.createIndex('decisionId', 'decisionId');
+    create(STORES.simulatedTrash, { keyPath: ['account', 'dedupKey'] });
   };
 }
 

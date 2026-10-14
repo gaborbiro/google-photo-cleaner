@@ -8,6 +8,7 @@ dependencies {
     implementation(project(":core:design"))
     implementation(project(":services:connector:domain"))
     implementation(project(":features:shared:protection"))
+    implementation(project(":features:shared:duplicates"))
     implementation(project(":features:shared:previews"))
     implementation(project(":features:shared:embeddings"))
     implementation(libs.jetbrains.lifecycle.viewmodel.compose)

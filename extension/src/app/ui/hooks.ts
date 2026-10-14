@@ -166,3 +166,48 @@ export function useAccount(): { answer: AccountAnswer | undefined; refresh: () =
   }, [refresh]);
   return { answer, refresh };
 }
+
+const SPINNER_FRAME_MS = 100;
+const SPINNER_PX = 32;
+
+/**
+ * While [spinning], the browser tab's icon is a turning ring, so a running Scan shows from any tab
+ * (Chrome's own loading spinner only appears while a page loads). Background tabs get timers about
+ * once a second, so there it turns in steps. Afterwards the page's own icon is put back: Chrome keeps
+ * showing the last icon set, so removing the ring alone would leave its last frame in the tab.
+ */
+export function useSpinningTabIcon(spinning: boolean): void {
+  useEffect(() => {
+    if (!spinning) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = SPINNER_PX;
+    canvas.height = SPINNER_PX;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!link) throw new Error('The page has no tab icon to animate (link rel="icon")');
+    const ownIcon = link.href;
+    let turn = 0;
+    const draw = () => {
+      context.clearRect(0, 0, SPINNER_PX, SPINNER_PX);
+      context.lineWidth = 5;
+      context.lineCap = 'round';
+      context.strokeStyle = 'rgba(139, 116, 255, 0.25)';
+      context.beginPath();
+      context.arc(SPINNER_PX / 2, SPINNER_PX / 2, 12, 0, 2 * Math.PI);
+      context.stroke();
+      context.strokeStyle = '#8b74ff';
+      context.beginPath();
+      context.arc(SPINNER_PX / 2, SPINNER_PX / 2, 12, turn, turn + 1.5 * Math.PI);
+      context.stroke();
+      link.href = canvas.toDataURL('image/png');
+      turn += Math.PI / 6;
+    };
+    draw();
+    const timer = setInterval(draw, SPINNER_FRAME_MS);
+    return () => {
+      clearInterval(timer);
+      link.href = ownIcon;
+    };
+  }, [spinning]);
+}

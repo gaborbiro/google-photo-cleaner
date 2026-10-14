@@ -1,8 +1,8 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
-import { pause, resume, setAnalysisFullSpeed, startAnalysis, startScan } from '../../src/app/shared/actions';
-import { jobId, NO_PROGRESS, reportProgress } from '../../src/app/shared/job';
+import { pause, resume, resumeWaitingForPhotos, setAnalysisFullSpeed, startAnalysis, startScan } from '../../src/app/shared/actions';
+import { endJob, jobId, NO_PROGRESS, reportProgress } from '../../src/app/shared/job';
 import type { AppRequest } from '../../src/app/shared/messages';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
 
@@ -49,6 +49,19 @@ describe('scan actions (on the real job store, in memory)', () => {
     await resume(store, send, 'library-scan', 'acc1', 3_000);
     expect((await store.get(scanOf('acc1')))?.status).toBe('running');
     expect(sent).toHaveLength(2);
+  });
+
+  it('Google Photos open again carries on the jobs that waited for it, for that account only', async () => {
+    const store = new IndexedDbJobStore(new IDBFactory());
+    const { send } = recorder();
+    for (const account of ['acc1', 'acc2']) {
+      await startScan(store, send, account, 1_000);
+      await store.update(jobId('library-scan', account), (j) => (j ? endJob(j, 'paused', 'Google Photos was closed.', 2_000, true) : null));
+    }
+    expect(await resumeWaitingForPhotos(store, 'acc1', 3_000)).toBe(true);
+    expect((await store.get(jobId('library-scan', 'acc1')))!.status).toBe('running');
+    expect((await store.get(jobId('library-scan', 'acc2')))!.status).toBe('paused');
+    expect(await resumeWaitingForPhotos(store, 'acc1', 4_000)).toBe(false); // nothing left waiting
   });
 
   it('pausing or resuming an account without a scan saves nothing', async () => {

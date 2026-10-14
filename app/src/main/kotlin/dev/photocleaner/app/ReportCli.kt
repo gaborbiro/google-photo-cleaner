@@ -2,7 +2,8 @@ package dev.photocleaner.app
 
 import dev.photocleaner.core.storage.AppPaths
 import dev.photocleaner.features.calibration.usecase.LoadCalibrationUseCase
-import dev.photocleaner.features.duplicates.model.MemberRole
+import dev.photocleaner.features.shared.duplicates.model.MemberRole
+import dev.photocleaner.features.duplicates.text
 import dev.photocleaner.features.duplicates.usecase.BuildDuplicateGroupsUseCase
 import dev.photocleaner.features.shared.protection.usecase.ClassifyInventoryUseCase
 import dev.photocleaner.repositories.analysis.SqlAnalysisRepository
@@ -30,7 +31,7 @@ private suspend fun printGroups(classify: ClassifyInventoryUseCase, analysis: Sq
     val started = System.currentTimeMillis()
     val result = BuildDuplicateGroupsUseCase(classify, analysis).execute()
     println("Built in ${System.currentTimeMillis() - started} ms")
-    result.blockedReason?.let { println("Blocked: $it") }
+    result.blocked?.let { println("Blocked: ${it.text()}") }
     println("Photos compared: ${result.photosCompared}, without embedding: ${result.photosWithoutEmbedding}")
     val groups = result.groups
     val proposed = groups.flatMap { g -> g.members.filter { it.role == MemberRole.PROPOSED } }

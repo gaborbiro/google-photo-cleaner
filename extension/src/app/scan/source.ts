@@ -6,6 +6,21 @@ import type { AlbumDto, AlbumItemsPageDto, AlbumsPageDto, LibraryPageDto } from 
 import type { ErrorKind, OpResult, ReadOp } from '../../shared/protocol';
 import type { AlbumRecord, EntryRef, InventoryItem } from './model';
 
+/**
+ * Google Photos closed or signed out: a scan or analysis waits for it, and carries on by itself when
+ * a Photos tab signed in to its account opens (the background hears of every Photos page that loads).
+ */
+export function waitsForPhotos(error: unknown): boolean {
+  return error instanceof SourceError && (error.kind === 'SESSION' || error.kind === 'NO_PHOTOS_TAB');
+}
+
+/** What the user reads while it waits. */
+export function waitingForPhotosText(error: SourceError): string {
+  return error.kind === 'SESSION'
+    ? 'Google Photos is signed out. Sign in again at photos.google.com; the scan continues by itself.'
+    : 'Google Photos was closed. Open photos.google.com, signed in to this account; the scan continues by itself.';
+}
+
 /** A failure reported by the page script, by kind (see shared/protocol.ts). */
 export class SourceError extends Error {
   constructor(

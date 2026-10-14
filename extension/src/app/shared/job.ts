@@ -20,6 +20,12 @@ interface JobBase {
   startedAtMs: number;
   updatedAtMs: number;
   finishedAtMs: number | null;
+  /**
+   * Paused only because Google Photos was closed or signed out: it carries on by itself when a
+   * Photos tab of this account is open again. Never set by the user's own pause (absent in jobs
+   * saved before this existed).
+   */
+  resumeWhenPhotosOpen?: boolean;
 }
 
 export interface ScanJob extends JobBase {
@@ -55,7 +61,7 @@ export function jobId(kind: JobKind, account: string): string {
 
 function base(kind: JobKind, account: string, nowMs: number): JobBase {
   if (!account) throw new Error('A job needs an account');
-  return { id: jobId(kind, account), account, status: 'running', startedAtMs: nowMs, updatedAtMs: nowMs, finishedAtMs: null };
+  return { id: jobId(kind, account), account, status: 'running', startedAtMs: nowMs, updatedAtMs: nowMs, finishedAtMs: null, resumeWhenPhotosOpen: false };
 }
 
 /** A fresh scan, started now; replaces a finished, failed or paused one. */
@@ -76,12 +82,19 @@ export function startAnalysisJob(account: string, nowMs: number, previous: Analy
   };
 }
 
+/** The user's pause: it stays paused until they resume it (also a pause that was waiting for Google Photos). */
 export function pauseJob<J extends Job>(job: J, nowMs: number): J {
-  return job.status === 'running' ? { ...job, status: 'paused', updatedAtMs: nowMs } : job;
+  if (job.status === 'running') return { ...job, status: 'paused', resumeWhenPhotosOpen: false, updatedAtMs: nowMs };
+  return job.status === 'paused' && job.resumeWhenPhotosOpen ? { ...job, resumeWhenPhotosOpen: false, updatedAtMs: nowMs } : job;
 }
 
 export function resumeJob<J extends Job>(job: J, nowMs: number): J {
-  return job.status === 'paused' ? { ...job, status: 'running', progress: { ...job.progress, notice: null }, updatedAtMs: nowMs } : job;
+  return job.status === 'paused' ? { ...job, status: 'running', resumeWhenPhotosOpen: false, progress: { ...job.progress, notice: null }, updatedAtMs: nowMs } : job;
+}
+
+/** Google Photos is open and signed in to [account] again: a job that paused only for want of it carries on. */
+export function resumeIfWaitingForPhotos<J extends Job>(job: J, account: string, nowMs: number): J {
+  return job.status === 'paused' && job.resumeWhenPhotosOpen === true && job.account === account ? resumeJob(job, nowMs) : job;
 }
 
 /** New progress from the background page; ignored once the job is no longer running. */
@@ -89,15 +102,18 @@ export function reportProgress<J extends Job>(job: J, progress: J['progress'], n
   return job.status === 'running' ? { ...job, progress, updatedAtMs: nowMs } : job;
 }
 
-/** How the background page's run ended. A user pause has already been saved and stays as it is. */
-export function endJob<J extends Job>(job: J, outcome: 'completed' | 'paused' | 'failed', notice: string | null, nowMs: number): J {
+/**
+ * How the background page's run ended. A user pause has already been saved and stays as it is.
+ * [resumeWhenPhotosOpen]: paused only because Google Photos was missing.
+ */
+export function endJob<J extends Job>(job: J, outcome: 'completed' | 'paused' | 'failed', notice: string | null, nowMs: number, resumeWhenPhotosOpen = false): J {
   if (job.status !== 'running') return job;
   const progress = { ...job.progress, notice };
   switch (outcome) {
     case 'completed':
       return { ...job, status: 'finished', progress, updatedAtMs: nowMs, finishedAtMs: nowMs };
     case 'paused':
-      return { ...job, status: 'paused', progress, updatedAtMs: nowMs };
+      return { ...job, status: 'paused', progress, resumeWhenPhotosOpen, updatedAtMs: nowMs };
     case 'failed':
       return { ...job, status: 'failed', progress, updatedAtMs: nowMs, finishedAtMs: nowMs };
   }

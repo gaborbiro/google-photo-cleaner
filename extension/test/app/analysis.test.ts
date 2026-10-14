@@ -150,13 +150,12 @@ describe('AI analysis', () => {
     expect(embedder.calls.map((c) => c.index)).not.toContain(1);
   });
 
-  it('a lost session pauses with what to do', async () => {
+  it('a lost session pauses until Google Photos is signed in again, saying so', async () => {
     const env = await setup();
     env.source.failure = (op) => (op === 'preview' ? new SourceError('SESSION', 'signed out', 401) : null);
     const clock = { now: 0 };
     const { outcome } = await analyse(env, new FakeEmbedder(clock, 100), clock);
-    expect(outcome.kind).toBe('paused');
-    expect((outcome as { reason: string }).reason).toContain('session ended');
+    expect(outcome).toEqual({ kind: 'paused', reason: 'Google Photos is signed out. Sign in again at photos.google.com; the scan continues by itself.', untilPhotosOpen: true });
   });
 
   it('refuses to read another account\'s library', async () => {
@@ -175,7 +174,7 @@ describe('AI analysis', () => {
     const embedder = new FakeEmbedder(clock, 100);
     embedder.loadError = new Error('Not enough free disk space for the AI model: about 368 MB is needed.');
     const { outcome } = await analyse(env, embedder, clock);
-    expect(outcome).toEqual({ kind: 'paused', reason: 'Not enough free disk space for the AI model: about 368 MB is needed.' });
+    expect(outcome).toEqual({ kind: 'paused', reason: 'Not enough free disk space for the AI model: about 368 MB is needed.', untilPhotosOpen: false });
   });
 
   it('reports the speed and where each photo\'s time goes', async () => {
@@ -186,6 +185,38 @@ describe('AI analysis', () => {
     const last = progress.at(-1)!;
     expect(last.photosPerSecond).toBeCloseTo(4);
     expect(last.perPhotoMs).toEqual({ other: 0, pace: 0, preview: 0, ai: 250, save: 0 });
+  });
+
+  it('a run with nothing new finishes at once: no model to start, no library to read', async () => {
+    const env = await setup(Array.from({ length: 30 }, (_, i) => fakeItem(i)));
+    const clock = { now: 0 };
+    const embedder = new FakeEmbedder(clock, 100);
+    await analyse(env, embedder, clock);
+    let loads = 0;
+    embedder.load = async () => void loads++;
+    env.source.calls.length = 0;
+    const { outcome, progress } = await analyse(env, embedder, clock);
+    expect(outcome).toEqual({ kind: 'completed' });
+    expect(loads).toBe(0);
+    expect(env.source.calls).toEqual([]);
+    expect(progress.at(-1)).toMatchObject({ photos: 30, analysed: 30, newPhotos: 0 });
+  });
+
+  it('new photos are the newest: reading stops as soon as they are done', async () => {
+    // 30 photos, 3 a page, newest first; then 2 newer ones arrive at the top.
+    const library = Array.from({ length: 30 }, (_, i) => fakeItem(i + 2));
+    const env = await setup(library);
+    const clock = { now: 0 };
+    const embedder = new FakeEmbedder(clock, 100);
+    await analyse(env, embedder, clock);
+    env.source.library.unshift(fakeItem(0), fakeItem(1));
+    await scan(env.source, env.inventory);
+    env.source.calls.length = 0;
+    embedder.calls.length = 0;
+    const { progress } = await analyse(env, embedder, clock);
+    expect(embedder.calls.map((c) => c.index).sort()).toEqual([0, 1]);
+    expect(env.source.calls.filter((c) => c === 'library')).toHaveLength(1); // the first page only, not all 11
+    expect(progress.at(-1)).toMatchObject({ photos: 32, analysed: 32, newPhotos: 2, newAnalysed: 2 });
   });
 
   it('shows why it is going gently', async () => {

@@ -17,7 +17,9 @@ export type AppRequest =
   | { kind: 'app-run-op'; account: string; op: ReadOp; params: Record<string, unknown> }
   | { kind: 'app-open-review'; account: string | null }
   | { kind: 'app-open-photos' }
-  | { kind: 'app-show-panel' };
+  | { kind: 'app-show-panel' }
+  /** A Google Photos page has loaded (from its content script): jobs waiting for it may carry on. */
+  | { kind: 'app-photos-ready' };
 
 export interface AccountAnswer {
   /** null when no signed-in Photos tab answered. */

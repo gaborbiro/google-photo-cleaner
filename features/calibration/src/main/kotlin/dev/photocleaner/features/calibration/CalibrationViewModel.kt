@@ -6,7 +6,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.photocleaner.core.design.PhotoDateFormat
-import dev.photocleaner.features.calibration.model.BudgetReport
+import dev.photocleaner.features.shared.duplicates.calibration.BudgetReport
 import dev.photocleaner.features.calibration.model.CalibrationPrepProgress
 import dev.photocleaner.features.calibration.model.CalibrationView
 import dev.photocleaner.features.calibration.model.ScoredPair

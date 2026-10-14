@@ -34,3 +34,13 @@ export function chooseDetail(photosPerSecondAtPreferred: number, photosToAnalyse
   const hours = photosToAnalyse / photosPerSecondAtPreferred / 3600;
   return hours > MAX_FIRST_ANALYSIS_HOURS_AT_PREFERRED ? FALLBACK_DETAIL : PREFERRED_DETAIL;
 }
+
+/**
+ * Photos at least this similar (and taken within 2 minutes of each other) count as duplicates.
+ * Per detail, because similarity runs differently at each; chosen like the desktop's 0.925 at its
+ * detail 280: the lowest threshold that wrongly flags only one of the labelled pairs.
+ * - 140: from the 180 calibration labels (dev-calibration.html, 2026-10-14): 98.7% precision,
+ *   86.0% of duplicates found (desktop: 99%, 88%). Only zero wrong pairs would mean 0.970 and 41%.
+ * - 70: PROVISIONAL, the desktop's value; not calibrated (needs the labelled photos analysed at 70).
+ */
+export const DUPLICATE_THRESHOLD: Record<Detail, number> = { 140: 0.915, 70: 0.925 };

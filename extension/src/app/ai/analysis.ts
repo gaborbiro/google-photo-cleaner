@@ -6,7 +6,7 @@
 // the detail for this library.
 
 import type { IndexedDbInventoryStore } from '../scan/inventoryStore';
-import { SourceError, type AnalysisSource, type LibraryPhoto, type Preview } from '../scan/source';
+import { SourceError, waitingForPhotosText, waitsForPhotos, type AnalysisSource, type LibraryPhoto, type Preview } from '../scan/source';
 import type { IndexedDbAnalysisStore } from './analysisStore';
 import { chooseDetail, FALLBACK_DETAIL, modelKey, PREFERRED_DETAIL, PREVIEW_SIZE_PX, SPEED_CHECK_PHOTOS, type Detail } from './model';
 import { measureQuality, type RgbaImage } from './quality';
@@ -23,8 +23,13 @@ export interface AnalysisProgress {
   stage: 'model' | 'speed-check' | 'analysing' | null;
   /** While the model downloads, 0–100. */
   modelPercent: number | null;
+  /** Photos in the library scan, and how many of them have a fingerprint. */
   photos: number;
   analysed: number;
+  /** Photos without a fingerprint when this run started (all of them the first time); null until known. */
+  newPhotos: number | null;
+  /** Of those, fingerprinted so far this run. */
+  newAnalysed: number;
   /** Photos whose preview couldn't be fetched or read this run; tried again next run. */
   failed: number;
   /** Over the last minute, so changes show straight away. */
@@ -41,13 +46,14 @@ export interface AnalysisProgress {
 }
 
 export const NO_ANALYSIS: AnalysisProgress = {
-  stage: null, modelPercent: null, photos: 0, analysed: 0, failed: 0, photosPerSecond: null, etaSeconds: null, perPhotoMs: null,
+  stage: null, modelPercent: null, photos: 0, analysed: 0, newPhotos: null, newAnalysed: 0, failed: 0, photosPerSecond: null, etaSeconds: null, perPhotoMs: null,
   detail: null, speedCheckText: null, waiting: null, notice: null,
 };
 
 export type AnalysisOutcome =
   | { kind: 'completed' }
-  | { kind: 'paused'; reason: string }
+  /** [untilPhotosOpen]: only Google Photos was missing; it continues by itself once it is back. */
+  | { kind: 'paused'; reason: string; untilPhotosOpen: boolean }
   | { kind: 'stopped' }
   | { kind: 'not-started'; reason: string };
 
@@ -72,7 +78,11 @@ export interface AnalysisDeps {
   prefetch?: number;
 }
 
-class Pause extends Error {}
+class Pause extends Error {
+  constructor(message: string, readonly untilPhotosOpen = false) {
+    super(message);
+  }
+}
 class UserStop extends Error {}
 
 const MAX_PAGE_ATTEMPTS = 3;
@@ -112,10 +122,22 @@ class AnalysisSession {
       return { kind: 'completed' };
     }
     try {
-      await this.loadModel();
-      const settings = (await this.deps.store.settings(account)) ?? (await this.speedCheck());
-      this.progress = { ...this.progress, detail: settings.detail, stage: 'analysing' };
+      let settings = await this.deps.store.settings(account);
+      if (settings) {
+        this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey), this.photoKeys);
+        // Nothing new since the last run: no model to start, no library to read again.
+        if (this.analysed.size === this.photoKeys.size) {
+          this.progress = { ...this.progress, detail: settings.detail, newPhotos: 0 };
+          await this.emit(true);
+          return { kind: 'completed' };
+        }
+        await this.loadModel();
+      } else {
+        await this.loadModel();
+        settings = await this.speedCheck();
+      }
       this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey), this.photoKeys);
+      this.progress = { ...this.progress, detail: settings.detail, stage: 'analysing', newPhotos: this.photoKeys.size - this.analysed.size, newAnalysed: 0 };
       this.speed = new SpeedMeter(this.now());
       await this.emit(true);
       await this.analyseLibrary(settings.detail, settings.modelKey);
@@ -127,7 +149,7 @@ class AnalysisSession {
       if (e instanceof Pause) {
         this.progress = { ...this.progress, notice: e.message, waiting: null };
         await this.emit(true);
-        return { kind: 'paused', reason: e.message };
+        return { kind: 'paused', reason: e.message, untilPhotosOpen: e.untilPhotosOpen };
       }
       throw e;
     }
@@ -184,7 +206,12 @@ class AnalysisSession {
     return settings;
   }
 
+  /**
+   * Reads the library newest first and fingerprints every photo without one. New photos are
+   * usually the newest, so reading stops as soon as none is left to do.
+   */
   private async analyseLibrary(detail: Detail, key: string): Promise<void> {
+    const pending = new Set([...this.photoKeys].filter((k) => !this.analysed.has(k)));
     let token: string | null = null;
     let lastPhotoMs = 0;
     let lastEnd: number | null = null;
@@ -210,6 +237,7 @@ class AnalysisSession {
         if (next) fetches.push(this.prefetch(next));
         const previewStart = this.now();
         const image = await fetches[i]!;
+        pending.delete(todo[i]!.mediaKey);
         if (image === null) {
           this.progress = { ...this.progress, failed: this.progress.failed + 1 };
           lastEnd = this.now();
@@ -221,12 +249,13 @@ class AnalysisSession {
         await this.save(todo[i]!, image, vector, key);
         const end = this.now();
         lastPhotoMs = saveStart - aiStart;
+        this.progress = { ...this.progress, newAnalysed: this.progress.newAnalysed + 1 };
         this.speed!.record(end, { other: paceStart - lastEnd, pace: previewStart - paceStart, preview: aiStart - previewStart, ai: saveStart - aiStart, save: end - saveStart });
         await this.emit(false);
         lastEnd = end;
       }
       token = page.nextPageToken;
-    } while (token !== null);
+    } while (token !== null && pending.size > 0);
   }
 
   private async save(photo: LibraryPhoto, image: RgbaImage, vector: Float32Array, key: string): Promise<void> {
@@ -256,9 +285,8 @@ class AnalysisSession {
             await this.sleep(RATE_LIMIT_WAIT_MS * rateLimits);
             break;
           case 'SESSION':
-            throw new Pause('The Google Photos session ended. Reload photos.google.com, check you are signed in, then resume.');
           case 'NO_PHOTOS_TAB':
-            throw new Pause(`${e.message} Then resume the analysis.`);
+            throw new Pause(waitingForPhotosText(e), true);
           default:
             return null;
         }
@@ -276,8 +304,7 @@ class AnalysisSession {
         return page;
       } catch (e) {
         if (!(e instanceof SourceError)) throw e;
-        if (e.kind === 'SESSION') throw new Pause('The Google Photos session ended. Reload photos.google.com, check you are signed in, then resume.');
-        if (e.kind === 'NO_PHOTOS_TAB') throw new Pause(`${e.message} Then resume the analysis.`);
+        if (waitsForPhotos(e)) throw new Pause(waitingForPhotosText(e), true);
         if (attempt >= MAX_PAGE_ATTEMPTS || (e.kind !== 'TRANSIENT' && e.kind !== 'RATE_LIMIT')) {
           throw new Pause(`Reading the library failed (${e.message}). Resume when the connection is back.`);
         }

@@ -1,10 +1,10 @@
 package dev.photocleaner.features.duplicates.usecase
 
-import dev.photocleaner.features.duplicates.model.DuplicateGroupsResult
-import dev.photocleaner.features.duplicates.model.GroupingSettings
-import dev.photocleaner.features.duplicates.model.MemberRole
+import dev.photocleaner.features.shared.duplicates.model.DuplicateGroupsResult
+import dev.photocleaner.features.shared.duplicates.model.GroupingSettings
+import dev.photocleaner.features.shared.duplicates.model.MemberRole
 import dev.photocleaner.features.shared.embeddings.EmbeddingSettings
-import dev.photocleaner.features.shared.embeddings.Vectors
+import dev.photocleaner.features.shared.duplicates.Vectors
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.usecase.ClassifyInventoryUseCase
 import dev.photocleaner.repositories.analysis.SqlAnalysisRepository
@@ -128,7 +128,7 @@ class BuildDuplicateGroupsUseCaseTest {
     fun `an incomplete or stale inventory produces no groups`() = runTest {
         setUp(listOf(Spec("a", 1_000, 0.0), Spec("b", 2_000, 1.0)), complete = false)
         val result = groups()
-        assertNotNull(result.blockedReason)
+        assertNotNull(result.blocked)
         assertEquals(emptyList(), result.groups)
     }
 
@@ -158,7 +158,7 @@ class BuildDuplicateGroupsUseCaseTest {
             repoAnalysis.save(specs.map { StoredEmbedding(it.key, "d-${it.key}", modelId, vectors.getValue(it.key), StoredQuality(it.sharpness, 100.0, 0.0, 0.0, 1, 1), now) })
 
             val result = BuildDuplicateGroupsUseCase(ClassifyInventoryUseCase(repoInventory, { now }), repoAnalysis, GroupingSettings()).execute()
-            assertNull(result.blockedReason)
+            assertNull(result.blocked)
             val seen = mutableSetOf<String>()
             result.groups.forEach { group ->
                 val keeper = group.keeper

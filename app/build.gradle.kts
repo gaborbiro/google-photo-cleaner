@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":services:connector"))
     implementation(project(":repositories:inventory"))
     implementation(project(":features:shared:protection"))
+    implementation(project(":features:shared:duplicates"))
     implementation(project(":features:scan"))
     implementation(project(":features:sample"))
     implementation(project(":features:calibration"))

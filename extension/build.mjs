@@ -1,7 +1,7 @@
 import { build } from 'esbuild';
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 
-if (!existsSync('generated/protection/PhotoCleaner-features-shared-protection.mjs')) {
+if (!existsSync('generated/kotlin/PhotoCleaner-features-shared-duplicates.mjs')) {
   console.error('The shared Kotlin protection rules are not built yet: run `npm run kotlin` first.');
   process.exit(1);
 }
@@ -48,7 +48,11 @@ function fresh(outdir) {
   await build({
     ...common,
     ...react,
-    entryPoints: { popup: 'src/app/popup/main.tsx', panel: 'src/app/panel/main.tsx', review: 'src/app/review/main.tsx' },
+    entryPoints: {
+      popup: 'src/app/popup/main.tsx', panel: 'src/app/panel/main.tsx', review: 'src/app/review/main.tsx',
+      // Developer tool, not linked from the app: chrome-extension://<id>/dev-calibration.html
+      'dev-calibration': 'src/app/dev/calibration.tsx',
+    },
     outdir,
     format: 'iife',
   });

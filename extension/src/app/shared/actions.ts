@@ -2,7 +2,7 @@
 // the service worker is then asked to make sure the background page is running.
 
 import { NO_ANALYSIS } from '../ai/analysis';
-import { jobId, pauseJob, resumeJob, setFullSpeed, startAnalysisJob, startScanJob, type Job, type JobKind } from './job';
+import { jobId, pauseJob, resumeIfWaitingForPhotos, resumeJob, setFullSpeed, startAnalysisJob, startScanJob, type Job, type JobKind } from './job';
 import type { AppRequest } from './messages';
 import type { JobStore } from './store';
 
@@ -31,6 +31,23 @@ export async function resume(store: JobStore, send: Send, kind: JobKind, account
   const saved = await store.update(jobId(kind, account), (job) => (job ? resumeJob(job, nowMs) : null));
   await send({ kind: 'app-wake-engine' });
   return saved;
+}
+
+/**
+ * Google Photos is open and signed in to [account]: the jobs that paused only for want of it carry
+ * on. Returns whether any did (then the background page must run).
+ */
+export async function resumeWaitingForPhotos(store: JobStore, account: string, nowMs: number): Promise<boolean> {
+  let resumed = false;
+  for (const kind of ['library-scan', 'analysis'] as const) {
+    await store.update(jobId(kind, account), (job) => {
+      if (!job) return null;
+      const next = resumeIfWaitingForPhotos(job, account, nowMs);
+      if (next !== job) resumed = true;
+      return next;
+    });
+  }
+  return resumed;
 }
 
 export function setAnalysisFullSpeed(store: JobStore, account: string, fullSpeed: boolean, nowMs: number): Promise<Job | null> {

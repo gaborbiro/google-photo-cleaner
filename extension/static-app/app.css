@@ -10,6 +10,8 @@
   --accent: #5b3fd6;
   --accent-fg: #ffffff;
   --warn: #b25b00;
+  --good: #2e7d32;
+  --bad: #c62828;
   font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
@@ -23,6 +25,8 @@
     --accent: #8b74ff;
     --accent-fg: #0d0b1a;
     --warn: #ffb35c;
+    --good: #66bb6a;
+    --bad: #ef5350;
   }
 }
 
@@ -58,3 +62,13 @@ table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
 th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .placeholder { border-top: 1px dashed var(--line); padding-top: 8px; }
+
+/* Report: the border says whether the protection data can be trusted. */
+.tone-good { border-left: 4px solid var(--good); }
+.tone-warn { border-left: 4px solid var(--warn); }
+.tone-bad { border-left: 4px solid var(--bad); }
+.tables { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 6px; }
+table.counts { width: auto; min-width: 300px; }
+table.counts td.indent { padding-left: 24px; color: var(--muted); }
+table.counts td.num { text-align: right; }
+a { color: var(--accent); }

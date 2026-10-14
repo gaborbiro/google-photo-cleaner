@@ -1,6 +1,5 @@
-package dev.photocleaner.features.shared.protection.usecase
+package dev.photocleaner.features.shared.protection
 
-import dev.photocleaner.features.shared.protection.EligibilityRules
 import dev.photocleaner.features.shared.protection.model.ClassifiedItem
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.model.InventoryClassification
@@ -8,29 +7,26 @@ import dev.photocleaner.features.shared.protection.model.InventoryReport
 import dev.photocleaner.features.shared.protection.model.ProtectionReason
 import dev.photocleaner.features.shared.protection.model.TypeCounts
 import dev.photocleaner.features.shared.protection.model.UnknownReason
-import dev.photocleaner.repositories.inventory.domain.InventoryRepository
+import dev.photocleaner.repositories.inventory.domain.InventorySnapshot
 import dev.photocleaner.repositories.inventory.domain.StoredMediaType
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
-/** Classifies every item of the latest scan run. Returns null when no scan has been started. */
-class ClassifyInventoryUseCase(
-    private val repository: InventoryRepository,
-    private val clock: () -> Long = System::currentTimeMillis,
-    private val maxAgeMs: Long = DEFAULT_MAX_AGE_MS,
-) {
+/**
+ * Classifies every item of one scan run and counts the outcome, by [EligibilityRules].
+ * Pure: the desktop app (from its database) and the browser extension (from IndexedDB) both
+ * call this with a snapshot, so they can never disagree on what is protected.
+ */
+object InventoryClassifier {
 
-    suspend fun execute(): InventoryClassification? {
-        val run = repository.latestRun() ?: return null
-        val snapshot = repository.snapshot(run.id)
-        return withContext(Dispatchers.Default) {
-            val coverage = EligibilityRules.coverage(snapshot, clock(), maxAgeMs)
-            val items = snapshot.items.map { EligibilityRules.classify(it, snapshot, coverage) }
-            val counts = listOf(StoredMediaType.PHOTO, StoredMediaType.VIDEO, null).map { type ->
-                countsOf(type, items.filter { it.item.mediaType == type })
-            }
-            InventoryClassification(InventoryReport(run.id, run.accountFingerprint, coverage, counts), items)
+    /** An inventory older than this no longer proves anything is unprotected. */
+    const val DEFAULT_MAX_AGE_MS = 24L * 60 * 60 * 1000
+
+    fun classify(snapshot: InventorySnapshot, nowMs: Long, maxAgeMs: Long = DEFAULT_MAX_AGE_MS): InventoryClassification {
+        val coverage = EligibilityRules.coverage(snapshot, nowMs, maxAgeMs)
+        val items = snapshot.items.map { EligibilityRules.classify(it, snapshot, coverage) }
+        val counts = listOf(StoredMediaType.PHOTO, StoredMediaType.VIDEO, null).map { type ->
+            countsOf(type, items.filter { it.item.mediaType == type })
         }
+        return InventoryClassification(InventoryReport(snapshot.run.id, snapshot.run.accountFingerprint, coverage, counts), items)
     }
 
     private fun countsOf(type: StoredMediaType?, items: List<ClassifiedItem>): TypeCounts {
@@ -51,10 +47,5 @@ class ClassifyInventoryUseCase(
             unknownByReason = UnknownReason.entries.associateWith { reason -> unknown.count { reason in it.unknownReasons } }
                 .filterValues { it > 0 },
         )
-    }
-
-    companion object {
-        /** An inventory older than this no longer proves anything is unprotected. */
-        const val DEFAULT_MAX_AGE_MS = 24L * 60 * 60 * 1000
     }
 }

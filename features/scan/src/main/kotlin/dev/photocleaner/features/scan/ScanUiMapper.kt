@@ -35,13 +35,13 @@ internal class ScanUiMapper {
     private val dateFormat = PhotoDateFormat("d MMM yyyy")
 
     fun progressLines(progress: ScanProgress): List<String> = if (progress.state == ScanState.NONE) emptyList() else listOf(
-        "Library: ${n(progress.libraryEntries)} entries in ${n(progress.libraryPages)} pages" +
+        "Library: ${count(progress.libraryEntries, "entry", "entries")} in ${count(progress.libraryPages, "page", "pages")}" +
             // Only meaningful while the library is being read, newest to oldest: afterwards it is just the
             // oldest date in the library, which can be a camera's factory default (1 Jan 1980).
             (progress.scannedBackToMs?.takeIf { progress.phase == ScanPhase.LIBRARY && progress.state != ScanState.COMPLETED && !PhotoDateFormat.isCameraDefault(it) }
                 ?.let { ", reached photos from ${dateFormat.format(it)}" } ?: ""),
-        "Favourite photos: ${n(progress.favouriteEntries)} entries",
-        "Archived photos: ${n(progress.archiveEntries)} entries",
+        "Favourite photos: ${count(progress.favouriteEntries, "entry", "entries")}",
+        "Archived photos: ${count(progress.archiveEntries, "entry", "entries")}",
         "Albums: ${n(progress.albumsRead)} of ${n(progress.albumsListed)} read" +
             if (progress.albumsFailed > 0) ", ${progress.albumsFailed} could not be read" else "",
     )
@@ -100,7 +100,7 @@ internal class ScanUiMapper {
             coverage.runStatusReason?.let { add("Last stop: $it") }
             coverage.phases.forEach { phase ->
                 add(
-                    "${phaseLabel(phase.name)}: ${n(phase.entries)} entries in ${n(phase.pages)} pages" +
+                    "${phaseLabel(phase.name)}: ${count(phase.entries, "entry", "entries")} in ${count(phase.pages, "page", "pages")}" +
                         (if (phase.duplicates > 0) ", ${n(phase.duplicates)} repeated" else "") +
                         if (phase.completed) ", read to the end" else ", not finished",
                 )
@@ -178,6 +178,9 @@ internal class ScanUiMapper {
     private fun time(ms: Long) = timeFormat.format(Instant.ofEpochMilli(ms))
 
     private fun n(value: Int) = "%,d".format(value)
+
+    /** "1 page", "43 pages". */
+    private fun count(value: Int, one: String, many: String) = "${n(value)} ${if (value == 1) one else many}"
 
     private companion object {
         /** Shorter scans have too few samples to say where the time went. */

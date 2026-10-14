@@ -1,5 +1,10 @@
 import { build } from 'esbuild';
-import { cpSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+
+if (!existsSync('generated/protection/PhotoCleaner-features-shared-protection.mjs')) {
+  console.error('The shared Kotlin protection rules are not built yet: run `npm run kotlin` first.');
+  process.exit(1);
+}
 
 // Two extensions from one project:
 //  dist/      the connector the desktop app talks to (unchanged while the desktop app is in use)

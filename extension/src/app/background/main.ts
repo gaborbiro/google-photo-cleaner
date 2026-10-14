@@ -2,7 +2,7 @@
 // state: it starts and stops the background page (which does the work), talks to the
 // Photos tabs, and opens the app's tabs. Job state lives in the job store.
 
-import type { OpResult, TabCommand } from '../../shared/protocol';
+import type { OpResult, ReadOp, TabCommand } from '../../shared/protocol';
 import { IndexedDbJobStore } from '../shared/store';
 import { isAppRequest, type AccountAnswer, type AppRequest, type TabRequest } from '../shared/messages';
 
@@ -46,6 +46,74 @@ async function accountOf(tab: chrome.tabs.Tab | undefined): Promise<AccountAnswe
   }
   const data = result.data as { accountFingerprint: string; accountEmail?: string };
   return { account: { fingerprint: data.accountFingerprint, email: data.accountEmail ?? null }, problem: null, photosTabOpen: true };
+}
+
+// --- running a scan's requests in the right account's tab ---
+
+/** Which account each Photos tab was last seen signed in to; rebuilt as needed (this worker restarts often). */
+const tabAccounts = new Map<number, string>();
+const RELOAD_TIMEOUT_MS = 30_000;
+
+/** Chrome puts background tabs to sleep (Memory Saver); a sleeping tab runs no scripts until reloaded. */
+async function wake(tab: chrome.tabs.Tab): Promise<void> {
+  if (!tab.discarded || tab.id === undefined) return;
+  const tabId = tab.id;
+  const loaded = new Promise<void>((resolve) => {
+    const timer = setTimeout(done, RELOAD_TIMEOUT_MS);
+    function done() {
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    }
+    function listener(id: number, info: chrome.tabs.OnUpdatedInfo) {
+      if (id === tabId && info.status === 'complete') done();
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+  await chrome.tabs.reload(tabId);
+  await loaded;
+}
+
+async function fingerprintOf(tab: chrome.tabs.Tab): Promise<string | null> {
+  if (tab.id === undefined) return null;
+  try {
+    await wake(tab);
+    const status = await sendToTab<OpResult>(tab.id, { kind: 'pc-command', op: 'status', params: {} });
+    const fingerprint = status.ok ? (status.data as { accountFingerprint: string }).accountFingerprint : null;
+    if (fingerprint) tabAccounts.set(tab.id, fingerprint);
+    else tabAccounts.delete(tab.id);
+    return fingerprint;
+  } catch {
+    tabAccounts.delete(tab.id);
+    return null;
+  }
+}
+
+/** A Photos tab signed in to [account]: the one used last time if it still is, otherwise the first that is. */
+async function tabFor(account: string): Promise<number | null> {
+  const tabs = await photosTabs();
+  const known = tabs.find((t) => t.id !== undefined && tabAccounts.get(t.id) === account);
+  for (const tab of known ? [known, ...tabs.filter((t) => t !== known)] : tabs) {
+    if (tab.id !== undefined && (await fingerprintOf(tab)) === account) return tab.id;
+  }
+  return null;
+}
+
+async function runOp(account: string, op: ReadOp, params: Record<string, unknown>): Promise<OpResult> {
+  const tabId = await tabFor(account);
+  if (tabId === null) {
+    return { ok: false, error: { kind: 'NO_PHOTOS_TAB', message: 'Open photos.google.com, signed in to the account being scanned.' } };
+  }
+  const result = await sendToTab<OpResult>(tabId, { kind: 'pc-command', op, params });
+  // A tab that went to sleep or lost its session mid-scan: one more try after waking it.
+  if (!result.ok && (result.error.kind === 'NO_PHOTOS_TAB' || result.error.kind === 'TRANSIENT')) {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (tab?.discarded) {
+      await wake(tab);
+      return sendToTab<OpResult>(tabId, { kind: 'pc-command', op, params });
+    }
+  }
+  return result;
 }
 
 // --- the background page (offscreen document) ---
@@ -120,6 +188,8 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
     case 'app-engine-idle':
       await closeEngineIfIdle();
       return true;
+    case 'app-run-op':
+      return runOp(request.account, request.op, request.params);
     case 'app-open-review':
       await openReview(request.account);
       return true;

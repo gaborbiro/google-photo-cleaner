@@ -1,15 +1,31 @@
+// The protection rules: what makes a photo protected, eligible or unknown. Multiplatform, so the
+// desktop app (JVM) and the browser extension (JavaScript) apply exactly the same tested rules.
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.multiplatform)
 }
 
-dependencies {
-    api(project(":repositories:inventory:domain"))
+kotlin {
+    jvm()
+    js {
+        browser()
+        // An ES module with TypeScript types, bundled into the extension (see exportToExtension).
+        useEsModules()
+        binaries.library()
+        generateTypeScriptDefinitions()
+    }
 
-    testImplementation(libs.kotlin.test)
-    testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(project(":repositories:inventory"))
+    sourceSets {
+        commonMain.dependencies {
+            api(project(":repositories:inventory:domain"))
+        }
+    }
 }
 
-tasks.test {
-    useJUnitPlatform()
+/** Copies the JavaScript build into the extension, which bundles it (extension/generated is git-ignored). */
+tasks.register<Copy>("exportToExtension") {
+    description = "Builds the protection rules for JavaScript and copies them into extension/generated/protection."
+    group = "photo cleaner"
+    dependsOn("jsProductionLibraryCompileSync")
+    from(layout.buildDirectory.dir("compileSync/js/main/productionLibrary/kotlin"))
+    into(rootProject.layout.projectDirectory.dir("extension/generated/protection"))
 }

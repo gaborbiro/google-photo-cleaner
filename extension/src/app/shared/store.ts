@@ -1,8 +1,9 @@
 // Where jobs are saved. Every change is one read-modify-write inside a single transaction,
-// so a pause pressed in the panel and a step taken by the background page can never
+// so a pause pressed in the panel and progress saved by the background page can never
 // overwrite each other. Saved changes are announced to every open surface.
 
-import { CHANGES_CHANNEL, DB_NAME, DB_VERSION } from './constants';
+import { CHANGES_CHANNEL } from './constants';
+import { committed, openDatabase, request, STORES } from './db';
 import type { Job } from './job';
 
 export interface JobStore {
@@ -12,57 +13,40 @@ export interface JobStore {
   update(id: string, change: (current: Job | null) => Job | null): Promise<Job | null>;
 }
 
-const JOBS = 'jobs';
-
-function request<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('IndexedDB request failed'));
-  });
-}
-
-function openDatabase(): Promise<IDBDatabase> {
-  const open = indexedDB.open(DB_NAME, DB_VERSION);
-  open.onupgradeneeded = () => {
-    const db = open.result;
-    if (!db.objectStoreNames.contains(JOBS)) db.createObjectStore(JOBS, { keyPath: 'id' });
-  };
-  return request(open);
-}
-
 export class IndexedDbJobStore implements JobStore {
   private db: Promise<IDBDatabase> | null = null;
-  private readonly changes = new BroadcastChannel(CHANGES_CHANNEL);
+  private changes: BroadcastChannel | null = null;
+
+  constructor(private readonly factory: IDBFactory = indexedDB) {}
 
   private database(): Promise<IDBDatabase> {
-    this.db ??= openDatabase();
+    this.db ??= openDatabase(this.factory);
     return this.db;
   }
 
   async all(): Promise<Job[]> {
     const db = await this.database();
-    return request(db.transaction(JOBS, 'readonly').objectStore(JOBS).getAll() as IDBRequest<Job[]>);
+    return request(db.transaction(STORES.jobs, 'readonly').objectStore(STORES.jobs).getAll() as IDBRequest<Job[]>);
   }
 
   async get(id: string): Promise<Job | null> {
     const db = await this.database();
-    return (await request(db.transaction(JOBS, 'readonly').objectStore(JOBS).get(id) as IDBRequest<Job | undefined>)) ?? null;
+    return (await request(db.transaction(STORES.jobs, 'readonly').objectStore(STORES.jobs).get(id) as IDBRequest<Job | undefined>)) ?? null;
   }
 
   async update(id: string, change: (current: Job | null) => Job | null): Promise<Job | null> {
     const db = await this.database();
-    const tx = db.transaction(JOBS, 'readwrite');
-    const jobs = tx.objectStore(JOBS);
+    const tx = db.transaction(STORES.jobs, 'readwrite');
+    const jobs = tx.objectStore(STORES.jobs);
     const current = (await request(jobs.get(id) as IDBRequest<Job | undefined>)) ?? null;
     const next = change(current);
     if (next === null) jobs.delete(id);
     else jobs.put(next);
-    await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? new Error('Saving failed'));
-      tx.onabort = () => reject(tx.error ?? new Error('Saving was aborted (is the disk full?)'));
-    });
-    if (next !== current) this.changes.postMessage({ kind: 'jobs-changed', id });
+    await committed(tx);
+    if (next !== current) {
+      this.changes ??= new BroadcastChannel(CHANGES_CHANNEL);
+      this.changes.postMessage({ kind: 'jobs-changed', id });
+    }
     return next;
   }
 }

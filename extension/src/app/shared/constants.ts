@@ -9,4 +9,5 @@ export const CHANGES_CHANNEL = 'photo-cleaner-app-changes';
 
 /** The browser database (IndexedDB) for everything the app stores. */
 export const DB_NAME = 'photo-cleaner';
-export const DB_VERSION = 1;
+/** 2: library scan stores (M2). */
+export const DB_VERSION = 2;

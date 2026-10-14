@@ -1,3 +1,5 @@
+import type { ReadOp } from '../../shared/protocol';
+
 // Messages from the surfaces (popup, panel, review tab) and the background page to the
 // service worker. The service worker starts and stops the background page and talks to
 // the Photos tabs; job state itself goes through the job store.
@@ -9,6 +11,8 @@ export type AppRequest =
   | { kind: 'app-wake-engine' }
   /** The background page has nothing left to run and may be closed. */
   | { kind: 'app-engine-idle' }
+  /** The background page's scan: one read operation, in a Photos tab signed in to [account]. */
+  | { kind: 'app-run-op'; account: string; op: ReadOp; params: Record<string, unknown> }
   | { kind: 'app-open-review'; account: string | null }
   | { kind: 'app-open-photos' }
   | { kind: 'app-show-panel' };

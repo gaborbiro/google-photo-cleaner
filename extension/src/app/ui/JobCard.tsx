@@ -3,6 +3,7 @@
 import { pauseScan, resumeScan, startScan } from '../shared/actions';
 import type { Job } from '../shared/job';
 import { jobView } from '../shared/jobView';
+import type { ReportView } from '../scan/report';
 import { send, store } from './hooks';
 
 export function JobCard({ account, job }: { account: string; job: Job | null }) {
@@ -25,13 +26,19 @@ export function JobCard({ account, job }: { account: string; job: Job | null }) 
         <strong>{view.title}</strong>
         <button className={view.action === 'pause' ? '' : 'primary'} onClick={act}>{view.actionLabel}</button>
       </div>
-      {view.progressText && (
-        <>
-          <div className="bar"><div style={{ width: `${view.percent}%` }} /></div>
-          <div className="mono">{view.progressText}</div>
-        </>
-      )}
+      {view.lines.map((line) => <div key={line} className="mono">{line}</div>)}
+      {view.notice && <div className="warn">{view.notice}</div>}
       {view.timesText && <div className="muted mono">{view.timesText}</div>}
+    </section>
+  );
+}
+
+/** The one-line outcome of the latest scan, coloured by whether it can be trusted. */
+export function ReportSummary({ report }: { report: ReportView }) {
+  return (
+    <section className={`card tone-${report.tone}`}>
+      <strong>{report.title}</strong>
+      <div className="mono">{report.summary}</div>
     </section>
   );
 }

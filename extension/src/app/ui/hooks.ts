@@ -5,14 +5,43 @@ import { useCallback, useEffect, useState } from 'react';
 import { jobId, type Job } from '../shared/job';
 import type { AccountAnswer, AppRequest } from '../shared/messages';
 import { IndexedDbJobStore, onJobsChanged } from '../shared/store';
+import { IndexedDbInventoryStore } from '../scan/inventoryStore';
+import { classify, reportView, type ReportView } from '../scan/report';
 
 export const store = new IndexedDbJobStore();
+const inventory = new IndexedDbInventoryStore();
+
+/**
+ * The protection report of [account]'s latest scan, by the shared rules: null before any scan,
+ * undefined while working it out. Worked out again when a scan ends (not on every page).
+ */
+export function useReport(account: string | null, job: Job | null | undefined): ReportView | null | undefined {
+  const [report, setReport] = useState<ReportView | null | undefined>(undefined);
+  const settled = job === undefined ? 'loading' : job === null ? 'none' : job.status === 'running' ? 'running' : `${job.status}:${job.updatedAtMs}`;
+  useEffect(() => {
+    if (account === null || settled === 'loading' || settled === 'running') return;
+    let alive = true;
+    void (async () => {
+      const run = await inventory.latestRun(account);
+      if (!run) return alive && setReport(null);
+      const view = reportView(classify(await inventory.snapshot(run.id), Date.now()));
+      if (alive) setReport(view);
+    })().catch((error: unknown) => {
+      console.error('Could not work out the report', error);
+      if (alive) setReport(null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [account, settled]);
+  return report;
+}
 
 export function send(request: AppRequest): Promise<unknown> {
   return chrome.runtime.sendMessage(request);
 }
 
-/** The pretend scan of [account], kept up to date; undefined while loading. */
+/** The library scan of [account], kept up to date; undefined while loading. */
 export function useScanJob(account: string | null): Job | null | undefined {
   const [job, setJob] = useState<Job | null | undefined>(undefined);
   useEffect(() => {
@@ -21,7 +50,7 @@ export function useScanJob(account: string | null): Job | null | undefined {
       return;
     }
     let alive = true;
-    const load = () => void store.get(jobId('pretend-scan', account)).then((j) => alive && setJob(j));
+    const load = () => void store.get(jobId('library-scan', account)).then((j) => alive && setJob(j));
     load();
     const stop = onJobsChanged(load);
     return () => {

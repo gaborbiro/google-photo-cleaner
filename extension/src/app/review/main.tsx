@@ -1,10 +1,39 @@
-// The review tab: the workbench. In M1 it shows every account's saved scan; Duplicates (M4)
-// and Search (M5) come here.
+// The review tab: the workbench. Shows the selected account's scan and its full protection report;
+// Duplicates (M4) and Search (M5) come here.
 
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import type { ReportView } from '../scan/report';
 import { accountLabel, jobView } from '../shared/jobView';
-import { send, useAccount, useAllJobs } from '../ui/hooks';
+import { send, useAccount, useAllJobs, useReport, useScanJob } from '../ui/hooks';
 import { JobCard } from '../ui/JobCard';
+
+function Report({ report }: { report: ReportView }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => void navigator.clipboard.writeText(report.copyText).then(() => setCopied(true));
+  return (
+    <section className={`card tone-${report.tone}`}>
+      <div className="row">
+        <strong>{report.title}</strong>
+        <button onClick={copy} title="Counts only, no album names">{copied ? 'Copied' : 'Copy report'}</button>
+      </div>
+      {report.coverageLines.map((line) => <div key={line} className="mono">{line}</div>)}
+      {report.issueLines.map((line) => <div key={line} className="warn">{line}</div>)}
+      <div className="tables">
+        {report.tables.map((t) => (
+          <table key={t.title} className="counts">
+            <thead><tr><th colSpan={2}>{t.title}</th></tr></thead>
+            <tbody>
+              {t.rows.map((r) => (
+                <tr key={r.label}><td className={r.indent ? 'indent' : ''}>{r.label}</td><td className="mono num">{r.value}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function Review() {
   const { answer } = useAccount();
@@ -13,7 +42,8 @@ function Review() {
   const live = answer?.account ?? null;
   const selected = requested ?? live?.fingerprint ?? null;
   const emailOf = (fingerprint: string) => (live?.fingerprint === fingerprint ? live.email : null);
-  const selectedJob = jobs.find((job) => job.account === selected) ?? null;
+  const job = useScanJob(selected);
+  const report = useReport(selected, job);
   return (
     <main className="review">
       <header className="row">
@@ -25,29 +55,26 @@ function Review() {
       ) : (
         <>
           <h2>{accountLabel(selected, emailOf(selected))}</h2>
-          <JobCard account={selected} job={selectedJob} />
+          {job !== undefined && <JobCard account={selected} job={job} />}
+          {report === undefined && job && <p className="muted">Working out the report…</p>}
+          {report && <Report report={report} />}
         </>
       )}
-      <h2>Saved on this computer</h2>
-      {jobs.length === 0 ? (
-        <p className="muted">Nothing saved yet.</p>
-      ) : (
-        <table>
-          <thead><tr><th>Account</th><th>Scan</th><th>Progress</th><th>Times</th></tr></thead>
-          <tbody>
-            {jobs.map((job) => {
-              const view = jobView(job);
-              return (
-                <tr key={job.id}>
-                  <td className="mono">{accountLabel(job.account, emailOf(job.account))}</td>
-                  <td>{view.title}</td>
-                  <td className="mono">{view.progressText}</td>
-                  <td className="mono muted">{view.timesText}</td>
+      {jobs.length > 1 && (
+        <>
+          <h2>Other accounts on this computer</h2>
+          <table>
+            <thead><tr><th>Account</th><th>Scan</th></tr></thead>
+            <tbody>
+              {jobs.filter((j) => j.account !== selected).map((j) => (
+                <tr key={j.id}>
+                  <td className="mono"><a href={`?account=${encodeURIComponent(j.account)}`}>{accountLabel(j.account, emailOf(j.account))}</a></td>
+                  <td>{jobView(j).title}</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
       <section className="placeholder">
         <h2>Duplicates</h2>

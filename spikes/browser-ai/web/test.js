@@ -16,11 +16,14 @@ const gpu = await describeGpu();
 $("gpu").textContent = gpu.available
   ? `WebGPU available: ${gpu.description}`
   : "WebGPU is NOT available in this browser; the test cannot run.";
-const buttons = [$("run"), $("run-speed")];
+const buttons = [$("run"), $("run-speed"), $("run-precision")];
 buttons.forEach((b) => (b.disabled = !gpu.available));
 $("run").onclick = () => guarded(() => run({ dtype: $("dtype").value, budget: Number($("budget").value), batch: Number($("batch").value) }));
 $("run-speed").onclick = () => guarded(async () => {
   for (const budget of [280, 140, 70]) for (const batch of [1, 4]) await run({ dtype: "fp16", budget, batch });
+});
+$("run-precision").onclick = () => guarded(async () => {
+  for (const dtype of ["q8", "q4f16", "q4"]) await run({ dtype, budget: 140, batch: 1 });
 });
 
 async function guarded(action) {

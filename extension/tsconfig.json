@@ -9,7 +9,8 @@
     "noUncheckedIndexedAccess": false,
     "noEmit": true,
     "skipLibCheck": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "jsx": "react-jsx"
   },
   "include": ["src", "test", "vendor/gptk/src/api/parser.ts", "vendor/gptk/src/types/index.ts"]
 }

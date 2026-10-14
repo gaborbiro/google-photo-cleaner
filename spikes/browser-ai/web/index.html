@@ -21,12 +21,14 @@
     and compares with the desktop app. Nothing is uploaded; the model is downloaded once and cached by the browser.</p>
   <p id="gpu">Checking WebGPU…</p>
   <p>
-    <label>Precision <select id="dtype"><option value="fp16">fp16</option><option value="q4">4-bit (q4)</option></select></label>
+    <label>Precision <select id="dtype"><option value="fp16">fp16</option><option value="q8">8-bit (q8)</option><option value="q4f16">4-bit + fp16 parts (q4f16)</option><option value="q4">4-bit (q4)</option></select></label>
     <label>Detail <select id="budget"><option>280</option><option>140</option><option>70</option></select></label>
     <label>Photos per GPU call <select id="batch"><option>1</option><option>4</option><option>8</option></select></label>
     <button id="run" disabled>Run</button>
     <button id="run-speed" disabled>Run speed set (6 runs)</button>
+    <button id="run-precision" disabled>Run precision set (3 runs)</button>
   </p>
+  <p>"Run precision set" tries 8-bit, 4-bit + fp16 parts and 4-bit, each at detail 140, to compare with fp16.</p>
   <p>"Run speed set" tries fp16 at detail 280, 140 and 70, each with 1 and 4 photos per GPU call.</p>
   <div id="results"></div>
   <div id="log"></div>

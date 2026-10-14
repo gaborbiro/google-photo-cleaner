@@ -1,0 +1,60 @@
+/* Techy and in control: plain, dense, monospace for numbers, follows the system's light/dark mode. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1d1d22;
+  --muted: #6b6b76;
+  --line: #d9d9e0;
+  --card: #f5f5f8;
+  --accent: #5b3fd6;
+  --accent-fg: #ffffff;
+  --warn: #b25b00;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17171c;
+    --fg: #e8e8ee;
+    --muted: #9a9aa8;
+    --line: #34343e;
+    --card: #222229;
+    --accent: #8b74ff;
+    --accent-fg: #0d0b1a;
+    --warn: #ffb35c;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); }
+main { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+body.popup main { width: 380px; }
+body.review main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+h1 { font-size: 16px; margin: 0; letter-spacing: 0.02em; }
+h2 { font-size: 14px; margin: 8px 0 0; }
+p { margin: 0; }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.warn { color: var(--warn); font-weight: 600; }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); transition: width 0.15s linear; }
+
+button {
+  font: inherit; color: var(--fg); background: transparent; border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+button.ghost { border: none; padding: 2px 8px; font-size: 16px; }
+
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.placeholder { border-top: 1px dashed var(--line); padding-top: 8px; }

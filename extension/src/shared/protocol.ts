@@ -37,11 +37,14 @@ export interface OpError {
 
 export type OpResult = { ok: true; data: unknown } | { ok: false; error: OpError };
 
-/** Page script <-> content script, over window.postMessage. */
+/**
+ * Page script <-> content script, over window.postMessage. Each extension that installs
+ * a page script uses its own channel, so two of them in one page never answer each other.
+ */
 export const PAGE_CHANNEL = 'photo-cleaner-connector';
 
 export interface PageRequest {
-  channel: typeof PAGE_CHANNEL;
+  channel: string;
   dir: 'request';
   id: string;
   op: ReadOp;
@@ -49,7 +52,7 @@ export interface PageRequest {
 }
 
 export interface PageResponse {
-  channel: typeof PAGE_CHANNEL;
+  channel: string;
   dir: 'response';
   id: string;
   result: OpResult;

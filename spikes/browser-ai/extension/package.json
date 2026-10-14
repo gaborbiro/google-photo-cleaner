@@ -1,0 +1,11 @@
+{
+  "name": "photocleaner-browser-ai-test-extension",
+  "private": true,
+  "description": "Browser AI test inside extension pages (spike). `npm install` then `npm run lib` copies the libraries into lib/.",
+  "scripts": {
+    "lib": "node copy-lib.mjs"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.1"
+  }
+}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browser AI test</title>
+  <style>
+    :root { color-scheme: light dark; --ok: #2e7d32; --bad: #c62828; --muted: #888; }
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 24px; max-width: 1000px; }
+    button { font: inherit; padding: 6px 14px; margin-right: 8px; }
+    table { border-collapse: collapse; margin: 12px 0; }
+    td, th { border: 1px solid #8884; padding: 4px 10px; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 13px; color: var(--muted); }
+    .ok { color: var(--ok); } .bad { color: var(--bad); }
+  </style>
+</head>
+<body>
+  <h1>Browser AI test</h1>
+  <p>Runs EmbeddingGemma 2 on this computer's graphics card (WebGPU), on the photos of your labelled calibration pairs,
+    and compares with the desktop app. Nothing is uploaded; the model is downloaded once and cached by the browser.</p>
+  <p id="gpu">Checking WebGPU…</p>
+  <p>
+    <label>Precision <select id="dtype"><option value="fp16">fp16</option><option value="q4">4-bit (q4)</option></select></label>
+    <label>Detail <select id="budget"><option>280</option><option>140</option><option>70</option></select></label>
+    <label>Photos per GPU call <select id="batch"><option>1</option><option>4</option><option>8</option></select></label>
+    <button id="run" disabled>Run</button>
+    <button id="run-speed" disabled>Run speed set (6 runs)</button>
+  </p>
+  <p>"Run speed set" tries fp16 at detail 280, 140 and 70, each with 1 and 4 photos per GPU call.</p>
+  <div id="results"></div>
+  <div id="log"></div>
+  <script type="module" src="test.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Photo Cleaner – browser AI test",
+  "version": "0.0.1",
+  "description": "Spike: runs the photo model inside extension pages (own tab, panel in Google Photos, background). Not the real extension.",
+  "action": { "default_popup": "popup.html", "default_title": "Browser AI test" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["offscreen", "storage"],
+  "host_permissions": ["http://localhost:8123/*", "https://huggingface.co/*", "https://*.hf.co/*"],
+  "content_scripts": [
+    { "matches": ["https://photos.google.com/*"], "js": ["panel-launcher.js"], "run_at": "document_idle" }
+  ],
+  "web_accessible_resources": [
+    { "resources": ["app.html"], "matches": ["https://photos.google.com/*"] }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  }
+}

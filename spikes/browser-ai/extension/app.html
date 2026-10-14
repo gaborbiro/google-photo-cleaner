@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Browser AI test (extension page)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 16px; background: Canvas; color: CanvasText; }
+    button { font: inherit; padding: 6px 14px; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; opacity: 0.8; }
+  </style>
+</head>
+<body>
+  <h2 id="title">Browser AI test</h2>
+  <p>Runs the photo model (detail 140, fp16) on your 354 calibration photos inside this extension page.
+    Needs the local test server running.</p>
+  <p><button id="run">Run</button></p>
+  <div id="log"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

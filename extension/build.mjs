@@ -38,7 +38,13 @@ function fresh(outdir) {
   await build({ ...common, entryPoints: { page: 'src/app/page/main.ts' }, outdir, format: 'iife', banner: { js: gptkNotice } });
   await build({ ...common, entryPoints: { content: 'src/app/content/main.ts' }, outdir, format: 'iife' });
   await build({ ...common, entryPoints: { background: 'src/app/background/main.ts' }, outdir, format: 'esm' });
-  await build({ ...common, entryPoints: { engine: 'src/app/engine/main.ts' }, outdir, format: 'iife' });
+  // The background page holds the AI model; its runtime is packed in, because extensions may not
+  // load code from the internet. The WebGPU backend uses the "asyncify" build of ONNX Runtime.
+  await build({ ...common, entryPoints: { engine: 'src/app/engine/main.ts' }, outdir, format: 'esm' });
+  mkdirSync(`${outdir}/ort`);
+  for (const file of ['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm']) {
+    cpSync(`node_modules/onnxruntime-web/dist/${file}`, `${outdir}/ort/${file}`);
+  }
   await build({
     ...common,
     ...react,

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { endJob, jobId, NO_PROGRESS, pauseJob, reportProgress, resumeJob, startJob } from '../../src/app/shared/job';
+import { NO_ANALYSIS } from '../../src/app/ai/analysis';
+import { endJob, jobId, NO_PROGRESS, pauseJob, reportProgress, resumeJob, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 
 const progress = { ...NO_PROGRESS, phase: 'LIBRARY' as const, libraryEntries: 500 };
 
 describe('job life cycle', () => {
-  const started = startJob('library-scan', 'acc1', 1_000);
+  const started = startScanJob('acc1', 1_000);
 
   it('starts running with no progress, labelled with its account', () => {
     expect(started).toMatchObject({ id: jobId('library-scan', 'acc1'), account: 'acc1', status: 'running', progress: NO_PROGRESS, finishedAtMs: null });
@@ -33,6 +34,19 @@ describe('job life cycle', () => {
   });
 
   it('refuses a job without an account', () => {
-    expect(() => startJob('library-scan', '', 0)).toThrow();
+    expect(() => startScanJob('', 0)).toThrow();
+  });
+});
+
+describe('analysis job', () => {
+  it('a new run keeps the full-speed choice and what the speed check said', () => {
+    const first = setFullSpeed(startAnalysisJob('acc1', 0, null, NO_ANALYSIS), true, 1);
+    const withCheck = reportProgress(first, { ...first.progress, speedCheckText: 'Speed check: 5.7 photos/s', detail: 140 }, 2);
+    const next = startAnalysisJob('acc1', 3, endJob(withCheck, 'completed', null, 2), NO_ANALYSIS);
+    expect(next).toMatchObject({ kind: 'analysis', status: 'running', fullSpeed: true, progress: { speedCheckText: 'Speed check: 5.7 photos/s', detail: 140, analysed: 0 } });
+  });
+
+  it('scan and analysis jobs of one account have separate ids', () => {
+    expect(startScanJob('acc1', 0).id).not.toBe(startAnalysisJob('acc1', 0, null, NO_ANALYSIS).id);
   });
 });

@@ -5,8 +5,10 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { ReportView } from '../scan/report';
 import { accountLabel, jobView } from '../shared/jobView';
-import { send, useAccount, useAllJobs, useReport, useScanJob } from '../ui/hooks';
-import { JobCard } from '../ui/JobCard';
+import type { ScanJob } from '../shared/job';
+import { send, useAccount, useAllJobs, useAnalysisJob, useReport, useScanJob } from '../ui/hooks';
+import { AnalysisCard, JobCard, StorageProblem } from '../ui/JobCard';
+import { SimilarPhotos } from './SimilarPhotos';
 
 function Report({ report }: { report: ReportView }) {
   const [copied, setCopied] = useState(false);
@@ -44,12 +46,15 @@ function Review() {
   const emailOf = (fingerprint: string) => (live?.fingerprint === fingerprint ? live.email : null);
   const job = useScanJob(selected);
   const report = useReport(selected, job);
+  const analysis = useAnalysisJob(selected);
+  const otherScans = jobs.filter((j): j is ScanJob => j.kind === 'library-scan' && j.account !== selected);
   return (
     <main className="review">
       <header className="row">
         <h1>Photo Cleaner · review</h1>
         <button onClick={() => void send({ kind: 'app-open-photos' })}>Google Photos</button>
       </header>
+      <StorageProblem />
       {selected === null ? (
         <p className="muted">No account yet: open Google Photos and start a scan from the panel.</p>
       ) : (
@@ -58,15 +63,17 @@ function Review() {
           {job !== undefined && <JobCard account={selected} job={job} />}
           {report === undefined && job && <p className="muted">Working out the report…</p>}
           {report && <Report report={report} />}
+          {analysis !== undefined && <AnalysisCard account={selected} job={analysis} scanFinished={job?.status === 'finished'} />}
+          {analysis && <SimilarPhotos account={selected} analysedCount={analysis.progress.analysed} />}
         </>
       )}
-      {jobs.length > 1 && (
+      {otherScans.length > 0 && (
         <>
           <h2>Other accounts on this computer</h2>
           <table>
             <thead><tr><th>Account</th><th>Scan</th></tr></thead>
             <tbody>
-              {jobs.filter((j) => j.account !== selected).map((j) => (
+              {otherScans.map((j) => (
                 <tr key={j.id}>
                   <td className="mono"><a href={`?account=${encodeURIComponent(j.account)}`}>{accountLabel(j.account, emailOf(j.account))}</a></td>
                   <td>{jobView(j).title}</td>

@@ -2,18 +2,63 @@
   "manifest_version": 3,
   "name": "Photo Cleaner (preview)",
   "description": "Finds duplicate and unwanted photos in Google Photos with on-device AI. Your photos never leave your computer.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs7FnvF1KSb3bj8NKKdYdc3l7ptpzrus2fF6I5vYPL3CS8yP758UNK8MyRy5C4kjTePa+rz2pYDuG0AV73p0/y+P5rgCgNcmcOt9kVTh1wGEQ9M3ScAibQbxjVhEIy2jrg4mB9XCIEf2NXFzXAyBd5/ebMQR07LUOZ0bV0DLvRvfbnEK/Aw97J0L4Y1BXlXuEXAjGT9iqnA9t3loQuSMWE/kGJyzTOuBtD3jCg+qcYm7li5vuHUS/z7qqz1NtpWvBtWW80S5Zx6TlzgOIi7hVIfhDsy3PACnXtbyXw0h1MDTsirOwuMYNm28TXIDnpceWx2CYcR302ROyJhlEjZtqIwIDAQAB",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "unlimitedStorage", "offscreen", "scripting"],
-  "host_permissions": ["https://photos.google.com/*"],
-  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "offscreen",
+    "scripting",
+    "idle"
+  ],
+  "host_permissions": [
+    "https://photos.google.com/*",
+    "https://huggingface.co/*",
+    "https://*.hf.co/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "content_scripts": [
-    { "matches": ["https://photos.google.com/*"], "js": ["page.js"], "world": "MAIN", "run_at": "document_idle" },
-    { "matches": ["https://photos.google.com/*"], "js": ["content.js"], "run_at": "document_idle" }
+    {
+      "matches": [
+        "https://photos.google.com/*"
+      ],
+      "js": [
+        "page.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://photos.google.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
   ],
   "web_accessible_resources": [
-    { "resources": ["panel.html", "panel.js", "app.css"], "matches": ["https://photos.google.com/*"] }
+    {
+      "resources": [
+        "panel.html",
+        "panel.js",
+        "app.css"
+      ],
+      "matches": [
+        "https://photos.google.com/*"
+      ]
+    }
   ],
-  "action": { "default_title": "Photo Cleaner", "default_popup": "popup.html" }
+  "action": {
+    "default_title": "Photo Cleaner",
+    "default_popup": "popup.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  }
 }

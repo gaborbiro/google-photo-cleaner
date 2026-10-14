@@ -11,6 +11,8 @@ export type AppRequest =
   | { kind: 'app-wake-engine' }
   /** The background page has nothing left to run and may be closed. */
   | { kind: 'app-engine-idle' }
+  /** Gentle mode: has the keyboard or mouse been used in the last minute? Answers 'active', 'idle' or 'locked'. */
+  | { kind: 'app-idle-state' }
   /** The background page's scan: one read operation, in a Photos tab signed in to [account]. */
   | { kind: 'app-run-op'; account: string; op: ReadOp; params: Record<string, unknown> }
   | { kind: 'app-open-review'; account: string | null }

@@ -31,7 +31,11 @@ export class IndexedDbInventoryStore {
   constructor(private readonly factory: IDBFactory = indexedDB) {}
 
   private database(): Promise<IDBDatabase> {
-    this.db ??= openDatabase(this.factory);
+    // A failed open (e.g. an upgrade blocked by an older page) is retried on the next call.
+    this.db ??= openDatabase(this.factory).catch((error: unknown) => {
+      this.db = null;
+      throw error;
+    });
     return this.db;
   }
 

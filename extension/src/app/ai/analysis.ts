@@ -1,0 +1,324 @@
+// The AI analysis of one account's library: the browser counterpart of the desktop app's
+// EmbedLibraryUseCase. Reads the library again page by page (newest first, so preview links are
+// fresh and recent photos are ready first), and for every photo not analysed yet fetches its
+// 512 px preview, measures its quality, fingerprints it and saves both. Photos already analysed
+// are skipped, so running again resumes. The first run starts with a speed check that chooses
+// the detail for this library.
+
+import type { IndexedDbInventoryStore } from '../scan/inventoryStore';
+import { SourceError, type AnalysisSource, type LibraryPhoto, type Preview } from '../scan/source';
+import type { IndexedDbAnalysisStore } from './analysisStore';
+import { chooseDetail, FALLBACK_DETAIL, modelKey, PREFERRED_DETAIL, PREVIEW_SIZE_PX, SPEED_CHECK_PHOTOS, type Detail } from './model';
+import { measureQuality, type RgbaImage } from './quality';
+import { SpeedMeter, type PhotoTiming } from './speed';
+
+export interface Embedder {
+  /** Downloads (first time) and prepares the model; [onProgress] gets 0–1. */
+  load(onProgress: (fraction: number) => void): Promise<void>;
+  /** An L2-normalised fingerprint of [image] at [detail]. */
+  embed(image: RgbaImage, detail: Detail): Promise<Float32Array>;
+}
+
+export interface AnalysisProgress {
+  stage: 'model' | 'speed-check' | 'analysing' | null;
+  /** While the model downloads, 0–100. */
+  modelPercent: number | null;
+  photos: number;
+  analysed: number;
+  /** Photos whose preview couldn't be fetched or read this run; tried again next run. */
+  failed: number;
+  /** Over the last minute, so changes show straight away. */
+  photosPerSecond: number | null;
+  etaSeconds: number | null;
+  /** Where each photo's time went over the last minute, in ms. */
+  perPhotoMs: PhotoTiming | null;
+  detail: Detail | null;
+  /** What the speed check found, in words; null until it ran. */
+  speedCheckText: string | null;
+  /** Why it is going slower or waiting right now (gentle mode); null at full speed. */
+  waiting: string | null;
+  notice: string | null;
+}
+
+export const NO_ANALYSIS: AnalysisProgress = {
+  stage: null, modelPercent: null, photos: 0, analysed: 0, failed: 0, photosPerSecond: null, etaSeconds: null, perPhotoMs: null,
+  detail: null, speedCheckText: null, waiting: null, notice: null,
+};
+
+export type AnalysisOutcome =
+  | { kind: 'completed' }
+  | { kind: 'paused'; reason: string }
+  | { kind: 'stopped' }
+  | { kind: 'not-started'; reason: string };
+
+export interface AnalysisDeps {
+  account: string;
+  source: AnalysisSource;
+  inventory: IndexedDbInventoryStore;
+  store: IndexedDbAnalysisStore;
+  embedder: Embedder;
+  decode: (preview: Preview) => Promise<RgbaImage>;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  shouldStop: () => Promise<boolean>;
+  /**
+   * Called before each photo with how long the last one took: waits as gentle mode asks (slower
+   * while the computer is in use, not at all on battery), saying why through [show] while it
+   * waits, and null when going at full speed.
+   */
+  pace: (lastPhotoMs: number, show: (waiting: string | null) => Promise<void>) => Promise<void>;
+  onProgress: (progress: AnalysisProgress) => Promise<void>;
+  /** Previews fetched ahead while the model works. */
+  prefetch?: number;
+}
+
+class Pause extends Error {}
+class UserStop extends Error {}
+
+const MAX_PAGE_ATTEMPTS = 3;
+const MAX_RATE_LIMITS = 3;
+const RATE_LIMIT_WAIT_MS = 30_000;
+const PROGRESS_EVERY_MS = 1_000;
+
+export async function runAnalysis(deps: AnalysisDeps): Promise<AnalysisOutcome> {
+  return new AnalysisSession(deps).execute();
+}
+
+class AnalysisSession {
+  private readonly now: () => number;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private progress: AnalysisProgress = NO_ANALYSIS;
+  private photoKeys = new Set<string>();
+  private analysed = new Set<string>();
+  private speed: SpeedMeter | null = null;
+  private lastEmitMs = 0;
+
+  constructor(private readonly deps: AnalysisDeps) {
+    this.now = deps.now ?? Date.now;
+    this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  }
+
+  async execute(): Promise<AnalysisOutcome> {
+    const { inventory, account } = this.deps;
+    const run = await inventory.latestRun(account);
+    if (run?.status !== 'COMPLETED') {
+      return { kind: 'not-started', reason: 'The analysis needs a finished library scan. Scan the library first.' };
+    }
+    const snapshot = await inventory.snapshot(run.id);
+    this.photoKeys = new Set(snapshot.items.filter((i) => i.mediaType === 'PHOTO').map((i) => i.mediaKey));
+    this.progress = { ...NO_ANALYSIS, photos: this.photoKeys.size };
+    if (this.photoKeys.size === 0) {
+      await this.emit(true);
+      return { kind: 'completed' };
+    }
+    try {
+      await this.loadModel();
+      const settings = (await this.deps.store.settings(account)) ?? (await this.speedCheck());
+      this.progress = { ...this.progress, detail: settings.detail, stage: 'analysing' };
+      this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey), this.photoKeys);
+      this.speed = new SpeedMeter(this.now());
+      await this.emit(true);
+      await this.analyseLibrary(settings.detail, settings.modelKey);
+      this.progress = { ...this.progress, stage: null, waiting: null, etaSeconds: null };
+      await this.emit(true);
+      return { kind: 'completed' };
+    } catch (e) {
+      if (e instanceof UserStop) return { kind: 'stopped' };
+      if (e instanceof Pause) {
+        this.progress = { ...this.progress, notice: e.message, waiting: null };
+        await this.emit(true);
+        return { kind: 'paused', reason: e.message };
+      }
+      throw e;
+    }
+  }
+
+  private async loadModel(): Promise<void> {
+    this.progress = { ...this.progress, stage: 'model', modelPercent: 0 };
+    await this.emit(true);
+    try {
+      await this.deps.embedder.load((fraction) => {
+        this.progress = { ...this.progress, modelPercent: Math.floor(fraction * 100) };
+        void this.emit(false);
+      });
+    } catch (e) {
+      // No graphics card access, no disk space, no network for the download: say why, resumable.
+      throw new Pause(e instanceof Error ? e.message : `The AI model could not start: ${String(e)}`);
+    }
+    this.progress = { ...this.progress, modelPercent: null };
+  }
+
+  /**
+   * Fingerprints the newest few photos at the preferred detail, times it, and chooses the detail
+   * for this library. At the preferred detail those fingerprints are kept.
+   */
+  private async speedCheck() {
+    this.progress = { ...this.progress, stage: 'speed-check' };
+    await this.emit(true);
+    const page = await this.readPage(null);
+    const sample = page.entries.filter((p) => this.photoKeys.has(p.mediaKey) && p.thumbUrl).slice(0, SPEED_CHECK_PHOTOS + 1);
+    const images: { photo: LibraryPhoto; image: RgbaImage }[] = [];
+    for (const photo of sample) {
+      const image = await this.fetchImage(photo);
+      if (image) images.push({ photo, image });
+    }
+    if (images.length < 2) throw new Pause('Not enough photo previews could be fetched for the speed check. Resume to try again.');
+    // The first photo also prepares the graphics card, so it is not timed.
+    const fingerprints: { photo: LibraryPhoto; image: RgbaImage; vector: Float32Array }[] = [];
+    let timedMs = 0;
+    for (const [index, { photo, image }] of images.entries()) {
+      await this.stopIfAsked();
+      const start = this.now();
+      const vector = await this.deps.embedder.embed(image, PREFERRED_DETAIL);
+      if (index > 0) timedMs += this.now() - start;
+      fingerprints.push({ photo, image, vector });
+    }
+    const rate = (images.length - 1) / Math.max(timedMs / 1000, 0.001);
+    const detail = chooseDetail(rate, this.photoKeys.size);
+    const settings = { account: this.deps.account, detail, modelKey: modelKey(detail), measuredPhotosPerSecond: rate, chosenAtMs: this.now() };
+    await this.deps.store.saveSettings(settings);
+    if (detail === PREFERRED_DETAIL) {
+      for (const f of fingerprints) await this.save(f.photo, f.image, f.vector, settings.modelKey);
+    }
+    this.progress = { ...this.progress, speedCheckText: speedCheckText(rate, this.photoKeys.size, detail) };
+    return settings;
+  }
+
+  private async analyseLibrary(detail: Detail, key: string): Promise<void> {
+    let token: string | null = null;
+    let lastPhotoMs = 0;
+    let lastEnd: number | null = null;
+    do {
+      await this.stopIfAsked();
+      const page = await this.readPage(token);
+      const photos = page.entries.filter((p) => this.photoKeys.has(p.mediaKey));
+      await this.deps.store.savePhotoInfo(photos.map((p) => ({ account: this.deps.account, mediaKey: p.mediaKey, uploadedAtMs: p.uploadedAtMs, width: p.width, height: p.height })));
+      const todo = photos.filter((p) => !this.analysed.has(p.mediaKey));
+      // Previews download a few photos ahead while the graphics card works on the current one.
+      const ahead = this.deps.prefetch ?? 4;
+      const fetches: Promise<RgbaImage | null>[] = todo.slice(0, ahead).map((p) => this.prefetch(p));
+      for (let i = 0; i < todo.length; i++) {
+        await this.stopIfAsked();
+        const paceStart = this.now();
+        lastEnd ??= paceStart;
+        await this.deps.pace(lastPhotoMs, async (waiting) => {
+          if (waiting === this.progress.waiting) return;
+          this.progress = { ...this.progress, waiting };
+          await this.emit(true);
+        });
+        const next = todo[i + ahead];
+        if (next) fetches.push(this.prefetch(next));
+        const previewStart = this.now();
+        const image = await fetches[i]!;
+        if (image === null) {
+          this.progress = { ...this.progress, failed: this.progress.failed + 1 };
+          lastEnd = this.now();
+          continue;
+        }
+        const aiStart = this.now();
+        const vector = await this.deps.embedder.embed(image, detail);
+        const saveStart = this.now();
+        await this.save(todo[i]!, image, vector, key);
+        const end = this.now();
+        lastPhotoMs = saveStart - aiStart;
+        this.speed!.record(end, { other: paceStart - lastEnd, pace: previewStart - paceStart, preview: aiStart - previewStart, ai: saveStart - aiStart, save: end - saveStart });
+        await this.emit(false);
+        lastEnd = end;
+      }
+      token = page.nextPageToken;
+    } while (token !== null);
+  }
+
+  private async save(photo: LibraryPhoto, image: RgbaImage, vector: Float32Array, key: string): Promise<void> {
+    await this.deps.store.saveEmbedding({ modelKey: key, mediaKey: photo.mediaKey, account: this.deps.account, vector, quality: measureQuality(image), createdAtMs: this.now() });
+    this.analysed.add(photo.mediaKey);
+  }
+
+  /** Starts fetching ahead; a failure surfaces when the photo's turn comes, not as an unhandled error before. */
+  private prefetch(photo: LibraryPhoto): Promise<RgbaImage | null> {
+    const fetching = this.fetchImage(photo);
+    fetching.catch(() => {});
+    return fetching;
+  }
+
+  /** A preview as pixels, or null when this photo's preview can't be had right now (counted as failed). */
+  private async fetchImage(photo: LibraryPhoto): Promise<RgbaImage | null> {
+    if (!photo.thumbUrl) return null;
+    let rateLimits = 0;
+    for (;;) {
+      try {
+        return await this.deps.decode(await this.deps.source.preview(photo.thumbUrl, PREVIEW_SIZE_PX));
+      } catch (e) {
+        if (!(e instanceof SourceError)) return null; // a preview that can't be decoded
+        switch (e.kind) {
+          case 'RATE_LIMIT':
+            if (++rateLimits > MAX_RATE_LIMITS) throw new Pause('Google is limiting preview downloads. Resume the analysis later.');
+            await this.sleep(RATE_LIMIT_WAIT_MS * rateLimits);
+            break;
+          case 'SESSION':
+            throw new Pause('The Google Photos session ended. Reload photos.google.com, check you are signed in, then resume.');
+          case 'NO_PHOTOS_TAB':
+            throw new Pause(`${e.message} Then resume the analysis.`);
+          default:
+            return null;
+        }
+      }
+    }
+  }
+
+  private async readPage(token: string | null) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const page = await this.deps.source.libraryPhotos(token);
+        if (page.accountFingerprint !== this.deps.account) {
+          throw new Pause('The Google Photos tab is signed in to a different account. Switch it back, then resume.');
+        }
+        return page;
+      } catch (e) {
+        if (!(e instanceof SourceError)) throw e;
+        if (e.kind === 'SESSION') throw new Pause('The Google Photos session ended. Reload photos.google.com, check you are signed in, then resume.');
+        if (e.kind === 'NO_PHOTOS_TAB') throw new Pause(`${e.message} Then resume the analysis.`);
+        if (attempt >= MAX_PAGE_ATTEMPTS || (e.kind !== 'TRANSIENT' && e.kind !== 'RATE_LIMIT')) {
+          throw new Pause(`Reading the library failed (${e.message}). Resume when the connection is back.`);
+        }
+        await this.sleep(5_000 * attempt);
+      }
+    }
+  }
+
+  private async stopIfAsked(): Promise<void> {
+    if (await this.deps.shouldStop()) throw new UserStop();
+  }
+
+  /** Progress at most once a second while working, so saving it costs nothing noticeable. */
+  private async emit(force: boolean): Promise<void> {
+    const now = this.now();
+    if (!force && now - this.lastEmitMs < PROGRESS_EVERY_MS) return;
+    this.lastEmitMs = now;
+    const recent = this.speed?.recent(now) ?? null;
+    const rate = recent?.photosPerSecond ?? null;
+    const remaining = this.photoKeys.size - this.analysed.size;
+    this.progress = {
+      ...this.progress,
+      analysed: this.analysed.size,
+      photosPerSecond: rate,
+      etaSeconds: rate && remaining > 0 ? Math.round(remaining / rate) : null,
+      perPhotoMs: recent?.perPhoto ?? null,
+    };
+    await this.deps.onProgress(this.progress);
+  }
+}
+
+function intersect(a: Set<string>, b: Set<string>): Set<string> {
+  return new Set([...a].filter((k) => b.has(k)));
+}
+
+/** "Speed check: 5.7 photos/s at detail 140, so your 17,202 photos take about 50 min." */
+export function speedCheckText(rate: number, photos: number, detail: Detail): string {
+  const minutes = Math.round(photos / rate / 60);
+  const duration = minutes >= 90 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
+  const base = `Speed check: ${rate.toFixed(1)} photos/s at detail ${PREFERRED_DETAIL}`;
+  return detail === PREFERRED_DETAIL
+    ? `${base}, so your ${photos.toLocaleString('en-GB')} photos take about ${duration}.`
+    : `${base}: about ${duration} for your ${photos.toLocaleString('en-GB')} photos, so this library uses detail ${FALLBACK_DETAIL}, about twice as fast and nearly as good.`;
+}

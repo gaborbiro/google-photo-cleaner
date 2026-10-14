@@ -190,6 +190,8 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
       return true;
     case 'app-run-op':
       return runOp(request.account, request.op, request.params);
+    case 'app-idle-state':
+      return chrome.idle.queryState(60);
     case 'app-open-review':
       await openReview(request.account);
       return true;

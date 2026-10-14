@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
-import { pauseScan, resumeScan, startScan } from '../../src/app/shared/actions';
+import { pause, resume, setAnalysisFullSpeed, startAnalysis, startScan } from '../../src/app/shared/actions';
 import { jobId, NO_PROGRESS, reportProgress } from '../../src/app/shared/job';
 import type { AppRequest } from '../../src/app/shared/messages';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
@@ -27,7 +27,7 @@ describe('scan actions (on the real job store, in memory)', () => {
     const { send } = recorder();
     await startScan(store, send, 'acc1', 1_000);
     await startScan(store, send, 'acc2', 1_000);
-    await pauseScan(store, 'acc1', 2_000);
+    await pause(store, 'library-scan', 'acc1', 2_000);
     expect((await store.get(scanOf('acc1')))?.status).toBe('paused');
     expect((await store.get(scanOf('acc2')))?.status).toBe('running');
   });
@@ -36,7 +36,7 @@ describe('scan actions (on the real job store, in memory)', () => {
     const store = new IndexedDbJobStore(new IDBFactory());
     const { send } = recorder();
     await startScan(store, send, 'acc1', 1_000);
-    await pauseScan(store, 'acc1', 2_000);
+    await pause(store, 'library-scan', 'acc1', 2_000);
     await store.update(scanOf('acc1'), (job) => (job ? reportProgress(job, { ...NO_PROGRESS, libraryEntries: 500 }, 3_000) : null));
     expect(await store.get(scanOf('acc1'))).toMatchObject({ status: 'paused', progress: { libraryEntries: 0 } });
   });
@@ -45,8 +45,8 @@ describe('scan actions (on the real job store, in memory)', () => {
     const store = new IndexedDbJobStore(new IDBFactory());
     const { sent, send } = recorder();
     await startScan(store, send, 'acc1', 1_000);
-    await pauseScan(store, 'acc1', 2_000);
-    await resumeScan(store, send, 'acc1', 3_000);
+    await pause(store, 'library-scan', 'acc1', 2_000);
+    await resume(store, send, 'library-scan', 'acc1', 3_000);
     expect((await store.get(scanOf('acc1')))?.status).toBe('running');
     expect(sent).toHaveLength(2);
   });
@@ -54,8 +54,29 @@ describe('scan actions (on the real job store, in memory)', () => {
   it('pausing or resuming an account without a scan saves nothing', async () => {
     const store = new IndexedDbJobStore(new IDBFactory());
     const { send } = recorder();
-    expect(await pauseScan(store, 'acc1', 1_000)).toBeNull();
-    expect(await resumeScan(store, send, 'acc1', 1_000)).toBeNull();
+    expect(await pause(store, 'library-scan', 'acc1', 1_000)).toBeNull();
+    expect(await resume(store, send, 'library-scan', 'acc1', 1_000)).toBeNull();
     expect(await store.all()).toEqual([]);
+  });
+});
+
+describe('analysis actions', () => {
+  it('starting the analysis wakes the background page; full speed is remembered on the job', async () => {
+    const store = new IndexedDbJobStore(new IDBFactory());
+    const { sent, send } = recorder();
+    await startAnalysis(store, send, 'acc1', 1_000);
+    await setAnalysisFullSpeed(store, 'acc1', true, 2_000);
+    expect(await store.get(jobId('analysis', 'acc1'))).toMatchObject({ kind: 'analysis', status: 'running', fullSpeed: true });
+    expect(sent).toEqual([{ kind: 'app-wake-engine' }]);
+  });
+
+  it('pausing the analysis leaves the scan alone', async () => {
+    const store = new IndexedDbJobStore(new IDBFactory());
+    const { send } = recorder();
+    await startScan(store, send, 'acc1', 1_000);
+    await startAnalysis(store, send, 'acc1', 1_000);
+    await pause(store, 'analysis', 'acc1', 2_000);
+    expect((await store.get(jobId('analysis', 'acc1')))?.status).toBe('paused');
+    expect((await store.get(jobId('library-scan', 'acc1')))?.status).toBe('running');
   });
 });

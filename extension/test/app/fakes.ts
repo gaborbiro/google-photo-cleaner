@@ -120,6 +120,26 @@ export class FakePhotos implements PhotosSource {
     return this.page('albums', this.albums.map((a) => a.album), token, 2);
   }
 
+  /** Previews of these library indexes answer as unavailable. */
+  unavailablePreviews = new Set<number>();
+
+  async libraryPhotos(token: string | null) {
+    this.before('library');
+    const page = this.page('lib', this.library, token, 3);
+    return {
+      ...page,
+      entries: page.entries.map((i) => ({ mediaKey: i.mediaKey, mediaType: i.mediaType, uploadedAtMs: i.takenAtMs + 60_000, width: i.width, height: i.height, thumbUrl: i.thumbUrl })),
+    };
+  }
+
+  /** A preview's bytes carry the photo's index, so the fake model can tell photos apart. */
+  async preview(thumbUrl: string, _sizePx: number) {
+    this.before('preview');
+    const index = Number(thumbUrl.split('thumb-')[1]);
+    if (this.unavailablePreviews.has(index)) throw new SourceError('PREVIEW_UNAVAILABLE', 'HTTP 404 fetching preview', 404);
+    return { contentType: 'image/jpeg', bytes: new Uint8Array([index, 7]) };
+  }
+
   async albumItemsPage(albumKey: string, _authKey: string | null, token: string | null) {
     this.before(`album:${albumKey}`);
     if (this.inaccessibleAlbums.has(albumKey)) throw new SourceError('RPC_ERROR', 'album not accessible', null, 5);

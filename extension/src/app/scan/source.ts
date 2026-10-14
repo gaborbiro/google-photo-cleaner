@@ -34,12 +34,33 @@ export interface PhotosSource {
   albumItemsPage(albumKey: string, authKey: string | null, pageToken: string | null): Promise<Page<EntryRef>>;
 }
 
+/** What the analysis needs to know about a library photo, read fresh so its preview link works. */
+export interface LibraryPhoto {
+  mediaKey: string;
+  mediaType: 'PHOTO' | 'VIDEO' | null;
+  uploadedAtMs: number | null;
+  width: number | null;
+  height: number | null;
+  thumbUrl: string | null;
+}
+
+export interface Preview {
+  contentType: string;
+  bytes: Uint8Array;
+}
+
+/** Google Photos as the analysis reads it: the library again, newest first, and previews. */
+export interface AnalysisSource {
+  libraryPhotos(pageToken: string | null): Promise<Page<LibraryPhoto>>;
+  preview(thumbUrl: string, sizePx: number): Promise<Preview>;
+}
+
 export type RunOp = (op: ReadOp, params: Record<string, unknown>) => Promise<OpResult>;
 
 type WithAccount<T> = T & { accountFingerprint: string };
 
 /** A [PhotosSource] over the page script's operations, mapped as the desktop's connector maps them. */
-export class OpPhotosSource implements PhotosSource {
+export class OpPhotosSource implements PhotosSource, AnalysisSource {
   constructor(private readonly run: RunOp) {}
 
   private async call<T>(op: ReadOp, params: Record<string, unknown>): Promise<T> {
@@ -73,6 +94,23 @@ export class OpPhotosSource implements PhotosSource {
       nextPageToken: dto.nextPageToken,
       accountFingerprint: dto.accountFingerprint,
     };
+  }
+
+  async libraryPhotos(pageToken: string | null): Promise<Page<LibraryPhoto>> {
+    const dto = await this.call<WithAccount<LibraryPageDto>>('listLibraryPage', pageToken ? { pageToken } : {});
+    return {
+      entries: dto.items.map((i) => ({ mediaKey: i.mediaKey, mediaType: i.mediaType, uploadedAtMs: i.uploadedAtMs, width: i.width, height: i.height, thumbUrl: i.thumbUrl })),
+      nextPageToken: dto.nextPageToken,
+      accountFingerprint: dto.accountFingerprint,
+    };
+  }
+
+  async preview(thumbUrl: string, sizePx: number): Promise<Preview> {
+    const dto = await this.call<{ contentType: string; base64: string }>('fetchPreview', { thumbUrl, sizePx });
+    const binary = atob(dto.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return { contentType: dto.contentType, bytes };
   }
 
   private async refs(op: ReadOp, pageToken: string | null): Promise<Page<EntryRef>> {

@@ -2,8 +2,10 @@
 // re-read whenever any surface or the background page saves a change.
 
 import { useCallback, useEffect, useState } from 'react';
-import { jobId, type Job } from '../shared/job';
+import type { OpResult } from '../../shared/protocol';
+import { jobId, type AnalysisJob, type Job, type JobKind, type ScanJob } from '../shared/job';
 import type { AccountAnswer, AppRequest } from '../shared/messages';
+import { openDatabase } from '../shared/db';
 import { IndexedDbJobStore, onJobsChanged } from '../shared/store';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { classify, reportView, type ReportView } from '../scan/report';
@@ -42,7 +44,16 @@ export function send(request: AppRequest): Promise<unknown> {
 }
 
 /** The library scan of [account], kept up to date; undefined while loading. */
-export function useScanJob(account: string | null): Job | null | undefined {
+export function useScanJob(account: string | null): ScanJob | null | undefined {
+  return useJob(account, 'library-scan') as ScanJob | null | undefined;
+}
+
+/** The AI analysis of [account], kept up to date; undefined while loading. */
+export function useAnalysisJob(account: string | null): AnalysisJob | null | undefined {
+  return useJob(account, 'analysis') as AnalysisJob | null | undefined;
+}
+
+function useJob(account: string | null, kind: JobKind): Job | null | undefined {
   const [job, setJob] = useState<Job | null | undefined>(undefined);
   useEffect(() => {
     if (account === null) {
@@ -50,15 +61,62 @@ export function useScanJob(account: string | null): Job | null | undefined {
       return;
     }
     let alive = true;
-    const load = () => void store.get(jobId('library-scan', account)).then((j) => alive && setJob(j));
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    // If the saved data can't be opened yet (see useStorageProblem), try again shortly.
+    const load = () => void store.get(jobId(kind, account)).then(
+      (j) => alive && setJob(j),
+      () => {
+        if (alive) retry = setTimeout(load, RETRY_MS);
+      },
+    );
     load();
     const stop = onJobsChanged(load);
     return () => {
       alive = false;
+      clearTimeout(retry);
       stop();
     };
-  }, [account]);
+  }, [account, kind]);
   return job;
+}
+
+const RETRY_MS = 3_000;
+
+/**
+ * Why the saved data can't be opened right now, in plain words (e.g. an older copy of the
+ * extension still holds it after an update); null when all is well. Checks again until it works.
+ */
+export function useStorageProblem(): string | null {
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const probe = () => openDatabase().then(
+      (db) => {
+        db.close();
+        if (alive) setProblem(null);
+      },
+      (error: unknown) => {
+        if (!alive) return;
+        setProblem(error instanceof Error ? error.message : String(error));
+        retry = setTimeout(probe, RETRY_MS);
+      },
+    );
+    void probe();
+    return () => {
+      alive = false;
+      clearTimeout(retry);
+    };
+  }, []);
+  return problem;
+}
+
+/** Fetches a photo's preview through the account's Photos tab, as an image address; null when unavailable. */
+export async function previewDataUrl(account: string, thumbUrl: string, sizePx: number): Promise<string | null> {
+  const result = (await send({ kind: 'app-run-op', account, op: 'fetchPreview', params: { thumbUrl, sizePx } })) as OpResult;
+  if (!result.ok) return null;
+  const { contentType, base64 } = result.data as { contentType: string; base64: string };
+  return `data:${contentType};base64,${base64}`;
 }
 
 /** All saved jobs (every account), kept up to date. */
@@ -66,11 +124,18 @@ export function useAllJobs(): Job[] {
   const [jobs, setJobs] = useState<Job[]>([]);
   useEffect(() => {
     let alive = true;
-    const load = () => void store.all().then((all) => alive && setJobs(all));
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const load = () => void store.all().then(
+      (all) => alive && setJobs(all),
+      () => {
+        if (alive) retry = setTimeout(load, RETRY_MS);
+      },
+    );
     load();
     const stop = onJobsChanged(load);
     return () => {
       alive = false;
+      clearTimeout(retry);
       stop();
     };
   }, []);

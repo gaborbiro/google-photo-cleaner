@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browser search test</title>
+  <style>
+    :root { color-scheme: light dark; --muted: #888; }
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 24px; }
+    button, input { font: inherit; padding: 6px 12px; }
+    table { border-collapse: collapse; margin: 12px 0; }
+    td, th { border: 1px solid #8884; padding: 4px 10px; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    .columns { display: flex; gap: 24px; align-items: flex-start; }
+    .grid { display: grid; grid-template-columns: repeat(4, 90px); gap: 4px; }
+    .grid img { width: 90px; height: 90px; object-fit: cover; border: 3px solid transparent; }
+    .grid img.hit { border-color: #2e7d32; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Browser search test</h1>
+  <p>Do "More like selected" and text search still find the right photos at lower detail (faster)?
+    Your approved Search sweeps are the answer key: for each, 3 of its photos are the examples, and the
+    test counts how many of the rest come back first among ~1,500 photos. Detail 280 uses the desktop
+    app's own fingerprints; 140 and 70 run here on the graphics card (about 7 minutes).</p>
+  <p id="gpu">Checking WebGPU…</p>
+  <p><label>Text search <input id="query" value="meal prep boxes" size="30"></label>
+    <button id="run" disabled>Run</button></p>
+  <div id="results"></div>
+  <div id="log"></div>
+  <script type="module" src="search.js"></script>
+</body>
+</html>

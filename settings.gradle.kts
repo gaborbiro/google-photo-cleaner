@@ -42,3 +42,7 @@ include(":features:scan")
 include(":features:sample")
 include(":features:connection")
 include(":features:probe")
+
+// Spikes: experiments that the app does not depend on.
+include(":spikes:browser-ai-export")
+project(":spikes:browser-ai-export").projectDir = file("spikes/browser-ai/export")

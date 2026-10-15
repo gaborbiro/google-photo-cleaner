@@ -74,19 +74,107 @@ grows into the product; a new shared Kotlin module holds the tested rules, compi
 
 ### Milestones (each one usable on its own)
 
-- [x] **M1 Foundation** (2026-10-14, commit `ed88a96` on branch `claude/extension-m1-cd69e7d`, folder `C:\Work\PhotoCleaner-extension`; 47 tests pass; checked in Chrome: panel, popup, review tab, survives closing the panel and a browser restart, accounts kept apart): one extension; popup, panel in Google Photos (shows the signed-in account),
+- [x] **M1 Foundation** (2026-10-14, commit `ff4fd6b` on branch `claude/extension-m1-cd69e7d`, folder `C:\Work\PhotoCleaner-extension`; 47 tests pass; checked in Chrome: panel, popup, review tab, survives closing the panel and a browser restart, accounts kept apart): one extension; popup, panel in Google Photos (shows the signed-in account),
       empty review tab; background page running a pretend job that survives closing the panel.
       Check: close and reopen everything, progress is still there
-- [ ] **M2 Library scan in the browser**: the panel's Scan lists library, favourites, archive, albums
+- [x] **M2 Library scan in the browser** (2026-10-14, commit `34e39d2` on the M1 branch; 69 extension tests + 128 desktop tests pass; checked on my library: every count identical to the desktop app, 19,021 entries, 17,202 photos, 2,088 protected, 15,028 eligible, 86 unknown; ~2 min vs the desktop's 2 min 18 s): protection rules and inventory types are now Kotlin Multiplatform (desktop uses the JVM build, the extension the JavaScript one via `npm run kotlin`); the scan itself is TypeScript, ported with the desktop's scenarios. The panel's Scan lists library, favourites, archive, albums
       and works out protection, saved per account. Check: counts match the desktop app's report exactly
-- [ ] **M3 AI analysis**: model download with space check; capability and speed check with an honest
+- [x] **M3 AI analysis** (commit c838df1 on branch `claude/extension-m3-34e39d2`, 110 extension tests pass): model download with space check; capability and speed check with an honest
       time estimate; background analysis, newest first, resumable; stays out of the way (pause while
       the user is busy or on battery, a "full speed" switch). Check: embeddings match the desktop's
-- [ ] **M4 Duplicates review**: review tab with groups, keys, toasts, viewer (UX decisions from phase
-      0), simulated trash. Check: same groups as the desktop app
-- [ ] **M5 Search & sweep**: text search and "More like selected". Check: the meal-prep sweep comes back
+  - [x] My library on the RTX, detail 140: all 17,202 photos analysed. Speed check said 4.9 photos/s,
+        about 59 min; at full speed it ran at 5.2 photos/s (per photo: AI 182 ms, everything else
+        12 ms; the graphics card is ~92% busy, so this is the hardware's limit)
+  - [x] Spot check (12 most similar photos to a picked one): spot-on by eye; it even groups by
+        concepts like homelessness. Quality measurement matches the desktop worker exactly
+  - [x] Lesson: show the speed over the last minute, not since the start, plus a per-photo time
+        breakdown. The average since the start hid that Full speed had worked
+  - [ ] Still to check: search with the 4-bit model; 4-bit speed on built-in (Intel) graphics; a
+        numeric comparison of fingerprints with the desktop's (only checked by eye so far)
+- [x] **M4 Duplicates review** (commit 1008fde on branch `claude/extension-m4-c838df1`, 162 extension
+      tests pass; works well in my Chrome): review tab with groups, keys, toasts, viewer (UX
+      decisions from phase 0), simulated trash. Check: same groups as the desktop app (not exactly:
+      the browser uses detail 140 at 0.915, the desktop 280 at 0.925; groups looked right)
+  - [x] Review tab with "1 · Scan (done)" and "2 · Duplicates" tabs (last one remembered); header and status lines
+        scroll away and fade, tabs and action bar stay pinned; one group at a time with the
+        desktop's tiles, labels, reasons, keys (D F S A Z, arrows, Space, Enter), viewer and toasts
+  - [x] Decisions and the trash queue saved per account; undo; trash SIMULATED (nothing sent to
+        Google). The queue is a TypeScript twin of the desktop's for now; share it in M6
+  - [x] "Search more like these" button: comes with Search (M5)
+  - [x] One Scan for the user: one card, one button. "Stage 1 of 2 · Reading your photo list", then
+        "Stage 2 of 2 · Analysing new photos"; done = "Up to date" with "Check for new photos". Still
+        two saved jobs underneath, each resumable
+  - [x] Duplicates = at least the threshold similar AND taken within 2 minutes (as on the desktop).
+        Same-kind photos across days (months of Food4Fitness boxes, 80–86% to each other) are
+        cleared with Search's sweep, not here
+  - [x] Threshold for detail 140: **0.915**, from my 180 calibration labels (developer page
+        dev-calibration.html): 98.7% precision, 86.0% of duplicates found (desktop at 280: 0.925,
+        99% / 88%). Chosen like the desktop's: the lowest threshold with only one wrong pair; one
+        pair labelled "different" scores ~0.966, so "zero wrong" would mean 0.970 and only 41% found
+  - [ ] Threshold for detail 70: still the desktop's 0.925 (provisional); calibrating needs the
+        labelled photos analysed at 70
+  - [x] Grouping, review queue and calibration maths moved into one shared Kotlin module
+        (features/shared/duplicates) used by the desktop and the extension; fixed on the way: a
+        group skipped and later kept counted as skipped
+  - [ ] Decide how to show similarity in the review: the raw % is hard to read on its own (different
+        meals score 86%)
+- [x] **M5 Search & sweep** (commit 06ccbcb on branch `claude/extension-m4-c838df1`; 185 extension
+      tests pass; works great in my Chrome): text search and "More like selected". Check: the
+      meal-prep sweep comes back
+  - [x] "Start over" clears the description, the examples and the results in one go
+  - [x] Search tab in the review page: describe photos (the AI model loads in the review tab on the
+        first text search, about 10–20 s), M / L for more / less like the selection with the
+        examples shown and removable, 300 best matches then Show more, sorted by best match / newest /
+        oldest; protected and unknown photos never shown. D asks, Enter moves the selection to the
+        (simulated) trash queue after checking every photo again; Z undoes. Duplicates' "Search more
+        like these" opens it with the group's photos as examples
+  - [ ] The ranking is TypeScript (a few lines of arithmetic); which photos may be shown comes from
+        the shared Kotlin protection rules. Share the ranking via Kotlin if the desktop gets "Less like these"
+  - [ ] New: "Add to album…" for search results (a new album or an existing one). A write request,
+        like trashing: needs M6's write path (one request at a time, every photo confirmed,
+        failures shown). Bonus: photos in an album are protected, so it is also "keep all of these"
+  - [x] New: "Less like these". Select results that don't belong and push that direction away.
+        Ranking: text + average of the "more" examples − a share of the average of the "less"
+        examples; plus a rule that a photo closer to any "less" example than to every "more"
+        example drops out. The examples show above the results as +/− thumbnails, each removable
 - [ ] **M6 Real trashing + data controls**: move to Google Photos' trash with undo and safety checks;
-      storage line, "Forget this account", "Delete all my data", goodbye page
+      storage line, "Forget this account", the erase button (Erase Photo Cleaner's data), goodbye page
+  - [x] (done 2026-10-15, before real trashing) Protection choices as checkboxes, all on by default: never trash photos that are
+        ☑ favourites ☑ in an album ☑ archived. Photos of unknown status are always kept (not a
+        choice). Shared Kotlin rules take the choices; the trash queue re-checks with them. Say
+        plainly that trashing a photo also takes it out of every album
+  - [ ] Review every error the user can see and handle each properly: plain words, what to do,
+        and retry by itself whatever is only a hiccup. Example seen: "Stopped by an unexpected
+        error: A listener indicated an asynchronous response by returning true, but the message
+        channel closed before a response was received" (Chrome stopped the service worker mid-
+        request, or the extension was reloaded during a Scan): should be retried like a network blip
+  - [ ] Google's undocumented requests: Photo Cleaner talks to Google Photos the way Google's own
+        page does, and Google can change that any day. Rule: when an answer doesn't fit, stop
+        before changing anything and say so plainly; never carry on and guess
+    - [x] (2026-10-15) One plain message everywhere for "Google changed something": "Photo Cleaner
+          no longer understands Google Photos' answers; Google may have changed something. It
+          stopped to be safe, and nothing in your library was changed. Check for a Photo Cleaner
+          update, then try again." Scan, analysis, the account check and previews use it; an error
+          code Google keeps returning says "keeps refusing… (code N)"; details go to the log
+    - [x] (2026-10-15) The analysis no longer counts a changed answer as "this photo failed" (a
+          format change would have "finished" with every photo failed). It also pauses when 25
+          previews in a row fail
+    - [ ] Signed-in check reads values from Google's page; if Google renames them, users are told
+          "signed out" when they aren't. Tell the two apart, or word it "signed out, or Google
+          changed something"
+    - [ ] Before real trashing: the trash request is the riskiest one. Read back the result
+          (is the photo really in the trash?) and stop at the first surprise
+    - [ ] Early warning: a daily automatic check against a test account (the read requests, a
+          trash and restore) so we hear of a change before users do
+    - [ ] A remote "pause trashing" switch (a setting fetched as data, e.g. Firebase Remote
+          Config; extensions may fetch data, not code) to stop trashing for everyone while a
+          fix ships
+    - [ ] Error reports (below) must include these, so we know within hours
+  - [ ] Warn before uninstalling: Chrome gives extensions no "are you sure?" moment, so say it
+        up front, next to the storage line and the erase button: everything (the scan, the
+        analysis, your decisions) lives only in this browser, and uninstalling deletes it; a fresh
+        start means scanning (minutes) and analysing (about an hour) again. Disabling keeps it.
+        Consider exporting decisions (a backup) so they survive a reinstall or a new computer
 - [ ] Then: Chrome, Edge, Brave on Windows and a Mac (need access to a Mac); phase 3
 
 ### Capability check and minimum specs (provisional until M3 testing)
@@ -106,28 +194,34 @@ grows into the product; a new shared Kotlin module holds the tested rules, compi
 
 Structure and storage
 
-- [ ] One extension with the three surfaces: toolbar popup, panel inside photos.google.com, review tab
-- [ ] Hidden background page that does the work; the surfaces only show and control it
-- [ ] Move the tested Kotlin rules (protection, grouping, trash queue) to Kotlin Multiplatform so they run in the browser
-- [ ] Store everything in the browser (IndexedDB or SQLite in browser storage). Only numbers are stored, no images: an embedding (fingerprint, 768 numbers) per photo, ~25–50 MB for 17,000 photos; the model (0.3–0.9 GB) is the big item. Request `unlimitedStorage`: no quota, and Chrome never evicts it when the disk is low
-- [ ] Separate data per Google account (storage is per Chrome profile, not per account): label every scan, embedding and decision with the account, show and act on the current one only; never apply one account's protection info to another's photos. Switching accounts back and forth keeps each one's progress
+- [x] One extension with the three surfaces: toolbar popup, panel inside photos.google.com, review tab
+- [x] Hidden background page that does the work; the surfaces only show and control it
+- [~] Move the tested Kotlin rules (protection, grouping, trash queue) to Kotlin Multiplatform so they run in the browser: protection, grouping and the review queue done (M2, M4); the trash queue is a TypeScript twin for now (share it in M6)
+- [x] Store everything in the browser (IndexedDB or SQLite in browser storage). Only numbers are stored, no images: an embedding (fingerprint, 768 numbers) per photo, ~25–50 MB for 17,000 photos; the model (0.3–0.9 GB) is the big item. Request `unlimitedStorage`: no quota, and Chrome never evicts it when the disk is low
+- [x] Separate data per Google account (storage is per Chrome profile, not per account): label every scan, embedding and decision with the account, show and act on the current one only; never apply one account's protection info to another's photos. Switching accounts back and forth keeps each one's progress
 - [ ] Disk space and system clean-ups: check free space before downloading the model; on "disk full" pause the scan with a clear message and never half-save a decision; a missing model is re-downloaded; missing data is reported honestly ("start a new scan"), not a crash. Windows' own clean-up leaves browser data alone, but tools like CCleaner can wipe the model cache
 - [ ] Reading the library during a long scan: today it goes through a photos.google.com tab (data feed and access tokens live there). Keep a Photos tab open in the background, or find out whether photos can be fetched without one. Same question for thumbnails in the review tab
 
 Scanning and reviewing
 
-- [ ] One Scan (library + protection, then AI analysis of new photos) instead of today's two steps
-- [ ] First analysis as a background job: resumes across sessions, newest photos first, review can start while it runs
-- [ ] Pick the detail level from the computer's speed (140 on a good graphics card, 70 on a weak one), fixed per library, each with its own tuned threshold
-- [ ] Calibration becomes a developer tool; users get the tuned threshold
-- [ ] Review tab: Duplicates and Search & sweep (carry over the UX decisions from phase 0)
+- [x] One Scan (library + protection, then AI analysis of new photos) instead of today's two steps
+- [x] First analysis as a background job: resumes across sessions, newest photos first, review can start while it runs
+- [x] Pick the detail level from the computer's speed (140 on a good graphics card, 70 on a weak one), fixed per library, each with its own tuned threshold (70's threshold still provisional)
+- [x] Calibration becomes a developer tool; users get the tuned threshold
+- [x] Review tab: Duplicates and Search & sweep (carry over the UX decisions from phase 0)
 - [ ] Real trashing in Google Photos (still simulated today), with undo and safety checks
 
 Data controls (details in the Data privacy chapter)
 
 - [ ] Storage line, visible: "AI files: 290 MB · only needed while scanning; downloaded again next time · [Free up space]"; "Forget this account's library"
-- [ ] "Delete all my data · removes everything Photo Cleaner stored on this computer, the same as uninstalling it (the extension stays installed). Photos already in Google Photos' trash stay there."
-- [ ] Goodbye page on uninstall (on our website): "all your data has been deleted from this computer", asks why they left
+- [x] Erase button, two clicks (decided and built 2026-10-15; on the Scan tab for now, next to the storage line in M6). Never "delete" next to "data" or "photos": people read it as deleting their photos.
+      - First, only the button: **[ Erase Photo Cleaner's data from this computer ]**
+      - After the first click, the explanation appears and the button becomes **[ Confirm to erase ]** (with Cancel):
+        "Removes the library scan, the AI fingerprints and your review progress (which groups you've
+        already gone through), as uninstalling would. **Your photos in Google Photos are not touched**:
+        photos you already trashed stay in Google Photos' trash."
+      - (Not "your decisions": it sounds as if trashed photos would come back.)
+- [ ] Goodbye page on uninstall (on our website): "Photo Cleaner's data has been erased from this computer; your photos in Google Photos were not touched", asks why they left
 
 Testing
 
@@ -143,6 +237,25 @@ Testing
 - [ ] Website: landing page with "Add to Chrome", demo, privacy promise
 - [ ] Direct download on the website (zip + "Load unpacked" steps for Chrome; signed file for Firefox if we support it)
 - [ ] Pricing: free, paid, or free with a paid tier (one competitor: US$9.99 once)
+- [ ] Before each release: go through `docs/extension-manual-checks.md` (on the extension branch
+      until merged) in Chrome, Edge and Brave
+- [ ] Error reports with Firebase (I know it best). Chrome extensions may not load code from the
+      internet, so not the usual Firebase Analytics web script: send events to the Firebase
+      project's Google Analytics property with the Measurement Protocol (a plain web request,
+      Chrome's documented way for extensions). Crashlytics is phones only. Errors to report:
+  - [ ] Google changed something: where (scan: library / favourites / archive / album list /
+        album contents; analysis: library / previews; account check; previews in review), kind,
+        Google's request name, the fixed message (e.g. "Parser item count differs"), extension version
+  - [ ] Google keeps refusing a request: request name and error code
+  - [ ] Previews stopped (25 in a row failed); rate limits (how often, to tune the pacing)
+  - [ ] Unexpected errors: "Stopped by an unexpected error", screens that fail to draw, database
+        errors (blocked upgrades, full disk)
+  - [ ] The AI model failing to start (no WebGPU, no disk space), and speed check results (which
+        computers are too slow)
+  - [ ] M6: trash requests that fail or don't take effect
+  - [ ] Never: photo keys, addresses, album titles, account or email, anything about the photos.
+        A random install ID only. Changes "nothing leaves the computer" (see Data privacy): say
+        it in the privacy policy, and consider letting users turn it off
 
 ## 4. Launch
 
@@ -184,7 +297,7 @@ Kept up to date as we go; reviewed in full before publishing (phase 3).
       Check; if they do, don't store them, or only briefly
 - [ ] Optional thumbnail cache (for instant reviewing, ~30 KB each, ~500 MB for my library): real
       images, possibly intimate, in a folder the user can't easily find. If ever added: off unless
-      the user turns it on, deleted after review, covered by "Delete all my data"
+      the user turns it on, deleted after review, covered by the erase button
 - [ ] Model download from Hugging Face shows them the user's IP address and that they use the app.
       Hosting the model on our own site avoids that (cost: hosting ~0.3–0.9 GB per new user)
 - [ ] The realistic threat is someone else using the same computer, or malware on it; Chrome's
@@ -197,13 +310,15 @@ Kept up to date as we go; reviewed in full before publishing (phase 3).
 
 ### Rules we follow
 
-- [ ] "Delete all my data" wipes every store we use: database, model cache, settings, and stops the
+- [x] The erase button wipes every store we use: database, model cache, settings, and stops the
       background page, so "the same as uninstalling" is true. Warn that it doesn't undo anything
       already in Google Photos' trash (kept there 60 days); the undo history is gone
 - [ ] "Forget this account's library" deletes that account's embeddings, findings and decisions
 - [ ] The goodbye page's address carries nothing that identifies the user
 - [ ] No analytics or crash reports containing photo data, keys or addresses (the desktop app already
       strips them from errors)
+- [ ] Error reports (Firebase, phase 3) are the one thing that leaves the computer: decide whether
+      they're on by default, and update "Already in our favour" and the store disclosure
 - [ ] Chrome Web Store: privacy policy + data-use disclosure (reads website content on
       photos.google.com, kept on the computer), "Limited Use" rules
 

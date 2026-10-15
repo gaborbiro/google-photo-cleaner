@@ -1,7 +1,7 @@
 // Everything that must pass before a change is done (`npm run check`), in the order that works:
 // 1. Gradle: build the shared Kotlin rules for the extension, run every Kotlin test (the desktop
 //    app's and the shared rules'), 2. the extension: typecheck, tests, build.
-// Stops at the first failure. The same command runs in CI (.github/workflows/check.yml).
+// Stops at the first failure. The same command runs in CI (.github/workflows/test.yml).
 
 import { spawnSync } from 'node:child_process';
 import { utimesSync } from 'node:fs';

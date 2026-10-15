@@ -17,7 +17,7 @@ approves to the trash. There are two products in this repository:
 
 ## Verify every change
 
-Run this before you call a change done. It must pass, and it is what CI runs (`.github/workflows/check.yml`):
+Run this before you call a change done. It must pass, and it is what CI runs (`.github/workflows/test.yml`):
 
 ```
 cd extension
@@ -102,7 +102,8 @@ log photo keys, URLs, album titles, tokens or account details. Never commit secr
   time), not `Date.UTC`. The tests run in California time (`vitest.config.mjs`), so a mix-up of UTC
   and local time fails on every machine.
 - `test/app/screens.test.tsx` opens each page (popup, panel, review tab and its tabs) in a pretend
-  browser and fails on any logged error. When you add a page, a tab or a state worth seeing, add it there.
+  browser with a made-up library, clicks and presses keys as a user would, and fails on any logged
+  error. When you add a page, a tab, a button or a key, add it there.
 - Some things can only be checked in Chrome by hand: loading the AI model, the real erase, resuming
   after Google Photos reopens, the spinning tab icon, the keyboard feel. Say so when a change touches
   them, naming the parts of `docs/extension-manual-checks.md` to go through.

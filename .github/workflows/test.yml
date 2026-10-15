@@ -1,6 +1,6 @@
 # Everything must pass on every push and pull request: the same `npm run check` as on a laptop,
 # plus the Python worker's tests. Windows, like the desktop app it also builds and tests.
-name: Check
+name: Test
 
 on:
   push:

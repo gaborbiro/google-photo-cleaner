@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gridKey, HELD_STEP_MS, HeldArrow, HOLD_DELAY_MS, repeatsWhenHeld, viewerKey, type KeyPress } from '../../src/app/duplicates/keys';
+import { gridKey, HELD_STEP_MS, HeldArrow, HOLD_DELAY_MS, repeatsWhenHeld, searchKey, viewerKey, type KeyPress } from '../../src/app/duplicates/keys';
 
 const press = (key: string, opts: Partial<KeyPress> = {}): KeyPress => ({ key, repeat: false, ctrlKey: false, altKey: false, metaKey: false, inTextField: false, ...opts });
 
@@ -66,6 +66,14 @@ describe('Duplicates keys', () => {
     expect(gridKey(press('d', { inTextField: true }))).toEqual({ kind: 'ignore' });
     expect(gridKey(press('z', { ctrlKey: true }))).toEqual({ kind: 'ignore' });
     expect(gridKey(press('q'))).toEqual({ kind: 'ignore' });
+  });
+
+  it('Search: D trash, A all, Space toggle, M / L more or less like the selection, Enter / Esc for the question, Z undo', () => {
+    expect(['d', 'a', ' ', 'm', 'l', 'Enter', 'Escape', 'z', 'ArrowDown'].map((k) => searchKey(press(k)))).toEqual(
+      ['approve', 'focusAll', 'toggle', 'more', 'less', 'enter', 'cancel', 'undo', 'down'].map((action) => ({ kind: 'act', action })),
+    );
+    expect(searchKey(press('m', { inTextField: true }))).toEqual({ kind: 'ignore' }); // typing a description
+    expect(searchKey(press('d', { repeat: true }))).toEqual({ kind: 'swallow' });
   });
 
   it('the viewer takes every key while open', () => {

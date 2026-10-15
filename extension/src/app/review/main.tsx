@@ -1,17 +1,23 @@
 // The review tab: the workbench. Scan shows the selected account's library scan, its full protection
-// report and the analysis; Duplicates reviews the duplicate groups (Search comes in M5).
+// report and the analysis; Duplicates reviews the duplicate groups; Search finds photos by
+// description or example and sweeps them to the trash queue.
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { accountLabel, documentTitle, scanTabTitle, scanView } from '../shared/jobView';
 import type { AnalysisJob, ScanJob } from '../shared/job';
 import { send, useAccount, useAllJobs, useAnalysisJob, useReport, useScanJob, useSpinningTabIcon } from '../ui/hooks';
 import { ScanCard, StorageProblem } from '../ui/JobCard';
-import { Duplicates } from './Duplicates';
+import { DuplicatesReview } from '../duplicates/reviewModel';
+import { reviewDeps } from '../duplicates/session';
+import { SearchModel } from '../search/searchModel';
+import { searchDeps } from '../search/session';
+import { Duplicates, useTrashQueue } from './Duplicates';
+import { Search } from './Search';
 
-type Tab = 'scan' | 'duplicates';
-/** The steps, numbered as on the desktop (which has Calibration as its step 2). */
-const TABS: { id: Tab; label: string }[] = [{ id: 'scan', label: '1 · Scan' }, { id: 'duplicates', label: '2 · Duplicates' }];
+type Tab = 'scan' | 'duplicates' | 'search';
+/** The steps, numbered as on the desktop (which has Calibration as its step 2); Search is not a step. */
+const TABS: { id: Tab; label: string }[] = [{ id: 'scan', label: '1 · Scan' }, { id: 'duplicates', label: '2 · Duplicates' }, { id: 'search', label: 'Search' }];
 const TAB_KEY = 'photo-cleaner.review-tab';
 
 /** The tab last open in this browser; Scan the first time (or when storage is unavailable). */
@@ -60,8 +66,6 @@ function Review() {
   useLayoutEffect(() => {
     window.scrollTo({ top: scrollOf.current.get(tab) ?? 0 });
   }, [tab]);
-  // The duplicate groups are built once both jobs are known, and again only when a library scan
-  // or the analysis finishes (their finish time changes; pausing and progress don't).
   // The Scan tab shows its status, as on the desktop: "1 · Scan (done)"; the browser tab its progress.
   const scan = selected !== null && job !== undefined && analysis !== undefined ? scanView(job, analysis, Date.now()) : null;
   const scanTitle = scan ? scanTabTitle(scan) : null;
@@ -70,7 +74,20 @@ function Review() {
     document.title = pageTitle;
   }, [pageTitle]);
   useSpinningTabIcon(scan?.tabStatus === 'scanning');
+  // The duplicate groups are built once both jobs are known, and again only when a library scan
+  // or the analysis finishes (their finish time changes; pausing and progress don't).
   const refreshKey = job === undefined || analysis === undefined ? null : `${job?.finishedAtMs ?? '-'}:${analysis?.finishedAtMs ?? '-'}`;
+  // The workbenches, once per account; the trash queue runs for both whichever tab is open.
+  const duplicates = useMemo(() => (selected === null ? null : new DuplicatesReview(reviewDeps(selected))), [selected]);
+  const search = useMemo(() => (selected === null ? null : new SearchModel(searchDeps(selected))), [selected]);
+  useTrashQueue(selected, duplicates);
+  useEffect(() => {
+    if (refreshKey !== null) search?.libraryChanged();
+  }, [search, refreshKey]);
+  const searchLike = (mediaKeys: string[]) => {
+    open('search');
+    search?.searchLike(mediaKeys);
+  };
   return (
     <main className="review">
       <header className="collapsing page-header">
@@ -90,9 +107,10 @@ function Review() {
         <p className="muted">No account yet: open Google Photos and start a scan from the panel.</p>
       ) : (
         <>
-          {opened.has('duplicates') && (
-            <Duplicates account={selected} active={tab === 'duplicates'} refreshKey={refreshKey} openScan={() => open('scan')} />
+          {opened.has('duplicates') && duplicates && (
+            <Duplicates review={duplicates} active={tab === 'duplicates'} refreshKey={refreshKey} openScan={() => open('scan')} onSearchLike={searchLike} />
           )}
+          {opened.has('search') && search && <Search model={search} active={tab === 'search'} openScan={() => open('scan')} />}
           {opened.has('scan') && (
             <div className="scan-tab" hidden={tab !== 'scan'}>
               {job !== undefined && analysis !== undefined && <ScanCard account={selected} scan={job} analysis={analysis} report={report} />}

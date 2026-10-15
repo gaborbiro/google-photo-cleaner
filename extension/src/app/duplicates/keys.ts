@@ -94,6 +94,22 @@ export function gridKey(press: KeyPress): KeyResult<GridAction> {
   return { kind: 'act', action };
 }
 
+export type SearchAction = 'approve' | 'focusAll' | 'toggle' | 'enter' | 'cancel' | 'more' | 'less' | 'undo' | 'left' | 'right' | 'up' | 'down';
+
+const SEARCH_KEYS: Record<string, SearchAction> = {
+  d: 'approve', a: 'focusAll', ' ': 'toggle', Enter: 'enter', Escape: 'cancel', m: 'more', l: 'less', z: 'undo', u: 'undo',
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+};
+
+/** Search's keys: as in Duplicates, plus M / L (more / less like the selected photos), Enter and Esc for the trash question. */
+export function searchKey(press: KeyPress): KeyResult<SearchAction> {
+  if (!usable(press)) return { kind: 'ignore' };
+  const action = SEARCH_KEYS[press.key.length === 1 ? press.key.toLowerCase() : press.key];
+  if (!action) return { kind: 'ignore' };
+  if (press.repeat) return { kind: 'swallow' };
+  return { kind: 'act', action };
+}
+
 /** The viewer takes every key while open, so nothing behind it acts. */
 export function viewerKey(press: KeyPress): KeyResult<ViewerAction> {
   if (!usable(press)) return { kind: 'ignore' };

@@ -13,6 +13,9 @@ wasm.wasmPaths = chrome.runtime.getURL('ort/');
 // Multi-threaded WebAssembly needs cross-origin isolation; the graphics card does the work anyway.
 wasm.numThreads = 1;
 
+/** The model's search-query prompt ("SearchQuery"), as the desktop app uses it; photos get no prompt. */
+const QUERY_PREFIX = 'task: search result | query: ';
+
 /** Room needed for the model besides what the browser already holds. */
 const SPACE_MARGIN = 1.3;
 
@@ -56,6 +59,15 @@ export class TransformersEmbedder implements Embedder {
     const raw = new RawImage(image.data, image.width, image.height, 4).rgb();
     const output = (await (this.model as unknown as (inputs: unknown) => Promise<{ sentence_embedding: { data: Float32Array } }>)(
       await (this.processor as unknown as (text: null, image: RawImage) => Promise<unknown>)(null, raw),
+    )).sentence_embedding.data;
+    return normalise(output);
+  }
+
+  /** An L2-normalised fingerprint of a description, comparable with the photos' fingerprints. */
+  async embedText(text: string): Promise<Float32Array> {
+    if (!this.processor || !this.model) throw new Error('The AI model is not loaded');
+    const output = (await (this.model as unknown as (inputs: unknown) => Promise<{ sentence_embedding: { data: Float32Array } }>)(
+      await (this.processor as unknown as (texts: string[]) => Promise<unknown>)([QUERY_PREFIX + text]),
     )).sentence_embedding.data;
     return normalise(output);
   }

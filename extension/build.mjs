@@ -41,6 +41,8 @@ function fresh(outdir) {
   // The background page holds the AI model; its runtime is packed in, because extensions may not
   // load code from the internet. The WebGPU backend uses the "asyncify" build of ONNX Runtime.
   await build({ ...common, entryPoints: { engine: 'src/app/engine/main.ts' }, outdir, format: 'esm' });
+  // Search's AI model for descriptions, loaded by the review tab on its first text search.
+  await build({ ...common, entryPoints: { 'search-ai': 'src/app/search/textModel.ts' }, outdir, format: 'esm' });
   mkdirSync(`${outdir}/ort`);
   for (const file of ['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm']) {
     cpSync(`node_modules/onnxruntime-web/dist/${file}`, `${outdir}/ort/${file}`);

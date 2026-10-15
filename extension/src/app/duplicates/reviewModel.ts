@@ -385,6 +385,11 @@ export class DuplicatesReview {
     this.publish();
   }
 
+  /** "Search more like these": every photo of the group on screen (or why there is none). */
+  groupKeysOrSay(): string[] | null {
+    return this.currentOrSay()?.members.map((m) => m.mediaKey) ?? null;
+  }
+
   // --- decisions ---
 
   approve(): void {

@@ -2,14 +2,15 @@
 
 import { createRoot } from 'react-dom/client';
 import { accountLabel } from '../shared/jobView';
-import { send, useAccount, useAnalysisJob, useReport, useScanJob } from '../ui/hooks';
-import { ScanCard, StorageProblem } from '../ui/JobCard';
+import { send, useAccount, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useStartOverWhenErased } from '../ui/hooks';
+import { EraseCard, ScanCard, StorageProblem } from '../ui/JobCard';
 
 function Popup() {
+  useStartOverWhenErased();
   const { answer } = useAccount();
   const account = answer?.account ?? null;
   const job = useScanJob(account?.fingerprint ?? null);
-  const report = useReport(account?.fingerprint ?? null, job);
+  const report = useReport(account?.fingerprint ?? null, job, useProtectionChoices(account?.fingerprint ?? null));
   const analysis = useAnalysisJob(account?.fingerprint ?? null);
   return (
     <main className="popup">
@@ -29,10 +30,11 @@ function Popup() {
           {job !== undefined && analysis !== undefined && <ScanCard account={account.fingerprint} scan={job} analysis={analysis} report={report} />}
           <div className="row">
             <button onClick={() => void send({ kind: 'app-show-panel' })}>Show panel in Google Photos</button>
-            <button onClick={() => void send({ kind: 'app-open-review', account: account.fingerprint })}>Open review tab <span aria-hidden="true">⤢</span></button>
+            <button onClick={() => void send({ kind: 'app-open-review', account: account.fingerprint })}>Open in tab <span aria-hidden="true">⤢</span></button>
           </div>
         </>
       )}
+      <EraseCard />
     </main>
   );
 }

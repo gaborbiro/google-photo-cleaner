@@ -4,6 +4,7 @@ import dev.photocleaner.features.shared.protection.model.ClassifiedItem
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.model.InventoryClassification
 import dev.photocleaner.features.shared.protection.model.InventoryReport
+import dev.photocleaner.features.shared.protection.model.ProtectionChoices
 import dev.photocleaner.features.shared.protection.model.ProtectionReason
 import dev.photocleaner.features.shared.protection.model.TypeCounts
 import dev.photocleaner.features.shared.protection.model.UnknownReason
@@ -20,9 +21,15 @@ object InventoryClassifier {
     /** An inventory older than this no longer proves anything is unprotected. */
     const val DEFAULT_MAX_AGE_MS = 24L * 60 * 60 * 1000
 
-    fun classify(snapshot: InventorySnapshot, nowMs: Long, maxAgeMs: Long = DEFAULT_MAX_AGE_MS): InventoryClassification {
+    /** [chosen]: the protections the user wants; the counts follow them too. */
+    fun classify(
+        snapshot: InventorySnapshot,
+        nowMs: Long,
+        maxAgeMs: Long = DEFAULT_MAX_AGE_MS,
+        chosen: ProtectionChoices = ProtectionChoices.ALL,
+    ): InventoryClassification {
         val coverage = EligibilityRules.coverage(snapshot, nowMs, maxAgeMs)
-        val items = snapshot.items.map { EligibilityRules.classify(it, snapshot, coverage) }
+        val items = snapshot.items.map { EligibilityRules.classify(it, snapshot, coverage, chosen) }
         val counts = listOf(StoredMediaType.PHOTO, StoredMediaType.VIDEO, null).map { type ->
             countsOf(type, items.filter { it.item.mediaType == type })
         }

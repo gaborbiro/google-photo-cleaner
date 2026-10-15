@@ -6,6 +6,7 @@ import { calibrationReportJson, defaultMaxAgeMs, reviewQueueJson } from '../../.
 import { DUPLICATE_THRESHOLD, type Detail } from '../ai/model';
 import type { Eligibility } from '../scan/report';
 import type { InventorySnapshot } from '../scan/model';
+import type { ProtectionChoices } from '../shared/preferences';
 
 export type Role = 'KEEPER' | 'PROPOSED' | 'REFERENCE';
 export type ProtectionReason = 'FAVOURITE' | 'IN_ALBUM' | 'ARCHIVED';
@@ -101,6 +102,7 @@ export function reviewQueue(
   vectors: Float32Array[],
   decisions: ActiveDecision[],
   settings: GroupingSettings,
+  choices: ProtectionChoices,
 ): ReviewQueue {
   const json = reviewQueueJson(
     snapshot === null ? null : JSON.stringify(snapshot),
@@ -110,6 +112,7 @@ export function reviewQueue(
     vectors,
     JSON.stringify(decisions),
     JSON.stringify(settings),
+    JSON.stringify(choices),
   );
   return JSON.parse(json) as ReviewQueue;
 }

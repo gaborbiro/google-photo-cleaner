@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { DuplicatesReview, type ReviewDeps } from '../../src/app/duplicates/reviewModel';
 import type { StoredDecision } from '../../src/app/duplicates/reviewStore';
 import type { DecisionKind, DuplicateGroup, GroupMember, ReviewQueue } from '../../src/app/duplicates/rules';
+import { SourceError } from '../../src/app/scan/source';
 
 function member(key: string, role: GroupMember['role'], opts: Partial<GroupMember> = {}): GroupMember {
   return {
@@ -50,7 +51,9 @@ class Fakes implements ReviewDeps {
   }
 
   async preview(thumbUrl: string, sizePx: number) {
-    return thumbUrl === 'thumb-missing' ? null : `data:${thumbUrl}@${sizePx}`;
+    if (thumbUrl === 'thumb-no-tab') throw new SourceError('NO_PHOTOS_TAB', 'no Photos tab');
+    if (thumbUrl === 'thumb-changed') throw new SourceError('BAD_REQUEST', 'Preview host not allowed');
+    return `data:${thumbUrl}@${sizePx}`;
   }
 }
 
@@ -347,9 +350,10 @@ describe('the Duplicates review', () => {
 
   it('a missing preview says so; the trash queue line counts the jobs', async () => {
     const fakes = new Fakes();
-    fakes.pending = [group('g', member('a', 'KEEPER'), member('b', 'PROPOSED', { thumbUrl: 'thumb-missing' }))];
+    fakes.pending = [group('g', member('a', 'KEEPER'), member('b', 'PROPOSED', { thumbUrl: 'thumb-no-tab' }), member('c', 'PROPOSED', { thumbUrl: 'thumb-changed' }))];
     const { review, view } = await opened(fakes);
-    expect(view().group!.tiles[1]).toMatchObject({ imageUrl: null, error: 'Preview unavailable (is Google Photos open?)' });
+    expect(view().group!.tiles[1]).toMatchObject({ imageUrl: null, error: 'Preview unavailable: open Google Photos' });
+    expect(view().group!.tiles[2]).toMatchObject({ imageUrl: null, error: 'Preview unavailable: Photo Cleaner needs an update' });
     review.setQueueStatus({ counts: { QUEUED: 1, COMPLETED: 3, RESTORED: 1 }, simulated: true, waitingReason: null });
     expect(view().queueText).toBe('Trash queue (SIMULATED, nothing is sent to Google): 1 queued · 3 in trash · 0 blocked · 0 failed · 0 cancelled · 1 restored');
   });

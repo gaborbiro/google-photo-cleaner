@@ -10,12 +10,13 @@ import dev.photocleaner.features.shared.protection.model.SourceAgreement
 object ProtectionJs {
     /**
      * Takes a scan snapshot as JSON (the shape of [InventorySnapshot]; see
-     * extension/src/app/scan/snapshot.ts) and returns the classification as JSON: the report and,
-     * per item, its eligibility and reasons. Malformed input throws.
+     * extension/src/app/scan/snapshot.ts) and the user's protection choices (`{favourites, albums,
+     * archived}`), and returns the classification as JSON: the report and, per item, its
+     * eligibility and reasons. Malformed input throws.
      */
-    fun classifyInventoryJson(snapshotJson: String, nowMs: Double, maxAgeMs: Double): String {
+    fun classifyInventoryJson(snapshotJson: String, nowMs: Double, maxAgeMs: Double, choicesJson: String): String {
         val snapshot = JsJson.inventorySnapshot(JSON.parse(snapshotJson))
-        val result = InventoryClassifier.classify(snapshot, nowMs.toLong(), maxAgeMs.toLong())
+        val result = InventoryClassifier.classify(snapshot, nowMs.toLong(), maxAgeMs.toLong(), JsJson.protectionChoices(JSON.parse(choicesJson)))
         return JSON.stringify(toJs(result))
     }
 

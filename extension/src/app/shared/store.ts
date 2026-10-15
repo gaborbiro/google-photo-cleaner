@@ -20,8 +20,9 @@ export class IndexedDbJobStore implements JobStore {
   constructor(private readonly factory: IDBFactory = indexedDB) {}
 
   private database(): Promise<IDBDatabase> {
-    // A failed open (e.g. an upgrade blocked by an older page) is retried on the next call.
-    this.db ??= openDatabase(this.factory).catch((error: unknown) => {
+    // Opened again on the next call after a failed open (an upgrade blocked by an older page) or
+    // after the connection closed (a newer version took over, or the data was erased).
+    this.db ??= openDatabase(this.factory, () => (this.db = null)).catch((error: unknown) => {
       this.db = null;
       throw error;
     });
@@ -53,6 +54,15 @@ export class IndexedDbJobStore implements JobStore {
     }
     return next;
   }
+}
+
+/** Every open Photo Cleaner page reloads when the saved data has been erased, so none shows what is gone. */
+export function onErased(listener: () => void): () => void {
+  const channel = new BroadcastChannel(CHANGES_CHANNEL);
+  channel.onmessage = (event: MessageEvent<{ kind?: string }>) => {
+    if (event.data?.kind === 'erased') listener();
+  };
+  return () => channel.close();
 }
 
 /** Listens for saved changes made by any surface or the background page. Returns a stop function. */

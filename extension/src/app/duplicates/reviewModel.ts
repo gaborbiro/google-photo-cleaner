@@ -2,7 +2,9 @@
 // desktop's ReviewViewModel: the state machine (focus, selection, decisions, undo, previews,
 // viewer) lives here, and view() works out every text and colour the screen shows.
 
+import { SourceError } from '../scan/source';
 import { count, n } from '../shared/format';
+import { previewProblemText } from '../shared/googleProblems';
 import type { StoredDecision } from './reviewStore';
 import { decisionItems, type Blocked, type DecisionKind, type DuplicateGroup, type GroupMember, type ReviewQueue } from './rules';
 import type { TrashQueueStatus } from './trash';
@@ -25,8 +27,8 @@ export interface ReviewDeps {
   record(group: DuplicateGroup, kind: DecisionKind, items: { mediaKey: string; dedupKey: string }[]): Promise<void>;
   /** Undoes the newest decision; null when there is none. */
   undo(): Promise<StoredDecision | null>;
-  /** A preview as an image address, fetched through Google Photos; null when unavailable. */
-  preview(thumbUrl: string, sizePx: number): Promise<string | null>;
+  /** A preview as an image address, fetched through Google Photos; throws (a SourceError saying why) when it can't be had. */
+  preview(thumbUrl: string, sizePx: number): Promise<string>;
 }
 
 export const TILE_PX = 300;
@@ -248,17 +250,16 @@ export class DuplicatesReview {
   private async loadPreview(m: GroupMember): Promise<void> {
     if (this.previews.has(m.mediaKey) || this.previewErrors.has(m.mediaKey) || this.loading.has(m.mediaKey)) return;
     if (m.thumbUrl === null) {
-      this.previewErrors.set(m.mediaKey, 'Preview unavailable');
+      this.previewErrors.set(m.mediaKey, previewProblemText(null));
       return this.publish();
     }
     this.loading.add(m.mediaKey);
     try {
       const url = await this.deps.preview(m.thumbUrl, PREVIEW_PX);
-      if (url === null) this.previewErrors.set(m.mediaKey, 'Preview unavailable (is Google Photos open?)');
-      else {
-        this.previews.set(m.mediaKey, url);
-        while (this.previews.size > PREVIEW_CACHE) this.previews.delete(this.previews.keys().next().value!);
-      }
+      this.previews.set(m.mediaKey, url);
+      while (this.previews.size > PREVIEW_CACHE) this.previews.delete(this.previews.keys().next().value!);
+    } catch (e) {
+      this.previewErrors.set(m.mediaKey, previewProblemText(e instanceof SourceError ? e.kind : null));
     } finally {
       this.loading.delete(m.mediaKey);
       this.publish();

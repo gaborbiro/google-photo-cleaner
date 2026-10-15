@@ -274,5 +274,9 @@ data class WorkerConfig(
     /** Test only: how long the fake embedder takes per request. */
     val fakeDelayMs: Long = 0,
 ) {
-    val pythonExecutable: Path get() = workerDir.resolve(".venv").resolve("Scripts").resolve("python.exe")
+    /** The worker's own Python: `.venv\Scripts\python.exe` on Windows, `.venv/bin/python` elsewhere (CI, other machines). */
+    val pythonExecutable: Path get() {
+        val venv = workerDir.resolve(".venv")
+        return if (System.getProperty("os.name").startsWith("Windows")) venv.resolve("Scripts").resolve("python.exe") else venv.resolve("bin").resolve("python")
+    }
 }

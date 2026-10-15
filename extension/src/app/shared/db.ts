@@ -24,6 +24,8 @@ export const STORES = {
   trashJobs: 'trashJobs',
   /** What the simulated trash holds: [account, dedupKey]. Nothing is sent to Google before M6. */
   simulatedTrash: 'simulatedTrash',
+  /** The user's choices per account (which kinds of photo are protected). */
+  preferences: 'preferences',
 } as const;
 
 export function request<T>(req: IDBRequest<T>): Promise<T> {
@@ -46,13 +48,22 @@ export function committed(tx: IDBTransaction): Promise<void> {
 export const UPGRADE_BLOCKED =
   'Photo Cleaner was updated and an older copy of it is still open, holding its saved data. Reload your Google Photos tabs and close other Photo Cleaner tabs; it then carries on by itself.';
 
-export function openDatabase(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
+/**
+ * Opens the database. [onClosed] hears when this connection is gone, so the next use opens a new
+ * one: after a newer version of the extension took over, or after the data was erased.
+ */
+export function openDatabase(factory: IDBFactory = indexedDB, onClosed: () => void = () => {}): Promise<IDBDatabase> {
   const open = factory.open(DB_NAME, DB_VERSION);
   return new Promise((resolve, reject) => {
     open.onsuccess = () => {
       const db = open.result;
-      // A newer version of the extension wants to upgrade: step aside instead of blocking it.
-      db.onversionchange = () => db.close();
+      // A newer version of the extension wants to upgrade, or the data is being erased: step aside
+      // instead of blocking it.
+      db.onversionchange = () => {
+        db.close();
+        onClosed();
+      };
+      db.onclose = onClosed;
       resolve(db);
     };
     open.onerror = () => reject(open.error ?? new Error('The saved data could not be opened'));
@@ -88,6 +99,7 @@ function upgrade(open: IDBOpenDBRequest): void {
     jobs?.createIndex('account', 'account');
     jobs?.createIndex('decisionId', 'decisionId');
     create(STORES.simulatedTrash, { keyPath: ['account', 'dedupKey'] });
+    create(STORES.preferences, { keyPath: 'account' });
   };
 }
 

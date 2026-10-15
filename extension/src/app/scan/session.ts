@@ -5,6 +5,7 @@
 
 import type { IndexedDbInventoryStore } from './inventoryStore';
 import type { AlbumStatus, ScanPhase, ScanRun } from './model';
+import { INCOMPATIBLE_TEXT, logGoogleProblem, refusedText } from '../shared/googleProblems';
 import { SourceError, waitingForPhotosText, waitsForPhotos, type PhotosSource } from './source';
 
 export interface ScanPolicy {
@@ -246,7 +247,8 @@ class ScanSession {
         if (!(e instanceof RpcFailed)) throw e;
         if (!usingSavedToken) {
           if (phase === 'ALBUM_MEMBERS') throw e;
-          throw new ScanStop('paused', `Google kept returning error code ${e.error.rpcCode ?? e.error.httpStatus ?? '?'} while reading the ${label}.`, e.error);
+          logGoogleProblem(`scan: ${label}`, e.error);
+          throw new ScanStop('paused', refusedText(label, e.error.rpcCode ?? e.error.httpStatus), e.error);
         }
         this.notice = `The saved position in the ${label} expired; reading it again from the start.`;
         await this.deps.store.resetPhase(this.run.id, phase, scope);
@@ -304,11 +306,10 @@ class ScanSession {
           case 'NO_PHOTOS_TAB':
             throw new ScanStop('paused', waitingForPhotosText(e), e);
           case 'PROTOCOL':
-            throw new ScanStop('failed', `Google's response to the ${label} request was not understood (${e.message}). The extension needs updating.`, e);
           case 'BAD_REQUEST':
-            throw new ScanStop('failed', `The ${label} request was rejected (${e.message}).`, e);
-          case 'PREVIEW_UNAVAILABLE':
-            throw new ScanStop('failed', `Unexpected preview failure during the ${label} request.`, e);
+          case 'PREVIEW_UNAVAILABLE': // a listing never fetches previews
+            logGoogleProblem(`scan: ${label}`, e);
+            throw new ScanStop('failed', INCOMPATIBLE_TEXT, e);
         }
       }
     }

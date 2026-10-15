@@ -1,8 +1,11 @@
 import { build } from 'esbuild';
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync } from 'node:fs';
+import { assertKotlinFresh } from './scripts/kotlinFresh.mjs';
 
-if (!existsSync('generated/kotlin/PhotoCleaner-features-shared-duplicates.mjs')) {
-  console.error('The shared Kotlin protection rules are not built yet: run `npm run kotlin` first.');
+try {
+  assertKotlinFresh();
+} catch (error) {
+  console.error(error.message);
   process.exit(1);
 }
 

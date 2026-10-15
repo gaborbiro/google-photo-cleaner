@@ -9,6 +9,7 @@ import { modelKey, type Detail } from '../../src/app/ai/model';
 import type { RgbaImage } from '../../src/app/ai/quality';
 import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
 import { SourceError } from '../../src/app/scan/source';
+import { INCOMPATIBLE_TEXT, PREVIEWS_STOPPED_TEXT } from '../../src/app/shared/googleProblems';
 import { fakeItem, FakePhotos, scan } from './fakes';
 
 /** A fake model: each photo's fingerprint points in its own direction; every call takes [msPerPhoto]. */
@@ -139,6 +140,34 @@ describe('AI analysis', () => {
     embedder.calls.length = 0;
     await analyse(env, embedder, clock);
     expect(embedder.calls.map((c) => c.index)).toEqual([5]);
+  });
+
+  it('when previews stop coming altogether it pauses instead of counting the whole library as failed', async () => {
+    const env = await setup(Array.from({ length: 60 }, (_, i) => fakeItem(i)));
+    let previews = 0;
+    env.source.failure = (op) => (op === 'preview' && ++previews > 11 ? new SourceError('PREVIEW_UNAVAILABLE', 'HTTP 404 fetching preview', 404) : null);
+    const clock = { now: 0 };
+    const { outcome, progress } = await analyse(env, new FakeEmbedder(clock, 100), clock);
+    expect(outcome).toEqual({ kind: 'paused', reason: PREVIEWS_STOPPED_TEXT, untilPhotosOpen: false });
+    expect(progress.at(-1)!.failed).toBe(25);
+
+    env.source.failure = () => null;
+    const resumed = await analyse(env, new FakeEmbedder(clock, 100), clock);
+    expect(resumed.outcome.kind).toBe('completed');
+    expect((await env.store.analysedKeys(modelKey(140))).size).toBe(60);
+  });
+
+  it('an answer from Google it does not understand stops it, saying so, before counting anything as failed', async () => {
+    for (const [op, kind] of [['preview', 'BAD_REQUEST'], ['preview', 'PROTOCOL'], ['library', 'PROTOCOL']] as const) {
+      const env = await setup(Array.from({ length: 30 }, (_, i) => fakeItem(i)));
+      let calls = 0;
+      // Previews fail after the speed check's 11.
+      env.source.failure = (o) => (o === op && ++calls > (op === 'preview' ? 11 : 0) ? new SourceError(kind, 'shape changed') : null);
+      const clock = { now: 0 };
+      const { outcome, progress } = await analyse(env, new FakeEmbedder(clock, 100), clock);
+      expect(outcome).toEqual({ kind: 'paused', reason: INCOMPATIBLE_TEXT, untilPhotosOpen: false });
+      expect(progress.at(-1)?.failed ?? 0).toBe(0);
+    }
   });
 
   it('only photos are analysed, not videos', async () => {

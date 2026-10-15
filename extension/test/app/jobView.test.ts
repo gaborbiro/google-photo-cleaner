@@ -8,7 +8,7 @@ const NOW = new Date(2026, 9, 14, 21, 40).getTime();
 describe('one Scan in two stages', () => {
   const reading = reportProgress(
     startScanJob('acc1', 0),
-    { ...NO_PROGRESS, phase: 'LIBRARY', libraryEntries: 12_500, albumsListed: 0, libraryReachedMs: Date.UTC(2021, 4, 3) },
+    { ...NO_PROGRESS, phase: 'LIBRARY', libraryEntries: 12_500, albumsListed: 0, libraryReachedMs: new Date(2021, 4, 3).getTime() },
     1_000,
   );
   const scanned = endJob(reading, 'completed', null, NOW);

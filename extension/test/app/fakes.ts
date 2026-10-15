@@ -6,6 +6,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
 import type { AlbumRecord, EntryRef, InventoryItem } from '../../src/app/scan/model';
 import { classify, type Classification } from '../../src/app/scan/report';
+import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 import { runScan, type ScanOutcome, type ScanPolicy, type ScanProgress } from '../../src/app/scan/session';
 import { SourceError, type Page, type PhotosSource } from '../../src/app/scan/source';
 
@@ -178,7 +179,7 @@ export async function scan(
 export async function classifyLatest(store: IndexedDbInventoryStore, nowMs = NOW, account = 'account-a'): Promise<Classification> {
   const run = await store.latestRun(account);
   if (!run) throw new Error('No scan run');
-  return classify(await store.snapshot(run.id), nowMs);
+  return classify(await store.snapshot(run.id), nowMs, ALL_PROTECTED);
 }
 
 export function eligibleIndexes(c: Classification): number[] {

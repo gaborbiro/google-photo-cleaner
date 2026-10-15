@@ -32,7 +32,7 @@ export class SimulatedTrash implements TrashService {
   constructor(private readonly factory: IDBFactory = indexedDB) {}
 
   private database(): Promise<IDBDatabase> {
-    this.db ??= openDatabase(this.factory).catch((error: unknown) => {
+    this.db ??= openDatabase(this.factory, () => (this.db = null)).catch((error: unknown) => {
       this.db = null;
       throw error;
     });

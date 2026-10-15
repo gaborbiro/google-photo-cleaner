@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { calibrationReport, groupingSettings, reviewQueue, type ActiveDecision, type AnalysedPhoto } from '../../src/app/duplicates/rules';
+import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 import { fakeItem, FakePhotos, newStore, NOW, scan } from './fakes';
 
 /** A unit vector at [degrees]: photos 3° apart are 99.9% similar, 60° apart 50%. */
@@ -25,7 +26,7 @@ describe('duplicate rules from Kotlin', () => {
     const snapshot = await library();
     const photos = [photo(0, 50), photo(1, 400), photo(2), photo(3), photo(4)];
     const vectors = [at(0), at(2), at(4), at(1), at(70)];
-    const queue = reviewQueue(snapshot, NOW, photos, vectors, [], groupingSettings(140));
+    const queue = reviewQueue(snapshot, NOW, photos, vectors, [], groupingSettings(140), ALL_PROTECTED);
     expect(queue).toMatchObject({ blocked: null, totalGroups: 1, decidedGroups: 0, photosAnalysed: 5, photosNotAnalysed: 0, settings: { threshold: 0.915, windowMs: 120_000 } });
     const group = queue.pending[0]!;
     expect(group.id).toMatch(/^[0-9a-f]{24}$/);
@@ -42,15 +43,15 @@ describe('duplicate rules from Kotlin', () => {
     const snapshot = await library();
     const photos = [photo(0), photo(1), photo(2), photo(3), photo(4)];
     const vectors = [at(0), at(2), at(4), at(1), at(70)];
-    const group = reviewQueue(snapshot, NOW, photos, vectors, [], groupingSettings(140)).pending[0]!;
+    const group = reviewQueue(snapshot, NOW, photos, vectors, [], groupingSettings(140), ALL_PROTECTED).pending[0]!;
     const kept: ActiveDecision = { id: 1, groupId: group.id, kind: 'KEPT', items: [], members: group.members.map((m) => m.mediaKey), createdAtMs: NOW };
-    expect(reviewQueue(snapshot, NOW, photos, vectors, [kept], groupingSettings(140))).toMatchObject({ pending: [], decidedGroups: 1 });
-    expect(reviewQueue(null, NOW, [], [], [], groupingSettings(140)).blocked).toBe('NOT_SCANNED');
+    expect(reviewQueue(snapshot, NOW, photos, vectors, [kept], groupingSettings(140), ALL_PROTECTED)).toMatchObject({ pending: [], decidedGroups: 1 });
+    expect(reviewQueue(null, NOW, [], [], [], groupingSettings(140), ALL_PROTECTED).blocked).toBe('NOT_SCANNED');
   });
 
   it('refuses fingerprints that do not line up with their photos', async () => {
     const snapshot = await library();
-    expect(() => reviewQueue(snapshot, NOW, [photo(0)], [], [], groupingSettings(140))).toThrow(/differ in length/);
+    expect(() => reviewQueue(snapshot, NOW, [photo(0)], [], [], groupingSettings(140), ALL_PROTECTED)).toThrow(/differ in length/);
   });
 
   it('recommends the first threshold above every pair labelled different', () => {

@@ -6,22 +6,38 @@ import { IndexedDbReviewStore } from '../duplicates/reviewStore';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { classify } from '../scan/report';
 import { count } from '../shared/format';
+import { IndexedDbPreferences } from '../shared/preferences';
 import { previewDataUrl } from '../ui/hooks';
 import type { LibraryPhoto, SearchDeps, SearchLibrary } from './searchModel';
 
-const inventory = new IndexedDbInventoryStore();
-const analysis = new IndexedDbAnalysisStore();
-const review = new IndexedDbReviewStore();
+/** The saved data Search reads and writes; tests pass their own. */
+export interface SearchStores {
+  inventory: IndexedDbInventoryStore;
+  analysis: IndexedDbAnalysisStore;
+  review: IndexedDbReviewStore;
+  preferences: IndexedDbPreferences;
+}
+
+export function searchStores(factory: IDBFactory = indexedDB): SearchStores {
+  return {
+    inventory: new IndexedDbInventoryStore(factory),
+    analysis: new IndexedDbAnalysisStore(factory),
+    review: new IndexedDbReviewStore(factory),
+    preferences: new IndexedDbPreferences(factory),
+  };
+}
+
+let shared: SearchStores | null = null;
 
 /** The search field's AI model, loaded on the first text search (a separate file: search-ai.js). */
 type TextModel = { embedQuery(text: string, onProgress: (fraction: number) => void): Promise<Float32Array> };
 let textModel: Promise<TextModel> | null = null;
 
-async function loadLibrary(account: string): Promise<SearchLibrary> {
+async function loadLibrary({ inventory, analysis, review, preferences }: SearchStores, account: string, nowMs: number): Promise<SearchLibrary> {
   const run = await inventory.latestRun(account);
   if (!run) return { blocked: 'NOT_SCANNED', photos: new Map() };
   const snapshot = await inventory.snapshot(run.id);
-  const classification = classify(snapshot, Date.now());
+  const classification = classify(snapshot, nowMs, await preferences.protection(account));
   const coverage = classification.report.coverage;
   if (!coverage.isComplete) return { blocked: 'SCAN_UNFINISHED', photos: new Map() };
   if (coverage.isStale) return { blocked: 'SCAN_STALE', photos: new Map() };
@@ -51,9 +67,9 @@ async function loadLibrary(account: string): Promise<SearchLibrary> {
  * Moves the photos to the trash queue, after checking them again against a fresh classification:
  * all or nothing, so a photo favourited since the search is never trashed by it.
  */
-async function sweep(account: string, mediaKeys: string[]): Promise<void> {
+async function sweep(stores: SearchStores, account: string, mediaKeys: string[], nowMs: number): Promise<void> {
   if (mediaKeys.length === 0) throw new Error('Nothing is selected for the trash.');
-  const library = await loadLibrary(account);
+  const library = await loadLibrary(stores, account, nowMs);
   if (library.blocked) throw new Error('The library scan is no longer usable; check for new photos on the Scan tab, then search again.');
   const stale = mediaKeys.filter((k) => { const p = library.photos.get(k); return !p || !p.eligible || p.approved; });
   if (stale.length > 0) {
@@ -61,18 +77,18 @@ async function sweep(account: string, mediaKeys: string[]): Promise<void> {
   }
   const items = [...mediaKeys].sort().map((k) => ({ mediaKey: k, dedupKey: library.photos.get(k)!.dedupKey }));
   // A sweep's id never matches a duplicate group's (24 hex characters).
-  await review.recordDecision(account, `sweep:${Date.now()}`, 'APPROVED', items, mediaKeys, Date.now());
+  await stores.review.recordDecision(account, `sweep:${nowMs}`, 'APPROVED', items, mediaKeys, nowMs);
 }
 
-export function searchDeps(account: string): SearchDeps {
+export function searchDeps(account: string, stores: SearchStores = (shared ??= searchStores()), now: () => number = Date.now): SearchDeps {
   return {
-    loadLibrary: () => loadLibrary(account),
+    loadLibrary: () => loadLibrary(stores, account, now()),
     embedQuery: async (text, onProgress) => {
       textModel ??= import(/* @vite-ignore */ chrome.runtime.getURL('search-ai.js')) as Promise<TextModel>;
       return (await textModel).embedQuery(text, onProgress);
     },
-    sweep: (mediaKeys) => sweep(account, mediaKeys),
-    undo: () => review.undoLast(account, Date.now()),
-    preview: (thumbUrl, sizePx) => previewDataUrl(account, thumbUrl, sizePx).catch(() => null),
+    sweep: (mediaKeys) => sweep(stores, account, mediaKeys, now()),
+    undo: () => stores.review.undoLast(account, now()),
+    preview: (thumbUrl, sizePx) => previewDataUrl(account, thumbUrl, sizePx),
   };
 }

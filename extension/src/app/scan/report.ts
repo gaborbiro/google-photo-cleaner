@@ -4,6 +4,7 @@
 
 import { classifyInventoryJson, defaultMaxAgeMs } from '../../../generated/kotlin/PhotoCleaner-features-shared-duplicates.mjs';
 import { count, n } from '../shared/format';
+import type { ProtectionChoices } from '../shared/preferences';
 import type { InventorySnapshot } from './model';
 
 export type Eligibility = 'PROTECTED' | 'ELIGIBLE' | 'UNKNOWN';
@@ -49,9 +50,9 @@ export interface Classification {
 /** How old a scan may be before it no longer proves what is protected (the shared rules' limit: a day). */
 export const SCAN_MAX_AGE_MS = defaultMaxAgeMs();
 
-/** Applies the shared protection rules to a snapshot. */
-export function classify(snapshot: InventorySnapshot, nowMs: number, maxAgeMs: number = defaultMaxAgeMs()): Classification {
-  return JSON.parse(classifyInventoryJson(JSON.stringify(snapshot), nowMs, maxAgeMs)) as Classification;
+/** Applies the shared protection rules to a snapshot, with the user's protection [choices]. */
+export function classify(snapshot: InventorySnapshot, nowMs: number, choices: ProtectionChoices, maxAgeMs: number = defaultMaxAgeMs()): Classification {
+  return JSON.parse(classifyInventoryJson(JSON.stringify(snapshot), nowMs, maxAgeMs, JSON.stringify(choices))) as Classification;
 }
 
 // --- what the screens show ---

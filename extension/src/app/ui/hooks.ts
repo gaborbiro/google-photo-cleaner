@@ -6,27 +6,31 @@ import type { OpResult } from '../../shared/protocol';
 import { jobId, type AnalysisJob, type Job, type JobKind, type ScanJob } from '../shared/job';
 import type { AccountAnswer, AppRequest } from '../shared/messages';
 import { openDatabase } from '../shared/db';
-import { IndexedDbJobStore, onJobsChanged } from '../shared/store';
+import { IndexedDbJobStore, onErased, onJobsChanged } from '../shared/store';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
+import { SourceError } from '../scan/source';
 import { classify, reportView, type ReportView } from '../scan/report';
+import { IndexedDbPreferences, type ProtectionChoices } from '../shared/preferences';
 
 export const store = new IndexedDbJobStore();
 const inventory = new IndexedDbInventoryStore();
+const preferences = new IndexedDbPreferences();
 
 /**
  * The protection report of [account]'s latest scan, by the shared rules: null before any scan,
  * undefined while working it out. Worked out again when a scan ends (not on every page).
  */
-export function useReport(account: string | null, job: Job | null | undefined): ReportView | null | undefined {
+export function useReport(account: string | null, job: Job | null | undefined, choices: ProtectionChoices | undefined): ReportView | null | undefined {
   const [report, setReport] = useState<ReportView | null | undefined>(undefined);
   const settled = job === undefined ? 'loading' : job === null ? 'none' : job.status === 'running' ? 'running' : `${job.status}:${job.updatedAtMs}`;
+  const chosen = choices === undefined ? null : JSON.stringify(choices);
   useEffect(() => {
-    if (account === null || settled === 'loading' || settled === 'running') return;
+    if (account === null || chosen === null || settled === 'loading' || settled === 'running') return;
     let alive = true;
     void (async () => {
       const run = await inventory.latestRun(account);
       if (!run) return alive && setReport(null);
-      const view = reportView(classify(await inventory.snapshot(run.id), Date.now()));
+      const view = reportView(classify(await inventory.snapshot(run.id), Date.now(), JSON.parse(chosen) as ProtectionChoices));
       if (alive) setReport(view);
     })().catch((error: unknown) => {
       console.error('Could not work out the report', error);
@@ -35,8 +39,40 @@ export function useReport(account: string | null, job: Job | null | undefined): 
     return () => {
       alive = false;
     };
-  }, [account, settled]);
+  }, [account, settled, chosen]);
   return report;
+}
+
+/** The account's protection choices, kept up to date (also when another surface changes them); undefined while loading. */
+export function useProtectionChoices(account: string | null): ProtectionChoices | undefined {
+  const [choices, setChoices] = useState<ProtectionChoices | undefined>(undefined);
+  useEffect(() => {
+    if (account === null) return;
+    let alive = true;
+    const load = () => void preferences.protection(account).then((c) => alive && setChoices(c), (error: unknown) => console.error('Could not read the protection choices', error));
+    load();
+    const stop = onJobsChanged(load);
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, [account]);
+  return choices;
+}
+
+const reloadPage = () => location.reload();
+
+/**
+ * When the saved data is erased, this page starts again from nothing ([then], e.g. a page that
+ * says so; otherwise a plain reload), so it never shows what is gone.
+ */
+export function useStartOverWhenErased(then: () => void = reloadPage): void {
+  useEffect(() => onErased(then), [then]);
+}
+
+/** Saves the account's protection choices; every surface hears of it. */
+export function setProtectionChoices(account: string, choices: ProtectionChoices): Promise<void> {
+  return preferences.setProtection(account, choices);
 }
 
 export function send(request: AppRequest): Promise<unknown> {
@@ -112,9 +148,13 @@ export function useStorageProblem(): string | null {
 }
 
 /** Fetches a photo's preview through the account's Photos tab, as an image address; null when unavailable. */
-export async function previewDataUrl(account: string, thumbUrl: string, sizePx: number): Promise<string | null> {
+/** Throws a SourceError saying why when the preview can't be had. */
+export async function previewDataUrl(account: string, thumbUrl: string, sizePx: number): Promise<string> {
   const result = (await send({ kind: 'app-run-op', account, op: 'fetchPreview', params: { thumbUrl, sizePx } })) as OpResult;
-  if (!result.ok) return null;
+  if (!result.ok) {
+    const { kind, message, httpStatus, rpcCode } = result.error;
+    throw new SourceError(kind, message, httpStatus ?? null, rpcCode ?? null);
+  }
   const { contentType, base64 } = result.data as { contentType: string; base64: string };
   return `data:${contentType};base64,${base64}`;
 }

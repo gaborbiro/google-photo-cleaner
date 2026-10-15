@@ -20,7 +20,8 @@ import dev.photocleaner.repositories.review.domain.DecisionKind
 
 /** See [ProtectionJs.classifyInventoryJson]. */
 @JsExport
-fun classifyInventoryJson(snapshotJson: String, nowMs: Double, maxAgeMs: Double): String = ProtectionJs.classifyInventoryJson(snapshotJson, nowMs, maxAgeMs)
+fun classifyInventoryJson(snapshotJson: String, nowMs: Double, maxAgeMs: Double, choicesJson: String): String =
+    ProtectionJs.classifyInventoryJson(snapshotJson, nowMs, maxAgeMs, choicesJson)
 
 /** The freshness limit the desktop app uses, so the extension can't drift from it. */
 @JsExport
@@ -35,6 +36,7 @@ fun defaultMaxAgeMs(): Double = ProtectionJs.defaultMaxAgeMs()
  * - [decisionsJson]: the decisions not undone, newest first, `{id, groupId, kind, items: [{mediaKey,
  *   dedupKey}], members: [mediaKey], createdAtMs}`.
  * - [settingsJson]: `{threshold, windowMs, maxGroupSize, tokenBudget}`.
+ * - [choicesJson]: the user's protection choices, `{favourites, albums, archived}`.
  *
  * Returns the queue as JSON (see extension/src/app/duplicates/rules.ts). Malformed input throws.
  */
@@ -47,8 +49,10 @@ fun reviewQueueJson(
     vectors: Array<FloatArray>,
     decisionsJson: String,
     settingsJson: String,
+    choicesJson: String,
 ): String {
-    val classification = snapshotJson?.let { InventoryClassifier.classify(JsJson.inventorySnapshot(JSON.parse(it)), nowMs.toLong(), maxAgeMs.toLong()) }
+    val chosen = JsJson.protectionChoices(JSON.parse(choicesJson))
+    val classification = snapshotJson?.let { InventoryClassifier.classify(JsJson.inventorySnapshot(JSON.parse(it)), nowMs.toLong(), maxAgeMs.toLong(), chosen) }
     val photos = JsJson.list(JSON.parse(photosJson), "photos")
     require(photos.size == vectors.size) { "photos and vectors differ in length (${photos.size} vs ${vectors.size})" }
     val analyses = photos.withIndex().associate { (index, p) ->

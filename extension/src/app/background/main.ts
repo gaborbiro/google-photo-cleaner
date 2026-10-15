@@ -2,8 +2,11 @@
 // state: it starts and stops the background page (which does the work), talks to the
 // Photos tabs, and opens the app's tabs. Job state lives in the job store.
 
-import type { OpResult, ReadOp, TabCommand } from '../../shared/protocol';
+import type { OpError, OpResult, ReadOp, TabCommand } from '../../shared/protocol';
 import { resumeWaitingForPhotos } from '../shared/actions';
+import { CHANGES_CHANNEL } from '../shared/constants';
+import { eraseAllData } from '../shared/erase';
+import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem } from '../shared/googleProblems';
 import { IndexedDbJobStore } from '../shared/store';
 import { isAppRequest, type AccountAnswer, type AppRequest, type TabRequest } from '../shared/messages';
 
@@ -42,11 +45,17 @@ async function accountOf(tab: chrome.tabs.Tab | undefined): Promise<AccountAnswe
     return { account: null, problem: 'The Google Photos tab is not responding; reload it.', photosTabOpen: true };
   }
   if (!result.ok) {
-    const problem = result.error.kind === 'SESSION' ? 'Google Photos is signed out in this tab.' : `Google Photos did not answer: ${result.error.message}`;
-    return { account: null, problem, photosTabOpen: true };
+    return { account: null, problem: accountProblem(result.error), photosTabOpen: true };
   }
   const data = result.data as { accountFingerprint: string; accountEmail?: string };
   return { account: { fingerprint: data.accountFingerprint, email: data.accountEmail ?? null }, problem: null, photosTabOpen: true };
+}
+
+function accountProblem(error: OpError): string {
+  if (error.kind === 'SESSION') return 'Google Photos is signed out in this tab.';
+  logGoogleProblem('account check', error);
+  if (isIncompatible(error.kind)) return INCOMPATIBLE_TEXT;
+  return 'Google Photos is not answering right now. Reload the Google Photos tab, or try again in a minute.';
 }
 
 // --- running a scan's requests in the right account's tab ---
@@ -173,6 +182,21 @@ async function photosReady(tab: chrome.tabs.Tab | undefined): Promise<void> {
   }
 }
 
+/**
+ * Erases everything saved, as uninstalling would: the background page stops first (so nothing is
+ * written meanwhile), then the data goes, then every open Photo Cleaner page reloads empty.
+ */
+async function eraseAll(): Promise<{ ok: true }> {
+  if (await engineRunning()) await chrome.offscreen.closeDocument();
+  tabAccounts.clear();
+  await eraseAllData();
+  const channel = new BroadcastChannel(CHANGES_CHANNEL);
+  channel.postMessage({ kind: 'erased' });
+  channel.close();
+  console.info('Photo Cleaner: all saved data erased');
+  return { ok: true };
+}
+
 // --- tabs ---
 
 async function openPhotos(): Promise<void> {
@@ -214,6 +238,8 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
     case 'app-photos-ready':
       await photosReady(sender.tab);
       return true;
+    case 'app-erase-all':
+      return eraseAll();
     case 'app-wake-engine':
       await wakeEngine();
       return true;

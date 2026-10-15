@@ -2,11 +2,13 @@
 // about protection; the same card in every surface.
 
 import { useState } from 'react';
+import type { AppRequest } from '../shared/messages';
 import { pause, resume, setAnalysisFullSpeed, startAnalysis, startScan } from '../shared/actions';
 import type { AnalysisJob, ScanJob } from '../shared/job';
 import { scanView } from '../shared/jobView';
 import type { ReportView } from '../scan/report';
-import { send, store, useStorageProblem } from './hooks';
+import type { ProtectionChoices } from '../shared/preferences';
+import { send, setProtectionChoices, store, useStorageProblem } from './hooks';
 
 /** One Scan in two stages: reading the photo list, then analysing the new photos. */
 export function ScanCard({ account, scan, analysis, report }: { account: string; scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null | undefined }) {
@@ -73,6 +75,69 @@ function ProtectionDetails({ report }: { report: ReportView }) {
       </div>
       <div><button className="small" onClick={copy} title="Counts only, no album names">{copied ? 'Copied' : 'Copy report'}</button></div>
     </details>
+  );
+}
+
+/**
+ * Which kinds of photo are never trashed, all ticked unless the user unticks one. Visible rather than
+ * tucked away: it decides what Duplicates and Search may offer for the trash.
+ */
+export function ProtectionCard({ account, choices }: { account: string; choices: ProtectionChoices }) {
+  const box = (key: keyof ProtectionChoices, label: string) => (
+    <label>
+      <input type="checkbox" checked={choices[key]} onChange={(e) => void setProtectionChoices(account, { ...choices, [key]: e.target.checked })} /> {label}
+    </label>
+  );
+  return (
+    <section className="card protection-card">
+      <strong>Never trash photos that are</strong>
+      <div className="row protection-boxes">
+        {box('favourites', 'favourites')}
+        {box('albums', 'in an album')}
+        {box('archived', 'archived')}
+      </div>
+      <p className="muted small">
+        Photos of unknown status, such as ones saved from someone else's share, are always kept. Trashing a photo also removes it from every album it's in.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * Erases everything Photo Cleaner saved on this computer, in two clicks: the explanation (and that
+ * photos in Google Photos are not touched) appears after the first. When it is done, every open
+ * Photo Cleaner page reloads empty.
+ */
+export function EraseCard() {
+  const [step, setStep] = useState<'button' | 'confirm' | 'erasing'>('button');
+  const [problem, setProblem] = useState<string | null>(null);
+  const erase = async () => {
+    setStep('erasing');
+    setProblem(null);
+    const answer = (await send({ kind: 'app-erase-all' } satisfies AppRequest)) as { ok?: true; error?: string } | undefined;
+    if (!answer?.ok) {
+      setProblem(answer?.error ?? 'The data could not be erased.');
+      setStep('confirm');
+    }
+  };
+  return (
+    <section className="card erase-card">
+      {step === 'button' ? (
+        <div><button onClick={() => setStep('confirm')}>Erase Photo Cleaner's data from this computer</button></div>
+      ) : (
+        <>
+          <p>
+            Removes the library scan, the AI fingerprints and your review progress (which groups you've already gone through), as uninstalling would.{' '}
+            <strong>Your photos in Google Photos are not touched</strong>: photos you already trashed stay in Google Photos' trash.
+          </p>
+          {problem && <div className="warn">{problem}</div>}
+          <div className="row erase-buttons">
+            <button className="danger" disabled={step === 'erasing'} onClick={() => void erase()}>{step === 'erasing' ? 'Erasing…' : 'Confirm to erase'}</button>
+            <button disabled={step === 'erasing'} onClick={() => setStep('button')}>Cancel</button>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

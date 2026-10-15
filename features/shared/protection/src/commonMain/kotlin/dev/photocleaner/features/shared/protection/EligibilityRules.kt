@@ -6,6 +6,7 @@ import dev.photocleaner.features.shared.protection.model.ClassifiedItem
 import dev.photocleaner.features.shared.protection.model.CoverageEvidence
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.model.PhaseEvidence
+import dev.photocleaner.features.shared.protection.model.ProtectionChoices
 import dev.photocleaner.features.shared.protection.model.ProtectionReason
 import dev.photocleaner.features.shared.protection.model.SourceAgreement
 import dev.photocleaner.features.shared.protection.model.UnknownReason
@@ -74,12 +75,17 @@ internal object EligibilityRules {
         )
     }
 
-    fun classify(item: InventoryItem, snapshot: InventorySnapshot, coverage: CoverageEvidence): ClassifiedItem {
+    /**
+     * Only the protections the user [chose] count. A photo whose only protection was turned off is
+     * then judged like any other: eligible if it is surely the user's own, otherwise unknown (so a
+     * photo saved from someone else's share stays untouchable either way).
+     */
+    fun classify(item: InventoryItem, snapshot: InventorySnapshot, coverage: CoverageEvidence, chosen: ProtectionChoices): ClassifiedItem {
         val protection = buildSet {
             if (item.isFavourite == true || item.dedupKey in snapshot.favouriteDedupKeys) add(ProtectionReason.FAVOURITE)
             if (snapshot.albumMembership[item.dedupKey].orEmpty().isNotEmpty()) add(ProtectionReason.IN_ALBUM)
             if (item.isArchived == true || item.dedupKey in snapshot.archivedDedupKeys) add(ProtectionReason.ARCHIVED)
-        }
+        }.filter(chosen::covers).toSet()
         if (protection.isNotEmpty()) return ClassifiedItem(item, Eligibility.PROTECTED, protection, emptySet())
 
         val unknown = buildSet {

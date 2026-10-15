@@ -6,6 +6,7 @@
 // the detail for this library.
 
 import type { IndexedDbInventoryStore } from '../scan/inventoryStore';
+import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, PREVIEWS_STOPPED_TEXT, refusedText } from '../shared/googleProblems';
 import { SourceError, waitingForPhotosText, waitsForPhotos, type AnalysisSource, type LibraryPhoto, type Preview } from '../scan/source';
 import type { IndexedDbAnalysisStore } from './analysisStore';
 import { chooseDetail, FALLBACK_DETAIL, modelKey, PREFERRED_DETAIL, PREVIEW_SIZE_PX, SPEED_CHECK_PHOTOS, type Detail } from './model';
@@ -88,6 +89,12 @@ class UserStop extends Error {}
 const MAX_PAGE_ATTEMPTS = 3;
 const MAX_RATE_LIMITS = 3;
 const RATE_LIMIT_WAIT_MS = 30_000;
+/**
+ * This many photos in a row without a preview means previews stopped working altogether (Google changed
+ * them, or the connection is gone), not that a few photos lack one: it pauses rather than counting the
+ * whole library as failed.
+ */
+const MAX_FAILED_IN_A_ROW = 25;
 const PROGRESS_EVERY_MS = 1_000;
 
 export async function runAnalysis(deps: AnalysisDeps): Promise<AnalysisOutcome> {
@@ -215,6 +222,7 @@ class AnalysisSession {
     let token: string | null = null;
     let lastPhotoMs = 0;
     let lastEnd: number | null = null;
+    let failedInARow = 0;
     do {
       await this.stopIfAsked();
       const page = await this.readPage(token);
@@ -240,9 +248,11 @@ class AnalysisSession {
         pending.delete(todo[i]!.mediaKey);
         if (image === null) {
           this.progress = { ...this.progress, failed: this.progress.failed + 1 };
+          if (++failedInARow >= MAX_FAILED_IN_A_ROW) throw new Pause(PREVIEWS_STOPPED_TEXT);
           lastEnd = this.now();
           continue;
         }
+        failedInARow = 0;
         const aiStart = this.now();
         const vector = await this.deps.embedder.embed(image, detail);
         const saveStart = this.now();
@@ -287,7 +297,11 @@ class AnalysisSession {
           case 'SESSION':
           case 'NO_PHOTOS_TAB':
             throw new Pause(waitingForPhotosText(e), true);
-          default:
+          case 'PROTOCOL':
+          case 'BAD_REQUEST':
+            logGoogleProblem('analysis: preview', e);
+            throw new Pause(INCOMPATIBLE_TEXT);
+          default: // this photo's preview is missing, or the network hiccuped: counted as failed, tried next time
             return null;
         }
       }
@@ -305,8 +319,15 @@ class AnalysisSession {
       } catch (e) {
         if (!(e instanceof SourceError)) throw e;
         if (waitsForPhotos(e)) throw new Pause(waitingForPhotosText(e), true);
-        if (attempt >= MAX_PAGE_ATTEMPTS || (e.kind !== 'TRANSIENT' && e.kind !== 'RATE_LIMIT')) {
-          throw new Pause(`Reading the library failed (${e.message}). Resume when the connection is back.`);
+        if (isIncompatible(e.kind)) {
+          logGoogleProblem('analysis: library', e);
+          throw new Pause(INCOMPATIBLE_TEXT);
+        }
+        if (attempt >= MAX_PAGE_ATTEMPTS) {
+          if (e.kind === 'RATE_LIMIT') throw new Pause('Google is limiting requests. Resume the analysis later.');
+          if (e.kind === 'TRANSIENT') throw new Pause('Google Photos could not be reached. Resume when the connection is back.');
+          logGoogleProblem('analysis: library', e);
+          throw new Pause(refusedText('library', e.rpcCode ?? e.httpStatus));
         }
         await this.sleep(5_000 * attempt);
       }

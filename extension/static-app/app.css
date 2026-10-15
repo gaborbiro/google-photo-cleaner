@@ -230,3 +230,12 @@ button:disabled { opacity: 0.5; cursor: default; }
 .search-tile figcaption a { color: var(--muted); text-decoration: none; }
 .search-tile figcaption a:hover { text-decoration: underline; }
 .show-more { display: flex; justify-content: center; padding: 12px 0 24px; }
+
+/* The protection choices on the Scan tab. */
+.protection-boxes { justify-content: flex-start; gap: 18px; }
+.protection-boxes label { cursor: pointer; }
+
+/* Erasing Photo Cleaner's data: a red confirm button only after the first click. */
+.erase-card p { margin: 0; }
+.erase-buttons { justify-content: flex-start; }
+button.danger { background: var(--negative); border-color: var(--negative); color: #fff; font-weight: 600; }

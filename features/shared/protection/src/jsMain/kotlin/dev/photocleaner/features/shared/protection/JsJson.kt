@@ -1,5 +1,6 @@
 package dev.photocleaner.features.shared.protection
 
+import dev.photocleaner.features.shared.protection.model.ProtectionChoices
 import dev.photocleaner.repositories.inventory.domain.AlbumRecord
 import dev.photocleaner.repositories.inventory.domain.AlbumStatus
 import dev.photocleaner.repositories.inventory.domain.InventoryItem
@@ -52,6 +53,10 @@ object JsJson {
         for ((k, v) in pairs) o[k] = v
         return o
     }
+
+    /** `{favourites, albums, archived}`: which protections the user wants. */
+    fun protectionChoices(raw: dynamic): ProtectionChoices =
+        ProtectionChoices(favourites = bool(raw, "favourites"), albums = bool(raw, "albums"), archived = bool(raw, "archived"))
 
     /** A scan snapshot in the shape of [InventorySnapshot] (see extension/src/app/scan/snapshot.ts). */
     fun inventorySnapshot(raw: dynamic): InventorySnapshot {

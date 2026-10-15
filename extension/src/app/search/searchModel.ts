@@ -33,7 +33,8 @@ export interface SearchDeps {
   sweep(mediaKeys: string[]): Promise<void>;
   /** Undoes the newest decision (a sweep or one made in Duplicates); null when there is none. */
   undo(): Promise<StoredDecision | null>;
-  preview(thumbUrl: string, sizePx: number): Promise<string | null>;
+  /** A preview as an image address, fetched through Google Photos; throws when it can't be had. */
+  preview(thumbUrl: string, sizePx: number): Promise<string>;
 }
 
 export type Tone = 'positive' | 'caution' | 'negative' | 'neutral';
@@ -503,10 +504,8 @@ export class SearchModel {
       this.fetching++;
       void this.deps.preview(photo.thumbUrl!, THUMB_PX).then(
         (url) => {
-          if (url !== null) {
-            this.thumbs.set(photo.mediaKey, url);
-            while (this.thumbs.size > THUMB_CACHE) this.thumbs.delete(this.thumbs.keys().next().value!);
-          }
+          this.thumbs.set(photo.mediaKey, url);
+          while (this.thumbs.size > THUMB_CACHE) this.thumbs.delete(this.thumbs.keys().next().value!);
         },
         () => undefined,
       ).finally(() => {
@@ -553,7 +552,7 @@ export class SearchModel {
       if (!photo?.thumbUrl || this.large.has(photo.mediaKey)) continue;
       this.large.set(photo.mediaKey, null);
       void this.deps.preview(photo.thumbUrl, VIEWER_PX).then(
-        (url) => this.large.set(photo.mediaKey, url ?? 'failed'),
+        (url) => this.large.set(photo.mediaKey, url),
         () => this.large.set(photo.mediaKey, 'failed'),
       ).finally(() => this.publish());
     }

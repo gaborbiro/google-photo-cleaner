@@ -2,8 +2,10 @@
 // ScanInventoryUseCaseTest, against the real IndexedDB store (in memory) and the shared
 // Kotlin protection rules.
 
+import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 import { describe, expect, it } from 'vitest';
 import { SourceError } from '../../src/app/scan/source';
+import { INCOMPATIBLE_TEXT, refusedText } from '../../src/app/shared/googleProblems';
 import {
   classifyLatest,
   eligibilityOf,
@@ -238,8 +240,18 @@ describe('library scan', () => {
     const source = standardAccount();
     source.failure = (op) => (op === 'albums' ? new SourceError('PROTOCOL', 'shape changed') : null);
     const { outcome } = await scan(source, store);
-    expect(outcome.kind).toBe('failed');
+    expect(outcome).toEqual({ kind: 'failed', reason: INCOMPATIBLE_TEXT });
     expect((await store.latestRun('account-a'))!.status).toBe('FAILED');
+    expect(eligibleIndexes(await classifyLatest(store))).toEqual([]);
+  });
+
+  it('an error code Google keeps returning pauses the scan, saying nothing was changed', async () => {
+    const store = newStore();
+    const source = standardAccount();
+    source.failure = (op) => (op === 'library' ? new SourceError('RPC_ERROR', 'RPC lcxiM returned error code 3', null, 3) : null);
+    const { outcome } = await scan(source, store);
+    expect(outcome).toEqual({ kind: 'paused', reason: refusedText('library', 3), untilPhotosOpen: false });
+    expect(refusedText('library', 3)).toBe('Google Photos keeps refusing to send your library (code 3). Nothing in your library was changed. Try again later; if it keeps happening, check for a Photo Cleaner update.');
     expect(eligibleIndexes(await classifyLatest(store))).toEqual([]);
   });
 
@@ -282,6 +294,6 @@ describe('library scan', () => {
 describe('the shared protection rules from JavaScript', () => {
   it('refuses a snapshot with a missing field instead of guessing', async () => {
     const { classify } = await import('../../src/app/scan/report');
-    expect(() => classify({ run: { id: 1 } } as never, NOW)).toThrow();
+    expect(() => classify({ run: { id: 1 } } as never, NOW, ALL_PROTECTED)).toThrow();
   });
 });

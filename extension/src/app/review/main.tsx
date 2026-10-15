@@ -6,8 +6,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { accountLabel, documentTitle, scanTabTitle, scanView } from '../shared/jobView';
 import type { AnalysisJob, ScanJob } from '../shared/job';
-import { send, useAccount, useAllJobs, useAnalysisJob, useReport, useScanJob, useSpinningTabIcon } from '../ui/hooks';
-import { ScanCard, StorageProblem } from '../ui/JobCard';
+import { send, useAccount, useAllJobs, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useSpinningTabIcon, useStartOverWhenErased } from '../ui/hooks';
+import { EraseCard, ProtectionCard, ScanCard, StorageProblem } from '../ui/JobCard';
 import { DuplicatesReview } from '../duplicates/reviewModel';
 import { reviewDeps } from '../duplicates/session';
 import { SearchModel } from '../search/searchModel';
@@ -38,15 +38,29 @@ function remember(tab: Tab): void {
   }
 }
 
+/** After an erase: the page starts again from nothing and says what happened. */
+function afterErase(): void {
+  try {
+    localStorage.clear();
+  } catch {
+    // Nothing more to erase here when storage is unavailable.
+  }
+  location.replace(`${location.pathname}?erased=1`);
+}
+
+const ERASED = new URLSearchParams(location.search).has('erased');
+
 function Review() {
+  useStartOverWhenErased(afterErase);
   const { answer } = useAccount();
   const jobs = useAllJobs();
-  const requested = new URLSearchParams(location.search).get('account');
+  const requested = ERASED ? null : new URLSearchParams(location.search).get('account');
   const live = answer?.account ?? null;
   const selected = requested ?? live?.fingerprint ?? null;
   const emailOf = (fingerprint: string) => (live?.fingerprint === fingerprint ? live.email : null);
   const job = useScanJob(selected);
-  const report = useReport(selected, job);
+  const choices = useProtectionChoices(selected);
+  const report = useReport(selected, job, choices);
   const analysis = useAnalysisJob(selected);
   const otherScans = jobs.filter((j): j is ScanJob => j.kind === 'library-scan' && j.account !== selected);
   const analysisOf = (account: string) => jobs.find((j): j is AnalysisJob => j.kind === 'analysis' && j.account === account) ?? null;
@@ -74,9 +88,11 @@ function Review() {
     document.title = pageTitle;
   }, [pageTitle]);
   useSpinningTabIcon(scan?.tabStatus === 'scanning');
-  // The duplicate groups are built once both jobs are known, and again only when a library scan
-  // or the analysis finishes (their finish time changes; pausing and progress don't).
-  const refreshKey = job === undefined || analysis === undefined ? null : `${job?.finishedAtMs ?? '-'}:${analysis?.finishedAtMs ?? '-'}`;
+  // The duplicate groups are built once the jobs and the protection choices are known, and again
+  // when a library scan or the analysis finishes (their finish time changes; pausing and progress
+  // don't) or the protection choices change.
+  const refreshKey = job === undefined || analysis === undefined || choices === undefined ? null
+    : `${job?.finishedAtMs ?? '-'}:${analysis?.finishedAtMs ?? '-'}:${JSON.stringify(choices)}`;
   // The workbenches, once per account; the trash queue runs for both whichever tab is open.
   const duplicates = useMemo(() => (selected === null ? null : new DuplicatesReview(reviewDeps(selected))), [selected]);
   const search = useMemo(() => (selected === null ? null : new SearchModel(searchDeps(selected))), [selected]);
@@ -92,10 +108,16 @@ function Review() {
     <main className="review">
       <header className="collapsing page-header">
         <div className="row">
-          <h1>Photo Cleaner · review</h1>
+          <h1>Photo Cleaner</h1>
           <button onClick={() => void send({ kind: 'app-open-photos' })}>Open Google Photos</button>
         </div>
         <StorageProblem />
+        {ERASED && (
+          <section className="card tone-good">
+            <strong>Photo Cleaner's data has been erased from this computer.</strong>
+            <span>Your photos in Google Photos were not touched. Scan your library again to start over.</span>
+          </section>
+        )}
         {selected !== null && <h2>Account: {accountLabel(selected, emailOf(selected))}</h2>}
       </header>
       <nav className="tabs">
@@ -114,6 +136,8 @@ function Review() {
           {opened.has('scan') && (
             <div className="scan-tab" hidden={tab !== 'scan'}>
               {job !== undefined && analysis !== undefined && <ScanCard account={selected} scan={job} analysis={analysis} report={report} />}
+              {choices !== undefined && <ProtectionCard account={selected} choices={choices} />}
+              <EraseCard />
             </div>
           )}
         </>

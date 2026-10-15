@@ -19,7 +19,9 @@ export type AppRequest =
   | { kind: 'app-open-photos' }
   | { kind: 'app-show-panel' }
   /** A Google Photos page has loaded (from its content script): jobs waiting for it may carry on. */
-  | { kind: 'app-photos-ready' };
+  | { kind: 'app-photos-ready' }
+  /** Erase everything Photo Cleaner saved on this computer; answers `{ ok: true }` or `{ error }`. */
+  | { kind: 'app-erase-all' };
 
 export interface AccountAnswer {
   /** null when no signed-in Photos tab answered. */

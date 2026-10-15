@@ -1,0 +1,115 @@
+# Browser extension: checks by hand
+
+`npm run check` tests the rules, the stores and that every page draws. These are the things only a
+real Chrome with a real Google Photos account can show. Go through the parts a change touches;
+go through all of it before a release.
+
+Each step says what you should see. Anything else is a bug: note what you did and what you saw,
+and copy the console (right-click the page → Inspect → Console).
+
+## Before you start
+
+- Build: `cd extension && npm run kotlin && npm run build`.
+- `chrome://extensions` → Developer mode → **Load unpacked** → `extension\dist-app`. If it is
+  already loaded, press ↻ on it, then reload every Google Photos tab.
+- photos.google.com open in one tab, signed in. A library of a few hundred photos is quick; the
+  real library (about 19,000) is the speed and stamina test.
+
+## 1. Opening it
+
+1. In Google Photos, click **Photo Cleaner** on the page. The panel opens on the right. Click it
+   twice quickly: still one panel.
+2. Reload the extension (↻) and the Photos tab: still one button and, when opened, one panel.
+3. Toolbar icon → popup: the account's email, the Scan card, **Open in tab ⤢**, the erase button
+   at the bottom. Texts are comfortably readable (not tiny).
+4. **Open in tab**: the review tab opens with the heading "Photo Cleaner", "Account: <email>",
+   and the tabs **1 · Scan**, **2 · Duplicates**, **Search**.
+5. Close the Photos tab, open the popup: it says Photo Cleaner works inside Google Photos and offers
+   **Open Google Photos**, which opens it.
+
+## 2. Scan
+
+1. **Scan library**. Stage 1 counts entries and says how far back it has got. The review tab's
+   browser tab shows a spinning ring as its icon.
+2. **Pause**, then **Resume**: it carries on where it stopped, not from the start.
+3. Close the Google Photos tab while it scans: it pauses, saying Google Photos was closed. Open
+   photos.google.com again (same account): it carries on by itself within a few seconds.
+4. Switch the Photos tab to another Google account: the scan pauses and says it's a different
+   account. Switch back and resume.
+5. Stage 2: the first time, the AI model downloads (a bar), then the speed check, then
+   "Analysing new photos" with photos per second and time left. **Full speed** changes the pace.
+6. When it's done: "1 · Scan (done)", "Scan complete", the tab icon goes back to the normal one,
+   and **Protection details** opens a small table (photos, protected, eligible, unknown).
+7. **Check for new photos**: it reads the photo list again but only analyses photos that are new;
+   with none new it finishes quickly.
+8. Note the speed (photos per second) and how long the full library took.
+
+## 3. Protection choices
+
+1. On the Scan tab, untick **favourites**. The panel and popup show the change without a reload;
+   Protection details count favourites as eligible.
+2. Tick it again. Duplicates and Search no longer offer favourites.
+3. Approve a favourite for the trash while favourites are unticked, then tick it again: the trash
+   queue line counts it as blocked, not in the trash.
+
+## 4. Duplicates
+
+1. The first group shows with its first photo focused, without pressing anything. Previews load;
+   a missing preview says why underneath.
+2. Arrows move the focus. Holding an arrow, after a short wait, slides along the row or column and
+   stops at the end without bouncing. Tapping an arrow at an edge bounces the photo once. Down on
+   the bottom row stays in its column.
+3. **A** focuses the whole group (every photo bounces); **A** again unfocuses. **Space** toggles
+   trash on the focused photo; clicking a photo toggles it without a bounce.
+4. **D** trashes the selection (simulated), **F** keeps all, **S** skips. **Z** undoes, with a
+   spinner while it works.
+5. In a long group scrolled down, the next long group brings its top row into view without opening
+   the folded toolbars.
+6. Switch to Scan and back: the groups are still there, not rebuilt.
+7. **Enter** opens the large viewer; arrows go through the group; **Esc** closes it.
+
+## 5. Search
+
+1. Type a description (e.g. "food", "receipt") → **Search**. The first time, the description
+   model downloads (a bar). Results appear best match first; protected photos never appear.
+2. Select a few → **M** (more like these): they show as + examples and the results change.
+   **L** (less like these) shows − examples and drops look-alikes. Removing an example works.
+   **Start over** clears everything.
+3. **D** asks to confirm; **Enter** moves them to the trash queue (simulated), **Esc** cancels.
+   **Z** undoes it.
+4. From Duplicates, **Search more like these** opens Search with that group as examples.
+
+## 6. Erase Photo Cleaner's data
+
+1. Popup → **Erase Photo Cleaner's data from this computer**: the explanation appears with
+   **Confirm to erase** and **Cancel**. Cancel: nothing happens.
+2. With the review tab and a panel open, confirm: "Erasing…", then every open page starts over;
+   the review tab says the data has been erased from this computer. Nothing changes in Google Photos.
+3. The Scan says "Not scanned yet", the protection choices are back to all ticked, and the AI
+   model downloads again on the next analysis.
+
+## 7. Updates and interruptions
+
+1. Reload the extension (↻) in the middle of a scan, then reload the Photos tab: the scan can be
+   resumed and carries on. (Known: it may say "Stopped by an unexpected error…"; see the error
+   review on the roadmap.)
+2. Leave the Photos tab in the background long enough for Chrome's Memory Saver to put it to sleep
+   during a scan: the scan wakes it (reloads it) and carries on.
+3. A database update with an old page still open: load a build with a newer database version while
+   an old review tab is open. A message says to reload Google Photos tabs and close other Photo
+   Cleaner tabs; after that it carries on by itself.
+
+## 8. When Google Photos changes
+
+These can't be triggered on purpose. If they ever appear, the message should say that Photo
+Cleaner no longer understands Google Photos' answers, that nothing in your library was changed,
+and to check for an update. The console has a line starting "Photo Cleaner: unexpected answer
+from Google Photos" with the details; keep it for the fix.
+
+## 9. Privacy
+
+1. Look through the console of the review tab, the panel's Photos tab and the service worker
+   (`chrome://extensions` → Photo Cleaner → service worker): no photo keys, photo addresses
+   (`googleusercontent.com/…`), album titles or tokens.
+2. DevTools → Network on the review tab: requests go only to Google Photos (through its tab) and,
+   for the AI models, Hugging Face.

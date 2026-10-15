@@ -67,6 +67,15 @@ unless the shared rules call it ELIGIBLE with the user's protection choices. Pho
 are never trashable. Trashing is still **simulated** (`SimulatedTrash`). Do not add any request that
 changes the user's Google Photos (trash, album edits, favourites…) unless the user explicitly asked for
 that change. Every new write path needs tests for refusing protected photos.
+- Search's sweep and the trash queue check every photo again against a fresh scan and the current
+  protection choices just before acting. `extension/test/app/sessions.test.ts` tests this through the
+  real wiring (`duplicates/session.ts`, `search/session.ts`); a change to that wiring needs tests there.
+
+**Google's undocumented requests.** Photo Cleaner talks to Google Photos the way Google's own page
+does, and Google can change that any day. When an answer doesn't fit (`PROTOCOL`, `BAD_REQUEST`),
+stop and show the shared message in `extension/src/app/shared/googleProblems.ts`, saying nothing in
+the library was changed; log the details with `logGoogleProblem`. Never count such an answer as one
+failed photo, never retry it as if the connection dropped, and never carry on guessing.
 
 **Shared rules live in Kotlin.** Grouping, protection and the review queue are in `features/shared/*`,
 tested in `commonTest`, and compiled for the extension. Don't reimplement them in TypeScript.
@@ -77,7 +86,9 @@ tested in `commonTest`, and compiled for the extension. Don't reimplement them i
 **The extension's database** (`extension/src/app/shared/db.ts`, version in `shared/constants.ts`):
 - Add stores in `upgrade()` only through `create(...)`, which only adds and is safe to run again.
   Never drop or clear users' data in an upgrade.
-- Raise `DB_VERSION` once per change set, with a comment saying what it adds.
+- Raise `DB_VERSION` once per change set, with a comment saying what it adds. In
+  `extension/test/app/db.test.ts`, add the new stores to `STORES_BY_VERSION` and the outgoing version
+  to the versions upgraded from, so an update from every earlier version stays tested.
 - Every store opens the database with `openDatabase(factory, onClosed)`, so it reconnects after an
   upgrade or after the data was erased.
 
@@ -101,7 +112,7 @@ log photo keys, URLs, album titles, tokens or account details. Never commit secr
 - Tests must not depend on the time zone or locale: build dates with `new Date(y, m, d, h)` (local
   time), not `Date.UTC`. The tests run in California time (`vitest.config.mjs`), so a mix-up of UTC
   and local time fails on every machine.
-- `test/app/screens.test.tsx` opens each page (popup, panel, review tab and its tabs) in a pretend
+- `extension/test/app/screens.test.tsx` opens each page (popup, panel, review tab and its tabs) in a pretend
   browser with a made-up library, clicks and presses keys as a user would, and fails on any logged
   error. When you add a page, a tab, a button or a key, add it there.
 - Some things can only be checked in Chrome by hand: loading the AI model, the real erase, resuming

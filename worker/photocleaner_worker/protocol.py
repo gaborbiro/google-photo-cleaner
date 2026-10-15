@@ -114,6 +114,8 @@ def _embed_text(embedder: Embedder, params: dict) -> dict:
     if not all(isinstance(t, str) and 0 < len(t.strip()) <= MAX_TEXT_LENGTH for t in texts):
         raise BadRequest(f"each text must be 1..{MAX_TEXT_LENGTH} characters")
     vectors = embedder.embed_text([t.strip() for t in texts])
+    if vectors.ndim != 2 or vectors.shape[0] != len(texts) or vectors.shape[1] == 0:
+        raise RuntimeError("embedder returned an invalid number or shape of text vectors")
     return {"vectors": [base64.b64encode(v.astype("<f2").tobytes()).decode("ascii") for v in vectors]}
 
 

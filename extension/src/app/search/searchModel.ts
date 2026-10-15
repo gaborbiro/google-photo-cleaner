@@ -4,9 +4,16 @@
 // every text the screen shows.
 
 import { count, n } from '../shared/format';
+import { ACTION_FAILED } from '../duplicates/reviewModel';
 import type { StoredDecision } from '../duplicates/reviewStore';
 import type { Blocked } from '../duplicates/rules';
+import { previewProblem } from '../shared/googleProblems';
+import type { ProtectionChoices } from '../shared/preferences';
 import { rankSearch, type SearchHit } from './rules';
+
+/** A result tile's size and the gap between tiles, as `.search-grid` in app.css lays them out. */
+const TILE_PX = 160;
+const TILE_GAP_PX = 6;
 
 /** What Search knows about one analysed photo of the latest library scan. */
 export interface LibraryPhoto {
@@ -22,6 +29,8 @@ export interface LibraryPhoto {
 export interface SearchLibrary {
   blocked: Blocked | null;
   photos: Map<string, LibraryPhoto>;
+  /** The account's protection choices: which kinds of photo never appear. */
+  protection: ProtectionChoices;
 }
 
 export interface SearchDeps {
@@ -57,6 +66,8 @@ export interface SearchTile {
   current: boolean;
   caption: string;
   link: string;
+  /** Why the thumbnail is missing, once fetching it failed (it is tried again when it comes back into view). */
+  error: string | null;
 }
 
 export interface ExampleView {
@@ -75,6 +86,8 @@ export interface ViewerView {
 }
 
 export interface SearchView {
+  /** How Search works and which photos never appear (following the protection choices). */
+  introText: string;
   query: string;
   /** There is a search to clear (a description, examples or results). */
   canStartOver: boolean;
@@ -108,6 +121,23 @@ const BLOCKED_TEXT: Record<Blocked, string> = {
   SCAN_UNFINISHED: 'The library scan is unfinished, so no photo can be trashed. Finish it on the Scan tab.',
   SCAN_STALE: 'The library scan is more than a day old. Check for new photos on the Scan tab (about 2–3 minutes).',
 };
+
+/**
+ * The explanation above the search field. Which photos never appear follows the account's protection
+ * choices; before the library is loaded it can't say which kinds those are.
+ */
+export function searchIntroText(protection: ProtectionChoices | null): string {
+  const kinds = protection === null ? ['protected photos'] : [
+    ...(protection.favourites ? ['favourites'] : []),
+    ...(protection.albums ? ['photos in albums'] : []),
+    ...(protection.archived ? ['archived photos'] : []),
+  ];
+  const never = [...kinds, 'photos of unknown status'];
+  const listed = never.length === 1 ? never[0] : `${never.slice(0, -1).join(', ')} and ${never.at(-1)}`;
+  return 'Describe what to search for (for example “meal prep boxes in plastic containers”, “printed documents”, “screenshots”). ' +
+    `The strongest matches are shown; ${listed} never appear. Click to select, Shift-click to select a range; ` +
+    'M finds more like the selected photos, L fewer.';
+}
 
 function photoDay(ms: number): string {
   if ([0, 315_532_800_000].some((d) => Math.abs(ms - d) <= 14 * 3_600_000)) return 'Date unknown';
@@ -155,6 +185,7 @@ export class SearchModel {
   private focusPulse = 0;
 
   private readonly thumbs = new Map<string, string>();
+  private readonly thumbErrors = new Map<string, string>();
   private readonly loading = new Set<string>();
   private readonly waiting: LibraryPhoto[] = [];
   private fetching = 0;
@@ -356,6 +387,18 @@ export class SearchModel {
     this.columns = Math.max(1, columns);
   }
 
+  /** The grid's width in pixels, as the screen measured it; a hidden grid (0) keeps the last real width. */
+  gridWidthMeasured(widthPx: number): void {
+    if (widthPx > 0) this.gridMeasured(Math.floor((widthPx + TILE_GAP_PX) / (TILE_PX + TILE_GAP_PX)));
+  }
+
+  /** The examples' thumbnails, for those not fetched yet. */
+  loadExampleThumbs(): void {
+    for (const mediaKey of [...(this.query?.more ?? []), ...(this.query?.less ?? [])]) {
+      if (!this.thumbs.has(mediaKey)) this.tileVisible(mediaKey);
+    }
+  }
+
   private resultsOrSay(): boolean {
     if (this.shown.length > 0) return true;
     this.sayAndPublish(this.query ? 'No results to act on.' : 'No results yet. Describe the photos above and press Enter.', 'caution');
@@ -483,7 +526,10 @@ export class SearchModel {
       if (this.query) await this.run(this.query);
       this.say(undone.kind === 'APPROVED' ? 'Undid the trashing: photos not yet sent are cancelled and any already trashed are restored' : 'Undid the last decision in Duplicates', 'positive');
       this.publish();
-    })();
+    })().catch((error: unknown) => {
+      console.error('Photo Cleaner: undo failed', error);
+      this.sayAndPublish(ACTION_FAILED, 'negative');
+    });
   }
 
   // --- thumbnails and the viewer ---
@@ -504,10 +550,11 @@ export class SearchModel {
       this.fetching++;
       void this.deps.preview(photo.thumbUrl!, THUMB_PX).then(
         (url) => {
+          this.thumbErrors.delete(photo.mediaKey);
           this.thumbs.set(photo.mediaKey, url);
           while (this.thumbs.size > THUMB_CACHE) this.thumbs.delete(this.thumbs.keys().next().value!);
         },
-        () => undefined,
+        (e: unknown) => void this.thumbErrors.set(photo.mediaKey, previewProblem('Search', e)),
       ).finally(() => {
         this.fetching--;
         this.loading.delete(photo.mediaKey);
@@ -553,7 +600,10 @@ export class SearchModel {
       this.large.set(photo.mediaKey, null);
       void this.deps.preview(photo.thumbUrl, VIEWER_PX).then(
         (url) => this.large.set(photo.mediaKey, url),
-        () => this.large.set(photo.mediaKey, 'failed'),
+        (e: unknown) => {
+          previewProblem('Search viewer', e);
+          this.large.set(photo.mediaKey, 'failed');
+        },
       ).finally(() => this.publish());
     }
   }
@@ -570,6 +620,7 @@ export class SearchModel {
     ];
     const example = (mediaKey: string): ExampleView => ({ mediaKey, imageUrl: this.thumbs.get(mediaKey) ?? null });
     return {
+      introText: searchIntroText(this.library?.protection ?? null),
       query: this.queryText,
       canStartOver: this.query !== null || this.queryText !== '',
       searching: this.searching,
@@ -591,6 +642,7 @@ export class SearchModel {
         current: !this.allFocused && index === this.focusedIndex,
         caption: caption(h),
         link: `https://photos.google.com/photo/${h.mediaKey}`,
+        error: this.thumbErrors.get(h.mediaKey) ?? null,
       })),
       resultsVersion: this.resultsVersion,
       focusPulse: this.focusPulse,

@@ -4,8 +4,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { accountLabel, documentTitle, scanTabTitle, scanView } from '../shared/jobView';
-import type { AnalysisJob, ScanJob } from '../shared/job';
+import { documentTitle, reviewAccount, reviewPageView, scanView } from '../shared/jobView';
 import { send, useAccount, useAllJobs, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useSpinningTabIcon, useStartOverWhenErased } from '../ui/hooks';
 import { EraseCard, ProtectionCard, ScanCard, StorageProblem } from '../ui/JobCard';
 import { DuplicatesReview } from '../duplicates/reviewModel';
@@ -16,16 +15,16 @@ import { Duplicates, useTrashQueue } from './Duplicates';
 import { Search } from './Search';
 
 type Tab = 'scan' | 'duplicates' | 'search';
-/** The steps, numbered as on the desktop (which has Calibration as its step 2); Search is not a step. */
-const TABS: { id: Tab; label: string }[] = [{ id: 'scan', label: '1 · Scan' }, { id: 'duplicates', label: '2 · Duplicates' }, { id: 'search', label: 'Search' }];
+const TABS: Tab[] = ['scan', 'duplicates', 'search'];
 const TAB_KEY = 'photo-cleaner.review-tab';
 
 /** The tab last open in this browser; Scan the first time (or when storage is unavailable). */
 function rememberedTab(): Tab {
   try {
     const saved = localStorage.getItem(TAB_KEY);
-    return TABS.some((t) => t.id === saved) ? (saved as Tab) : 'scan';
-  } catch {
+    return TABS.find((t) => t === saved) ?? 'scan';
+  } catch (error) {
+    console.warn('Photo Cleaner: could not read which tab was open last', error);
     return 'scan';
   }
 }
@@ -33,18 +32,14 @@ function rememberedTab(): Tab {
 function remember(tab: Tab): void {
   try {
     localStorage.setItem(TAB_KEY, tab);
-  } catch {
+  } catch (error) {
     // Only a convenience: the tab simply isn't remembered.
+    console.warn('Photo Cleaner: could not remember the open tab', error);
   }
 }
 
 /** After an erase: the page starts again from nothing and says what happened. */
 function afterErase(): void {
-  try {
-    localStorage.clear();
-  } catch {
-    // Nothing more to erase here when storage is unavailable.
-  }
   location.replace(`${location.pathname}?erased=1`);
 }
 
@@ -54,16 +49,13 @@ function Review() {
   useStartOverWhenErased(afterErase);
   const { answer } = useAccount();
   const jobs = useAllJobs();
-  const requested = ERASED ? null : new URLSearchParams(location.search).get('account');
-  const live = answer?.account ?? null;
-  const selected = requested ?? live?.fingerprint ?? null;
-  const emailOf = (fingerprint: string) => (live?.fingerprint === fingerprint ? live.email : null);
+  const signedIn = answer?.account ?? null;
+  const selected = reviewAccount(ERASED ? null : new URLSearchParams(location.search).get('account'), signedIn);
   const job = useScanJob(selected);
   const choices = useProtectionChoices(selected);
   const report = useReport(selected, job, choices);
   const analysis = useAnalysisJob(selected);
-  const otherScans = jobs.filter((j): j is ScanJob => j.kind === 'library-scan' && j.account !== selected);
-  const analysisOf = (account: string) => jobs.find((j): j is AnalysisJob => j.kind === 'analysis' && j.account === account) ?? null;
+  const page = reviewPageView({ selected, signedIn, jobs, scan: job, analysis, choices, nowMs: Date.now() });
   const [tab, setTab] = useState<Tab>(rememberedTab);
   // A tab, once opened, stays alive while hidden: its groups, selections and place are kept.
   const [opened, setOpened] = useState<ReadonlySet<Tab>>(() => new Set([tab]));
@@ -82,17 +74,12 @@ function Review() {
   }, [tab]);
   // The Scan tab shows its status, as on the desktop: "1 · Scan (done)"; the browser tab its progress.
   const scan = selected !== null && job !== undefined && analysis !== undefined ? scanView(job, analysis, Date.now()) : null;
-  const scanTitle = scan ? scanTabTitle(scan) : null;
   const pageTitle = scan ? documentTitle(scan) : 'Photo Cleaner';
   useEffect(() => {
     document.title = pageTitle;
   }, [pageTitle]);
   useSpinningTabIcon(scan?.tabStatus === 'scanning');
-  // The duplicate groups are built once the jobs and the protection choices are known, and again
-  // when a library scan or the analysis finishes (their finish time changes; pausing and progress
-  // don't) or the protection choices change.
-  const refreshKey = job === undefined || analysis === undefined || choices === undefined ? null
-    : `${job?.finishedAtMs ?? '-'}:${analysis?.finishedAtMs ?? '-'}:${JSON.stringify(choices)}`;
+  const { refreshKey } = page;
   // The workbenches, once per account; the trash queue runs for both whichever tab is open.
   const duplicates = useMemo(() => (selected === null ? null : new DuplicatesReview(reviewDeps(selected))), [selected]);
   const search = useMemo(() => (selected === null ? null : new SearchModel(searchDeps(selected))), [selected]);
@@ -118,11 +105,11 @@ function Review() {
             <span>Your photos in Google Photos were not touched. Scan your library again to start over.</span>
           </section>
         )}
-        {selected !== null && <h2>Account: {accountLabel(selected, emailOf(selected))}</h2>}
+        {page.accountText && <h2>{page.accountText}</h2>}
       </header>
       <nav className="tabs">
         {TABS.map((t) => (
-          <button key={t.id} tabIndex={-1} className={t.id === tab ? 'tab selected' : 'tab'} onClick={() => open(t.id)}>{(t.id === 'scan' && scanTitle) || t.label}</button>
+          <button key={t} tabIndex={-1} className={t === tab ? 'tab selected' : 'tab'} onClick={() => open(t)}>{page.tabLabels[t]}</button>
         ))}
       </nav>
       {selected === null ? (
@@ -142,16 +129,16 @@ function Review() {
           )}
         </>
       )}
-      {tab === 'scan' && otherScans.length > 0 && (
+      {tab === 'scan' && page.otherAccounts.length > 0 && (
         <>
           <h2>Other accounts on this computer</h2>
           <table>
             <thead><tr><th>Account</th><th>Scan</th></tr></thead>
             <tbody>
-              {otherScans.map((j) => (
-                <tr key={j.id}>
-                  <td className="mono"><a href={`?account=${encodeURIComponent(j.account)}`}>{accountLabel(j.account, emailOf(j.account))}</a></td>
-                  <td>{scanView(j, analysisOf(j.account), Date.now()).title}</td>
+              {page.otherAccounts.map((row) => (
+                <tr key={row.account}>
+                  <td className="mono"><a href={row.href}>{row.label}</a></td>
+                  <td>{row.scanTitle}</td>
                 </tr>
               ))}
             </tbody>

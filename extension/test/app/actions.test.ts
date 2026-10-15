@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
-import { pause, resume, resumeWaitingForPhotos, setAnalysisFullSpeed, startAnalysis, startScan } from '../../src/app/shared/actions';
+import { pause, resume, resumeWaitingForPhotos, scanButton, setAnalysisFullSpeed, startAnalysis, startScan } from '../../src/app/shared/actions';
 import { endJob, jobId, NO_PROGRESS, reportProgress } from '../../src/app/shared/job';
 import type { AppRequest } from '../../src/app/shared/messages';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
@@ -20,6 +20,20 @@ describe('scan actions (on the real job store, in memory)', () => {
     await startScan(store, send, 'acc1', 1_000);
     expect(await store.get(scanOf('acc1'))).toMatchObject({ status: 'running' });
     expect(sent).toEqual([{ kind: 'app-wake-engine' }]);
+  });
+
+  it("the Scan card's button does what its view says", async () => {
+    const store = new IndexedDbJobStore(new IDBFactory());
+    const { sent, send } = recorder();
+    await scanButton({ action: 'start', target: 'library-scan' }, store, send, 'acc1', 1_000);
+    expect(await store.get(scanOf('acc1'))).toMatchObject({ status: 'running' });
+    await scanButton({ action: 'pause', target: 'library-scan' }, store, send, 'acc1', 2_000);
+    expect(await store.get(scanOf('acc1'))).toMatchObject({ status: 'paused' });
+    await scanButton({ action: 'resume', target: 'library-scan' }, store, send, 'acc1', 3_000);
+    expect(await store.get(scanOf('acc1'))).toMatchObject({ status: 'running' });
+    await scanButton({ action: 'restart', target: 'analysis' }, store, send, 'acc1', 4_000);
+    expect(await store.get(jobId('analysis', 'acc1'))).toMatchObject({ status: 'running' });
+    expect(sent).toHaveLength(3); // start, resume and the analysis wake the background page; pausing doesn't
   });
 
   it('keeps each account separate', async () => {

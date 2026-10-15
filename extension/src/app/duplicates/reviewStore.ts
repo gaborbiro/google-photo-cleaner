@@ -4,6 +4,7 @@
 
 import { CHANGES_CHANNEL } from '../shared/constants';
 import { committed, openDatabase, request, STORES } from '../shared/db';
+import type { ProtectionChoices } from '../shared/preferences';
 import type { ActiveDecision, DecisionKind } from './rules';
 
 export type TrashJobState =
@@ -45,6 +46,14 @@ export interface TrashJob {
 
 type NewRecord<T> = Omit<T, 'id'>;
 
+/** How many duplicate groups wait for a decision (skipped ones included), worked out at [atMs] with [protection]. */
+export interface ReviewSummary {
+  account: string;
+  groupsToReview: number;
+  atMs: number;
+  protection: ProtectionChoices;
+}
+
 export class IndexedDbReviewStore {
   private db: Promise<IDBDatabase> | null = null;
   private changes: BroadcastChannel | null = null;
@@ -68,6 +77,19 @@ export class IndexedDbReviewStore {
   private announce(account: string): void {
     this.changes ??= new BroadcastChannel(CHANGES_CHANNEL);
     this.changes.postMessage({ kind: 'review-changed', account });
+  }
+
+  /** How many duplicate groups [account] has waiting, as last worked out; null before the first time. */
+  async summary(account: string): Promise<ReviewSummary | null> {
+    const tx = await this.tx([STORES.reviewSummaries], 'readonly');
+    return (await request(tx.objectStore(STORES.reviewSummaries).get(account) as IDBRequest<ReviewSummary | undefined>)) ?? null;
+  }
+
+  async saveSummary(summary: ReviewSummary): Promise<void> {
+    const tx = await this.tx([STORES.reviewSummaries], 'readwrite');
+    tx.objectStore(STORES.reviewSummaries).put(summary);
+    await committed(tx);
+    this.announce(summary.account);
   }
 
   /**

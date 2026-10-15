@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
 import { endJob, NO_PROGRESS, pauseJob, reportProgress, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
-import { accountLabel, documentTitle, scanTabTitle, scanView } from '../../src/app/shared/jobView';
+import { accountLabel, checkedText, documentTitle, reviewAccount, reviewButtonText, reviewPageView, scanTabTitle, scanView, surfaceView } from '../../src/app/shared/jobView';
+import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
 const NOW = new Date(2026, 9, 14, 21, 40).getTime();
 
@@ -76,7 +77,7 @@ describe('one Scan in two stages', () => {
     const done = endJob(reportProgress(analysing, { ...analysing.progress, analysed: 17_202 }, 2), 'completed', null, NOW);
     expect(scanView(scanned, done, NOW + 2 * 86_400_000)).toMatchObject({
       title: 'Scan out of date',
-      lines: ['17,202 photos', 'Checked 14 Oct 2026 21:40'],
+      lines: ['17,202 photos', 'Checked 2 days ago'],
       notice: 'More than a day old: check for new photos before anything can be trashed.',
       actionLabel: 'Check for new photos',
     });
@@ -115,5 +116,76 @@ describe('one Scan in two stages', () => {
   it('names an account by its email when known, otherwise by its fingerprint', () => {
     expect(accountLabel('a1b2c3d4e5f60718', 'me@example.com')).toBe('me@example.com');
     expect(accountLabel('a1b2c3d4e5f60718', null)).toBe('account a1b2c3d4…');
+  });
+});
+
+describe('the review tab', () => {
+  const finishedScan = (account: string) => endJob(startScanJob(account, 0), 'completed', null, NOW);
+
+  it('shows the account in its address, else the one signed in', () => {
+    expect(reviewAccount('acc2', { fingerprint: 'acc1' })).toBe('acc2');
+    expect(reviewAccount(null, { fingerprint: 'acc1' })).toBe('acc1');
+    expect(reviewAccount(null, null)).toBeNull();
+  });
+
+  it('names the account, labels the tabs and lists the other accounts with links', () => {
+    const page = reviewPageView({
+      selected: 'acc1', signedIn: { fingerprint: 'acc1', email: 'someone@example.com' },
+      jobs: [finishedScan('acc1'), finishedScan('acc2-0123456789')], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW,
+    });
+    expect(page.accountText).toBe('Account: someone@example.com');
+    expect(page.tabLabels).toEqual({ scan: '1 · Scan (needed)', duplicates: '2 · Duplicates', search: 'Search' });
+    expect(page.otherAccounts).toEqual([{ account: 'acc2-0123456789', href: '?account=acc2-0123456789', label: 'account acc2-012…', scanTitle: 'Photos not analysed yet' }]);
+  });
+
+  it('builds the groups again only when a scan or the analysis finishes, or the choices change', () => {
+    const input = { selected: 'acc1', signedIn: null, jobs: [], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW };
+    const key = reviewPageView(input).refreshKey;
+    expect(key).not.toBeNull();
+    expect(reviewPageView({ ...input, nowMs: NOW + 1_000 }).refreshKey).toBe(key);
+    expect(reviewPageView({ ...input, choices: { ...ALL_PROTECTED, favourites: false } }).refreshKey).not.toBe(key);
+    expect(reviewPageView({ ...input, scan: endJob(startScanJob('acc1', 0), 'completed', null, NOW + 5) }).refreshKey).not.toBe(key);
+    expect(reviewPageView({ ...input, choices: undefined }).refreshKey).toBeNull(); // still loading
+    expect(reviewPageView({ ...input, selected: null }).accountText).toBeNull();
+  });
+});
+
+describe('the popup and the panel', () => {
+  it("say where things stand: still looking, no Google Photos, a tab that can't say, or the account", () => {
+    expect(surfaceView(undefined)).toMatchObject({ state: 'looking', account: null });
+    expect(surfaceView({ account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false })).toMatchObject({ state: 'no-photos', problemText: 'No Google Photos tab is open.' });
+    expect(surfaceView({ account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true })).toMatchObject({ state: 'problem', problemText: 'Google Photos is signed out in this tab.' });
+    expect(surfaceView({ account: { fingerprint: 'acc1', email: 'someone@example.com' }, problem: null, photosTabOpen: true }))
+      .toEqual({ state: 'account', problemText: null, account: 'acc1', accountText: 'Account: someone@example.com' });
+  });
+});
+
+describe("the popup's review button", () => {
+  const scanned = endJob(startScanJob('acc1', 0), 'completed', null, NOW);
+  const summary = { account: 'acc1', groupsToReview: 1_731, atMs: NOW + 1_000, protection: ALL_PROTECTED };
+
+  it('says how many groups wait, while that count can be trusted', () => {
+    expect(reviewButtonText(summary, scanned, null, ALL_PROTECTED, NOW + 2_000)).toBe('Review 1,731 groups');
+    expect(reviewButtonText({ ...summary, groupsToReview: 1 }, scanned, null, ALL_PROTECTED, NOW + 2_000)).toBe('Review 1 group');
+  });
+
+  it('is left out when there is nothing to review or the count may be wrong', () => {
+    const at = NOW + 2_000;
+    expect(reviewButtonText(null, scanned, null, ALL_PROTECTED, at)).toBeNull();
+    expect(reviewButtonText({ ...summary, groupsToReview: 0 }, scanned, null, ALL_PROTECTED, at)).toBeNull();
+    expect(reviewButtonText(summary, endJob(startScanJob('acc1', 0), 'completed', null, NOW + 5_000), null, ALL_PROTECTED, at)).toBeNull(); // scanned since
+    expect(reviewButtonText(summary, startScanJob('acc1', NOW + 1_500), null, ALL_PROTECTED, at)).toBeNull(); // scanning now
+    expect(reviewButtonText(summary, scanned, null, { ...ALL_PROTECTED, albums: false }, at)).toBeNull(); // other choices
+    expect(reviewButtonText(summary, scanned, null, ALL_PROTECTED, NOW + 25 * 3_600_000)).toBeNull(); // the scan is out of date
+  });
+});
+
+describe('when the library was last checked', () => {
+  it('says today and yesterday with the time, then how many days ago, then the date', () => {
+    const at = (day: number, hour: number, minute = 0) => new Date(2026, 9, day, hour, minute).getTime();
+    expect(checkedText(at(14, 9, 5), at(14, 21))).toBe('Checked today 09:05');
+    expect(checkedText(at(13, 23, 50), at(14, 0, 10))).toBe('Checked yesterday 23:50'); // just before midnight
+    expect(checkedText(at(8, 18), at(14, 9))).toBe('Checked 6 days ago');
+    expect(checkedText(new Date(2026, 7, 1, 12).getTime(), at(14, 9))).toBe('Checked 1 Aug 2026');
   });
 });

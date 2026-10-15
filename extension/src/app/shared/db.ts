@@ -12,8 +12,8 @@ export const STORES = {
   archive: 'archive',
   albums: 'albums',
   albumMembers: 'albumMembers',
-  /** A photo's fingerprint and quality, per model key: [modelKey, mediaKey]. */
-  embeddings: 'embeddings',
+  /** A photo's fingerprint and quality, per account and model key: [account, modelKey, mediaKey]. */
+  fingerprints: 'fingerprints',
   /** Upload time and original size, for choosing which duplicate to keep: [account, mediaKey]. */
   photoInfo: 'photoInfo',
   /** Per account: the detail its library is analysed at, chosen once by the speed check. */
@@ -26,6 +26,8 @@ export const STORES = {
   simulatedTrash: 'simulatedTrash',
   /** The user's choices per account (which kinds of photo are protected). */
   preferences: 'preferences',
+  /** Per account: how many duplicate groups are waiting for review, as last worked out, for the popup. */
+  reviewSummaries: 'reviewSummaries',
 } as const;
 
 export function request<T>(req: IDBRequest<T>): Promise<T> {
@@ -47,6 +49,16 @@ export function committed(tx: IDBTransaction): Promise<void> {
 /** Shown when an older Photo Cleaner page keeps the database at its old version. */
 export const UPGRADE_BLOCKED =
   'Photo Cleaner was updated and an older copy of it is still open, holding its saved data. Reload your Google Photos tabs and close other Photo Cleaner tabs; it then carries on by itself.';
+
+/**
+ * What to tell the user when the saved data can't be opened: the blocked-upgrade explanation, or
+ * plain words for anything else (whose details go to the log, not on screen).
+ */
+export function storageProblemText(error: unknown): string {
+  if (error instanceof Error && error.message === UPGRADE_BLOCKED) return UPGRADE_BLOCKED;
+  console.warn('Photo Cleaner: the saved data could not be opened', error);
+  return "Photo Cleaner can't open its saved data right now. Close other Photo Cleaner tabs and reload your Google Photos tabs; if it keeps happening, restart Chrome.";
+}
 
 /**
  * Opens the database. [onClosed] hears when this connection is gone, so the next use opens a new
@@ -91,7 +103,10 @@ function upgrade(open: IDBOpenDBRequest): void {
     create(STORES.archive, { keyPath: ['runId', 'mediaKey'] });
     create(STORES.albums, { keyPath: ['runId', 'albumKey'] });
     create(STORES.albumMembers, { keyPath: ['runId', 'albumKey', 'mediaKey'] });
-    create(STORES.embeddings, { keyPath: ['modelKey', 'mediaKey'] })?.createIndex('account', 'account');
+    // Versions 3 to 5 kept fingerprints by photo key alone; version 6 keys them by account too.
+    if (create(STORES.fingerprints, { keyPath: ['account', 'modelKey', 'mediaKey'] }) && db.objectStoreNames.contains(OLD_FINGERPRINTS)) {
+      moveFingerprints(open.transaction!);
+    }
     create(STORES.photoInfo, { keyPath: ['account', 'mediaKey'] });
     create(STORES.analysisSettings, { keyPath: 'account' });
     create(STORES.decisions, { keyPath: 'id', autoIncrement: true })?.createIndex('account', 'account');
@@ -100,6 +115,28 @@ function upgrade(open: IDBOpenDBRequest): void {
     jobs?.createIndex('decisionId', 'decisionId');
     create(STORES.simulatedTrash, { keyPath: ['account', 'dedupKey'] });
     create(STORES.preferences, { keyPath: 'account' });
+    create(STORES.reviewSummaries, { keyPath: 'account' });
+  };
+}
+
+/** Where versions 3 to 5 kept the fingerprints. */
+const OLD_FINGERPRINTS = 'embeddings';
+
+/**
+ * Copies every fingerprint into the per-account store, then removes the old store. Both happen in the
+ * upgrade's one transaction: if anything fails, the upgrade fails as a whole and nothing is lost.
+ */
+function moveFingerprints(tx: IDBTransaction): void {
+  const target = tx.objectStore(STORES.fingerprints);
+  const cursor = tx.objectStore(OLD_FINGERPRINTS).openCursor();
+  cursor.onsuccess = () => {
+    const at = cursor.result;
+    if (at) {
+      target.put(at.value);
+      at.continue();
+    } else {
+      tx.db.deleteObjectStore(OLD_FINGERPRINTS);
+    }
   };
 }
 

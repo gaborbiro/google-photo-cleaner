@@ -32,14 +32,15 @@ class ReviewQueuesTest {
 
     @Test
     fun a_decided_moment_that_gains_a_photo_comes_back_with_only_the_newcomer_undecided() {
-        decide(queue("a", "b", "c").pending.single(), DecisionKind.KEPT)
-        assertTrue(queue("a", "b", "c").pending.isEmpty())
+        // Pin the existing keeper so the newcomer is a proposal, rather than a new recommended keeper.
+        decide(queue("a", "b", "c", favourites = setOf("a")).pending.single(), DecisionKind.KEPT)
+        assertTrue(queue("a", "b", "c", favourites = setOf("a")).pending.isEmpty())
 
-        val returning = queue("a", "b", "c", "d").pending.single()
+        val returning = queue("a", "b", "c", "d", favourites = setOf("a")).pending.single()
         assertEquals(setOf("a", "b", "c", "d"), returning.members.map { it.photo.item.mediaKey }.toSet())
         assertEquals(setOf("d"), returning.members.filter { !it.previouslyReviewed }.map { it.photo.item.mediaKey }.toSet())
         // Photos decided on before are never pre-selected for the trash again.
-        assertTrue(returning.defaultSelection().all { it == "d" })
+        assertEquals(setOf("d"), returning.defaultSelection())
     }
 
     @Test
@@ -89,6 +90,20 @@ class ReviewQueuesTest {
 
         decisions += Decision(2, "sweep", DecisionKind.APPROVED, listOf(DecisionItem(group.keeper.photo.item.mediaKey, "d")), setOf(group.keeper.photo.item.mediaKey), 0, null)
         assertTrue(queue("a", "b", "c").pending.isEmpty(), "proposals relative to a keeper that is going away are dropped")
+    }
+
+    @Test
+    fun a_skipped_moment_also_leaves_out_photos_approved_elsewhere() {
+        val group = queue("a", "b", "c").pending.single()
+        decide(group, DecisionKind.DEFERRED)
+        val proposed = group.members.first { it.role == MemberRole.PROPOSED }.photo.item
+        decisions += Decision(2, "sweep", DecisionKind.APPROVED, listOf(DecisionItem(proposed.mediaKey, proposed.dedupKey)), setOf(proposed.mediaKey), 0, null)
+        val left = queue("a", "b", "c").pending.single()
+        assertTrue(left.members.none { it.photo.item.mediaKey == proposed.mediaKey }, "a photo already queued is not offered twice")
+
+        // Search queued the keeper: what is left of the skipped moment would trash every copy of it.
+        decisions += Decision(3, "sweep", DecisionKind.APPROVED, listOf(DecisionItem(group.keeper.photo.item.mediaKey, "d")), setOf(group.keeper.photo.item.mediaKey), 0, null)
+        assertTrue(queue("a", "b", "c").pending.isEmpty(), "a skipped moment whose keeper is going away is dropped too")
     }
 
     @Test

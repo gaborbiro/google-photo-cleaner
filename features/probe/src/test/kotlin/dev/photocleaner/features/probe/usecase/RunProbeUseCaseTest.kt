@@ -101,6 +101,10 @@ class RunProbeUseCaseTest {
     @Test
     fun `a consistent account passes every check`() = runTest {
         val report = probe(FakeLibrary())
+        assertEquals(setOf(
+            "google-photos-session", "library-first-page", "library-pagination", "favourites-listing",
+            "favourites-agree-with-library-flags", "album-list", "album-contents-link-to-library-photos", "previews", "requests",
+        ), report.checks.map { it.id }.toSet())
         val failed = report.checks.filter { it.outcome != ProbeOutcome.PASS }
         assertTrue(failed.isEmpty(), "unexpected: ${failed.map { "${it.id}=${it.outcome}: ${it.summary}" }}")
     }
@@ -133,13 +137,16 @@ class RunProbeUseCaseTest {
     @Test
     fun `a failed session skips everything else`() = runTest {
         val report = probe(FakeLibrary(sessionFails = true))
+        assertEquals(9, report.checks.size, "the failed session must explicitly skip the remaining checks")
         assertEquals(ProbeOutcome.FAIL, report.outcome("google-photos-session"))
         assertTrue(report.checks.drop(1).dropLast(1).all { it.outcome == ProbeOutcome.SKIPPED })
     }
 
     @Test
     fun `the report contains no keys, titles or URLs`() = runTest {
-        val text = Json.encodeToString(ProbeReport.serializer(), probe(FakeLibrary()))
+        val report = probe(FakeLibrary())
+        assertEquals(9, report.checks.size, "privacy must be checked on a populated report")
+        val text = Json.encodeToString(ProbeReport.serializer(), report)
         listOf("lib-", "dedup-", "album-scoped", "album-own", "holiday", "Friend", "secret-thumb", "auth-key", ME, OTHER, ACCOUNT)
             .forEach { assertFalse(it in text, "report leaks '$it'") }
     }

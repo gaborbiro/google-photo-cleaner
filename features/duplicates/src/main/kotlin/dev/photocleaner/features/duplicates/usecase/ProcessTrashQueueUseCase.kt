@@ -2,6 +2,7 @@ package dev.photocleaner.features.duplicates.usecase
 
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.usecase.ClassifyInventoryUseCase
+import dev.photocleaner.repositories.inventory.domain.StoredMediaType
 import dev.photocleaner.repositories.review.domain.ReviewRepository
 import dev.photocleaner.repositories.review.domain.TrashJob
 import dev.photocleaner.repositories.review.domain.TrashJobState
@@ -92,12 +93,19 @@ class ProcessTrashQueueUseCase(
         if (!coverage.isComplete) return "Waiting: the inventory is incomplete. Run the scan again."
         if (coverage.isStale) return "Waiting: the inventory is out of date. Run the scan again to continue."
         val eligibility = classification.items.associate { it.item.mediaKey to it.eligibility }
+        val identities = classification.items.associate { it.item.mediaKey to it.item.dedupKey }
+        // Videos are never cleanup candidates, whatever approved them.
+        val photos = classification.items.filter { it.item.mediaType == StoredMediaType.PHOTO }.map { it.item.mediaKey }.toSet()
         val active = review.activeDecisions().map { it.id }.toSet()
 
         val sendable = mutableListOf<TrashJob>()
         queued.forEach { job ->
             when {
                 job.decisionId !in active -> review.transition(job.id, TrashJobState.QUEUED, TrashJobState.CANCELLED, null, clock())
+                identities[job.mediaKey] != null && identities[job.mediaKey] != job.dedupKey ->
+                    review.transition(job.id, TrashJobState.QUEUED, TrashJobState.BLOCKED, "Photo identity changed since approval", clock())
+                eligibility[job.mediaKey] == Eligibility.ELIGIBLE && job.mediaKey !in photos ->
+                    review.transition(job.id, TrashJobState.QUEUED, TrashJobState.BLOCKED, "Not a photo: only photos are trashed", clock())
                 eligibility[job.mediaKey] == Eligibility.ELIGIBLE -> sendable += job
                 eligibility[job.mediaKey] == null ->
                     review.transition(job.id, TrashJobState.QUEUED, TrashJobState.BLOCKED, "No longer in the library", clock())

@@ -15,7 +15,7 @@ const tabsLabel = document.getElementById('tabs') as HTMLDivElement;
 
 async function refresh(): Promise<void> {
   const response = (await chrome.runtime.sendMessage({ kind: 'pc-get-state' })) as { state: string; photosTabCount: number };
-  stateLabel.textContent = STATE_TEXT[response.state] ?? response.state;
+  stateLabel.textContent = STATE_TEXT[response.state] ?? 'Checking the connection to the app…';
   tabsLabel.textContent = response.photosTabCount === 0
     ? 'No photos.google.com tab open'
     : `${response.photosTabCount} photos.google.com tab(s) open`;

@@ -88,6 +88,7 @@ class PreviewSampleUseCaseTest {
         connector.failure = { op, call -> if (op == "preview" && call >= 2) ConnectorException.SessionExpired("signed out", 401) else null }
         val events = useCase().execute(emptySet()).toList()
         assertEquals(2, events.filterIsInstance<SampleEvent.Loaded>().size)
-        assertIs<SampleEvent.Stopped>(events.last())
+        val stopped = assertIs<SampleEvent.Stopped>(events.last())
+        assertEquals("The Google Photos session ended. Reload photos.google.com, then resume.", stopped.reason)
     }
 }

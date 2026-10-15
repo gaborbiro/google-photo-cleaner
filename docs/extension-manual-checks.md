@@ -49,8 +49,10 @@ and copy the console (right-click the page → Inspect → Console).
 1. On the Scan tab, untick **favourites**. The panel and popup show the change without a reload;
    Protection details count favourites as eligible.
 2. Tick it again. Duplicates and Search no longer offer favourites.
-3. Approve a favourite for the trash while favourites are unticked, then tick it again: the trash
-   queue line counts it as blocked, not in the trash.
+3. With favourites unticked, approve a favourite for the trash: the trash queue line counts it in the
+   (simulated) trash within a few seconds, since approved photos are sent at once. **Z** brings it
+   back. (A photo re-protected while still queued is blocked; that is tested automatically, because
+   by hand there is no time to tick the box before it is sent.)
 
 ## 4. Duplicates
 

@@ -142,6 +142,7 @@ export class IndexedDbInventoryStore {
         clear(STORES.albumMembers, scope);
         const albums = tx.objectStore(STORES.albums);
         const album = await request(albums.get([runId, scope]) as IDBRequest<AlbumRow | undefined>);
+        // Its contents are cleared either way; an album no longer listed has no failure to forget.
         if (album) albums.put({ ...album, failureReason: null });
         break;
       }
@@ -154,7 +155,9 @@ export class IndexedDbInventoryStore {
     const tx = await this.tx([STORES.albums], 'readwrite');
     const albums = tx.objectStore(STORES.albums);
     const album = await request(albums.get([runId, albumKey]) as IDBRequest<AlbumRow | undefined>);
-    if (album) albums.put({ ...album, failureReason: reason });
+    // A failure that can't be recorded must not vanish: it is what keeps the scan from counting as complete.
+    if (!album) throw new Error(`Album ${albumKey} is not in scan run ${runId}`);
+    albums.put({ ...album, failureReason: reason });
     await committed(tx);
   }
 

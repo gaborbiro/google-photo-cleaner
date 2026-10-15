@@ -1,8 +1,11 @@
 // Search & sweep's state machine and texts, with a fake library, model and trash queue.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { ACTION_FAILED } from '../../src/app/duplicates/reviewModel';
 import type { StoredDecision } from '../../src/app/duplicates/reviewStore';
-import { SearchModel, type LibraryPhoto, type SearchDeps, type SearchLibrary } from '../../src/app/search/searchModel';
+import { SearchModel, searchIntroText, type LibraryPhoto, type SearchDeps, type SearchLibrary } from '../../src/app/search/searchModel';
+import { SourceError } from '../../src/app/scan/source';
+import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
 const at = (degrees: number) => Float32Array.from([Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)]);
 
@@ -15,6 +18,7 @@ class Fakes implements SearchDeps {
   library: SearchLibrary = {
     blocked: null,
     photos: new Map([photo('box1', 0, 3), photo('box2', 5, 1), photo('fav', 2, 2, { eligible: false }), photo('tub', 30, 4), photo('cat', 80, 5)].map((p) => [p.mediaKey, p])),
+    protection: ALL_PROTECTED,
   };
   swept: string[][] = [];
   undone: StoredDecision[] = [];
@@ -34,10 +38,16 @@ class Fakes implements SearchDeps {
     if (this.sweepError) throw this.sweepError;
     this.swept.push(keys);
   }
+  undoError: Error | null = null;
   async undo() {
+    if (this.undoError) throw this.undoError;
     return this.undone.shift() ?? null;
   }
+  /** Thumbnails that fail, and how. */
+  failingPreviews = new Map<string, SourceError>();
   async preview(thumbUrl: string) {
+    const failure = this.failingPreviews.get(thumbUrl);
+    if (failure) throw failure;
     return `data:${thumbUrl}`;
   }
 }
@@ -152,6 +162,28 @@ describe('Search & sweep', () => {
     expect(view().resultText).toBe('4 best matches · 1 selected for the trash');
   });
 
+  it("the grid's measured width sets how far up and down move; a hidden grid keeps the last width", async () => {
+    const { model, view } = await searched();
+    model.gridWidthMeasured(3 * 160 + 2 * 6 - 1); // just too narrow for 3 tiles
+    model.focusMove(0, 1, false);
+    expect(view().tiles.findIndex((t) => t.current)).toBe(2);
+    model.focusMove(0, -1, false);
+    model.gridWidthMeasured(3 * 160 + 2 * 6); // exactly 3
+    model.gridWidthMeasured(0);
+    model.focusMove(0, 1, false);
+    expect(view().tiles.findIndex((t) => t.current)).toBe(3);
+  });
+
+  it('a failed undo says so', async () => {
+    const { model, view, fakes } = await searched();
+    fakes.undoError = new Error('database closed');
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    model.undo();
+    await settle();
+    expect(view().notice).toMatchObject({ text: ACTION_FAILED, tone: 'negative' });
+    errors.mockRestore();
+  });
+
   it('Z undoes and searches again so the photos come back', async () => {
     const { model, fakes, view } = await searched();
     model.tileClicked(0, false);
@@ -196,7 +228,7 @@ describe('Search & sweep', () => {
 
   it('a blocked library says why and shows nothing', async () => {
     const fakes = new Fakes();
-    fakes.library = { blocked: 'SCAN_STALE', photos: new Map() };
+    fakes.library = { blocked: 'SCAN_STALE', photos: new Map(), protection: ALL_PROTECTED };
     const { view } = await searched('boxes', fakes);
     expect(view()).toMatchObject({ blockedText: 'The library scan is more than a day old. Check for new photos on the Scan tab (about 2–3 minutes).', tiles: [], resultText: null });
   });
@@ -228,5 +260,32 @@ describe('Search & sweep', () => {
     await settle();
     await settle();
     expect(view().tiles[0]!.imageUrl).toBe('data:thumb-box1');
+  });
+
+  it('a thumbnail that fails says why, and is tried again when it comes back into view', async () => {
+    const { model, view, fakes } = await searched();
+    fakes.failingPreviews.set('thumb-box1', new SourceError('BAD_REQUEST', 'Preview host not allowed'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    model.tileVisible('box1');
+    await settle();
+    await settle();
+    expect(view().tiles[0]).toMatchObject({ imageUrl: null, error: 'Preview unavailable: Photo Cleaner needs an update' });
+    expect(warn).toHaveBeenCalledWith('Photo Cleaner: unexpected answer from Google Photos (Search: preview)', expect.objectContaining({ kind: 'BAD_REQUEST' }));
+    warn.mockRestore();
+
+    fakes.failingPreviews.clear();
+    model.tileVisible('box1');
+    await settle();
+    await settle();
+    expect(view().tiles[0]).toMatchObject({ imageUrl: 'data:thumb-box1', error: null });
+  });
+});
+
+describe('what Search says never appears', () => {
+  it('follows the protection choices', () => {
+    expect(searchIntroText(ALL_PROTECTED)).toContain('; favourites, photos in albums, archived photos and photos of unknown status never appear.');
+    expect(searchIntroText({ favourites: false, albums: true, archived: false })).toContain('; photos in albums and photos of unknown status never appear.');
+    expect(searchIntroText({ favourites: false, albums: false, archived: false })).toContain('; photos of unknown status never appear.');
+    expect(searchIntroText(null)).toContain('; protected photos and photos of unknown status never appear.');
   });
 });

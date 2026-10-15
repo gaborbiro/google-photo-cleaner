@@ -4,6 +4,7 @@
 import { NO_ANALYSIS } from '../ai/analysis';
 import { jobId, pauseJob, resumeIfWaitingForPhotos, resumeJob, setFullSpeed, startAnalysisJob, startScanJob, type Job, type JobKind } from './job';
 import type { AppRequest } from './messages';
+import type { ScanView } from './jobView';
 import type { JobStore } from './store';
 
 export type Send = (request: AppRequest) => Promise<unknown>;
@@ -21,6 +22,19 @@ export async function startAnalysis(store: JobStore, send: Send, account: string
     startAnalysisJob(account, nowMs, previous?.kind === 'analysis' ? previous : null, NO_ANALYSIS));
   await send({ kind: 'app-wake-engine' });
   return saved;
+}
+
+/** The Scan card's button: does what its view says ([action] on [target]). */
+export function scanButton(view: Pick<ScanView, 'action' | 'target'>, store: JobStore, send: Send, account: string, nowMs: number): Promise<Job | null> {
+  switch (view.action) {
+    case 'start':
+    case 'restart':
+      return view.target === 'library-scan' ? startScan(store, send, account, nowMs) : startAnalysis(store, send, account, nowMs);
+    case 'pause':
+      return pause(store, view.target, account, nowMs);
+    case 'resume':
+      return resume(store, send, view.target, account, nowMs);
+  }
 }
 
 export function pause(store: JobStore, kind: JobKind, account: string, nowMs: number): Promise<Job | null> {

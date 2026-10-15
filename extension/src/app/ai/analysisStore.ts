@@ -63,24 +63,23 @@ export class IndexedDbAnalysisStore {
     await committed(tx);
   }
 
-  /** Keys of the photos already analysed with [modelKey]. */
-  async analysedKeys(modelKey: string): Promise<Set<string>> {
-    const tx = await this.tx([STORES.embeddings], 'readonly');
-    const keys = await request(tx.objectStore(STORES.embeddings).getAllKeys(prefixRange(modelKey)));
-    return new Set(keys.map((k) => (k as IDBValidKey[])[1] as string));
+  /** Keys of [account]'s photos already analysed with [modelKey]. */
+  async analysedKeys(modelKey: string, account: string): Promise<Set<string>> {
+    const tx = await this.tx([STORES.fingerprints], 'readonly');
+    const keys = await request(tx.objectStore(STORES.fingerprints).getAllKeys(prefixRange(account, modelKey)));
+    return new Set(keys.map((k) => (k as IDBValidKey[])[2] as string));
   }
 
   async saveEmbedding(embedding: StoredEmbedding): Promise<void> {
-    const tx = await this.tx([STORES.embeddings], 'readwrite');
-    tx.objectStore(STORES.embeddings).put(embedding);
+    const tx = await this.tx([STORES.fingerprints], 'readwrite');
+    tx.objectStore(STORES.fingerprints).put(embedding);
     await committed(tx);
   }
 
   /** Every fingerprint of [account] made with [modelKey]. */
   async embeddings(modelKey: string, account: string): Promise<StoredEmbedding[]> {
-    const tx = await this.tx([STORES.embeddings], 'readonly');
-    const all = await request(tx.objectStore(STORES.embeddings).getAll(prefixRange(modelKey)) as IDBRequest<StoredEmbedding[]>);
-    return all.filter((e) => e.account === account);
+    const tx = await this.tx([STORES.fingerprints], 'readonly');
+    return request(tx.objectStore(STORES.fingerprints).getAll(prefixRange(account, modelKey)) as IDBRequest<StoredEmbedding[]>);
   }
 
   async savePhotoInfo(info: PhotoInfo[]): Promise<void> {

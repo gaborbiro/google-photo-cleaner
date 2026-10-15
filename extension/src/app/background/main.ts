@@ -6,7 +6,7 @@ import type { OpError, OpResult, ReadOp, TabCommand } from '../../shared/protoco
 import { resumeWaitingForPhotos } from '../shared/actions';
 import { CHANGES_CHANNEL } from '../shared/constants';
 import { eraseAllData } from '../shared/erase';
-import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem } from '../shared/googleProblems';
+import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, tabProblem } from '../shared/googleProblems';
 import { IndexedDbJobStore } from '../shared/store';
 import { isAppRequest, type AccountAnswer, type AppRequest, type TabRequest } from '../shared/messages';
 
@@ -28,6 +28,7 @@ async function sendToTab<T>(tabId: number, message: TabCommand | TabRequest): Pr
   try {
     return (await chrome.tabs.sendMessage(tabId, message)) as T;
   } catch {
+    // Expected for a tab opened before the extension started: nothing listens there until injected.
     await injectInto(tabId);
     return (await chrome.tabs.sendMessage(tabId, message)) as T;
   }
@@ -41,7 +42,8 @@ async function accountOf(tab: chrome.tabs.Tab | undefined): Promise<AccountAnswe
   let result: OpResult;
   try {
     result = await sendToTab<OpResult>(target.id, { kind: 'pc-command', op: 'status', params: {} });
-  } catch {
+  } catch (error) {
+    console.warn('Photo Cleaner: the Google Photos tab did not answer the account check', error);
     return { account: null, problem: 'The Google Photos tab is not responding; reload it.', photosTabOpen: true };
   }
   if (!result.ok) {
@@ -84,36 +86,47 @@ async function wake(tab: chrome.tabs.Tab): Promise<void> {
   await loaded;
 }
 
-async function fingerprintOf(tab: chrome.tabs.Tab): Promise<string | null> {
+/** The account [tab] is signed in to; its failed account check; or null when the tab did not answer at all. */
+async function statusOf(tab: chrome.tabs.Tab): Promise<{ fingerprint: string } | { failure: OpError } | null> {
   if (tab.id === undefined) return null;
   try {
     await wake(tab);
     const status = await sendToTab<OpResult>(tab.id, { kind: 'pc-command', op: 'status', params: {} });
-    const fingerprint = status.ok ? (status.data as { accountFingerprint: string }).accountFingerprint : null;
-    if (fingerprint) tabAccounts.set(tab.id, fingerprint);
-    else tabAccounts.delete(tab.id);
-    return fingerprint;
-  } catch {
+    if (!status.ok) {
+      tabAccounts.delete(tab.id);
+      return { failure: status.error };
+    }
+    const fingerprint = (status.data as { accountFingerprint: string }).accountFingerprint;
+    tabAccounts.set(tab.id, fingerprint);
+    return { fingerprint };
+  } catch (error) {
+    console.warn('Photo Cleaner: a Google Photos tab did not answer', error);
     tabAccounts.delete(tab.id);
     return null;
   }
 }
 
-/** A Photos tab signed in to [account]: the one used last time if it still is, otherwise the first that is. */
-async function tabFor(account: string): Promise<number | null> {
+/**
+ * A Photos tab signed in to [account]: the one used last time if it still is, otherwise the first that is.
+ * Without one, why (see [tabProblem]): a scan then says Google changed something, or that it is signed
+ * out, rather than asking for a Google Photos tab that is already open.
+ */
+async function tabFor(account: string): Promise<{ tabId: number } | { failure: OpError }> {
   const tabs = await photosTabs();
   const known = tabs.find((t) => t.id !== undefined && tabAccounts.get(t.id) === account);
+  const failures: OpError[] = [];
   for (const tab of known ? [known, ...tabs.filter((t) => t !== known)] : tabs) {
-    if (tab.id !== undefined && (await fingerprintOf(tab)) === account) return tab.id;
+    const answer = await statusOf(tab);
+    if (answer && 'fingerprint' in answer && answer.fingerprint === account) return { tabId: tab.id! };
+    if (answer && 'failure' in answer) failures.push(answer.failure);
   }
-  return null;
+  return { failure: tabProblem(failures) };
 }
 
 async function runOp(account: string, op: ReadOp, params: Record<string, unknown>): Promise<OpResult> {
-  const tabId = await tabFor(account);
-  if (tabId === null) {
-    return { ok: false, error: { kind: 'NO_PHOTOS_TAB', message: 'Open photos.google.com, signed in to the account being scanned.' } };
-  }
+  const found = await tabFor(account);
+  if ('failure' in found) return { ok: false, error: found.failure };
+  const { tabId } = found;
   const result = await sendToTab<OpResult>(tabId, { kind: 'pc-command', op, params });
   // A tab that went to sleep or lost its session mid-scan: one more try after waking it.
   if (!result.ok && (result.error.kind === 'NO_PHOTOS_TAB' || result.error.kind === 'TRANSIENT')) {
@@ -161,7 +174,7 @@ async function closeEngineIfIdle(): Promise<void> {
 /** A Photos tab signed in to [account] answered: jobs that paused for want of one carry on. */
 async function carryOn(account: string): Promise<void> {
   if (await resumeWaitingForPhotos(store, account, Date.now())) {
-    console.info(`Photo Cleaner: Google Photos is back for account ${account.slice(0, 8)}…; carrying on`);
+    console.info('Photo Cleaner: Google Photos is back for a waiting account; carrying on');
     await wakeEngine();
   }
 }

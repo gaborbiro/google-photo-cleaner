@@ -1,36 +1,32 @@
 // The toolbar popup: the front door. Says what to do next, depending on where things stand.
 
 import { createRoot } from 'react-dom/client';
-import { accountLabel } from '../shared/jobView';
-import { send, useAccount, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useStartOverWhenErased } from '../ui/hooks';
+import { send, useSignedInScan, useStartOverWhenErased } from '../ui/hooks';
 import { EraseCard, ScanCard, StorageProblem } from '../ui/JobCard';
 
 function Popup() {
   useStartOverWhenErased();
-  const { answer } = useAccount();
-  const account = answer?.account ?? null;
-  const job = useScanJob(account?.fingerprint ?? null);
-  const report = useReport(account?.fingerprint ?? null, job, useProtectionChoices(account?.fingerprint ?? null));
-  const analysis = useAnalysisJob(account?.fingerprint ?? null);
+  const { view, scan, analysis, report, reviewText } = useSignedInScan();
   return (
     <main className="popup">
       <h1>Photo Cleaner</h1>
       <StorageProblem />
-      {answer === undefined && <p className="muted">Looking for Google Photos…</p>}
-      {answer && !answer.photosTabOpen && (
+      {view.state === 'looking' && <p className="muted">Looking for Google Photos…</p>}
+      {view.state === 'no-photos' && (
         <>
           <p>Photo Cleaner works inside Google Photos. Open it to scan your library.</p>
           <button className="primary" onClick={() => void send({ kind: 'app-open-photos' })}>Open Google Photos</button>
         </>
       )}
-      {answer?.photosTabOpen && !account && <p className="warn">{answer.problem}</p>}
-      {account && (
+      {view.state === 'problem' && <p className="warn">{view.problemText}</p>}
+      {view.account && (
         <>
-          <p className="mono">Account: {accountLabel(account.fingerprint, account.email)}</p>
-          {job !== undefined && analysis !== undefined && <ScanCard account={account.fingerprint} scan={job} analysis={analysis} report={report} />}
+          <p className="mono">{view.accountText}</p>
+          {scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} />}
+          {reviewText && <button className="primary" onClick={() => void send({ kind: 'app-open-review', account: view.account })}>{reviewText}</button>}
           <div className="row">
             <button onClick={() => void send({ kind: 'app-show-panel' })}>Show panel in Google Photos</button>
-            <button onClick={() => void send({ kind: 'app-open-review', account: account.fingerprint })}>Open in tab <span aria-hidden="true">⤢</span></button>
+            <button onClick={() => void send({ kind: 'app-open-review', account: view.account })}>Open in tab <span aria-hidden="true">⤢</span></button>
           </div>
         </>
       )}

@@ -43,7 +43,8 @@ internal object EligibilityRules {
         }
         val issues = snapshot.albums.mapNotNull(::albumIssue)
         val finishedAt = run.finishedAtMs
-        val stale = finishedAt == null || nowMs - finishedAt > maxAgeMs
+        // A scan that finished "in the future" means the clock moved back: its age is unknown, so it proves nothing.
+        val stale = finishedAt == null || finishedAt > nowMs || nowMs - finishedAt > maxAgeMs
         val complete = run.status == RunStatus.COMPLETED &&
             phases.all { it.completed } &&
             issues.isEmpty()

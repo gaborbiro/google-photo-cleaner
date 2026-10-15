@@ -9,5 +9,8 @@ export const CHANGES_CHANNEL = 'photo-cleaner-app-changes';
 
 /** The browser database (IndexedDB) for everything the app stores. */
 export const DB_NAME = 'photo-cleaner';
-/** 2: library scan stores (M2). 3: analysis stores (M3). 4: review decisions and trash queue (M4). 5: preferences. */
-export const DB_VERSION = 5;
+/**
+ * 2: library scan stores (M2). 3: analysis stores (M3). 4: review decisions and trash queue (M4). 5: preferences.
+ * 6: fingerprints per account (moved from `embeddings`, which was keyed by photo key alone); review summaries.
+ */
+export const DB_VERSION = 6;

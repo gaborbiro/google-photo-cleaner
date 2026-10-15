@@ -18,7 +18,7 @@ import { SimulatedTrash } from '../../src/app/duplicates/trash';
 import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
 import { endJob, jobId, NO_PROGRESS, reportProgress, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 import type { AccountAnswer } from '../../src/app/shared/messages';
-import { IndexedDbPreferences } from '../../src/app/shared/preferences';
+import { ALL_PROTECTED, IndexedDbPreferences } from '../../src/app/shared/preferences';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
 import { fakeItem, FakePhotos, NOW, scan } from './fakes';
 
@@ -117,9 +117,6 @@ function press(key: string, target: EventTarget = window) {
   target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
   target.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true }));
 }
-
-/** Lets React draw whatever a click or key changed, before checking that something did not happen. */
-const moment = () => new Promise((resolve) => setTimeout(resolve, 50));
 
 const requests = (kind: string) => sent.filter((r) => r.kind === kind);
 
@@ -289,8 +286,12 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(selectedCount(root)).toBe(3));
 
     press('d', root.querySelector('input[type="search"]')!);
-    await moment();
+    // A later change drawn on screen means the key press above was handled by then.
+    searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.click();
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(2));
     expect(root.textContent).not.toContain('to the trash?');
+    searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.click();
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(3));
 
     press('d');
     await shows(root, 'Move 3 photos to the trash?');
@@ -358,6 +359,14 @@ describe('clicks and keys reach what they should', () => {
     await click(root, 'Show panel in Google Photos');
     expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a' }]);
     expect(requests('app-show-panel')).toHaveLength(1);
+  });
+
+  it('popup: with groups waiting it offers to review them, opening the review tab', async () => {
+    await scannedAndAnalysed(indexedDB);
+    await new IndexedDbReviewStore(indexedDB).saveSummary({ account: 'account-a', groupsToReview: 1_731, atMs: NOW + 1, protection: ALL_PROTECTED });
+    const root = await open('popup');
+    await click(root, 'Review 1,731 groups');
+    expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a' }]);
   });
 
   it('popup without Google Photos: Open Google Photos asks for it', async () => {

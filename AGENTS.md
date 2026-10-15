@@ -85,7 +85,10 @@ tested in `commonTest`, and compiled for the extension. Don't reimplement them i
 
 **The extension's database** (`extension/src/app/shared/db.ts`, version in `shared/constants.ts`):
 - Add stores in `upgrade()` only through `create(...)`, which only adds and is safe to run again.
-  Never drop or clear users' data in an upgrade.
+  Never drop or clear users' data in an upgrade. (The one exception, already shipped: the upgrade from
+  version 1 clears the `jobs` store, which then held only M1's pretend scans.) Data may move to a new
+  store when its key must change: copy every record and remove the old store in the same upgrade, which
+  is one transaction (see `moveFingerprints` in `db.ts`), and mark the old store `movedTo` in the test.
 - Raise `DB_VERSION` once per change set, with a comment saying what it adds. In
   `extension/test/app/db.test.ts`, add the new stores to `STORES_BY_VERSION` and the outgoing version
   to the versions upgraded from, so an update from every earlier version stays tested.
@@ -130,3 +133,17 @@ log photo keys, URLs, album titles, tokens or account details. Never commit secr
    ("Photo Cleaner (preview)").
 3. Open photos.google.com, signed in.
 4. After changes, press ↻ on the extension, then reload the Google Photos tab.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues in gaborbiro/google-photo-cleaner, through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.

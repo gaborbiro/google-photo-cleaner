@@ -22,20 +22,22 @@ class FlakyTrash extends SimulatedTrash {
   }
 }
 
-async function setup(opts: { favourites?: number[] } = {}) {
+async function setup(opts: { favourites?: number[]; videos?: number[] } = {}) {
   const factory = new IDBFactory();
   const review = new IndexedDbReviewStore(factory);
   const trash = new FlakyTrash(factory);
   const inventory = newStore();
-  const source = new FakePhotos(Array.from({ length: 6 }, (_, i) => fakeItem(i, { isFavourite: opts.favourites?.includes(i) ?? false })));
+  const source = new FakePhotos(Array.from({ length: 6 }, (_, i) => fakeItem(i, { isFavourite: opts.favourites?.includes(i) ?? false, mediaType: opts.videos?.includes(i) ? 'VIDEO' : 'PHOTO' })));
   await scan(source, inventory);
   let classification: Classification | null = await classifyLatest(inventory);
   const deps: TrashQueueDeps = { account: 'account-a', review, trash, classify: async () => classification, now: () => NOW };
   return {
     review, trash, deps, source, inventory,
     /** As after a new library scan: classification follows the current library. */
-    rescan: async (nowMs = NOW) => {
-      await scan(source, inventory);
+    rescan: async (nowMs = NOW, opts: { stopEarly?: boolean } = {}) => {
+      let checks = 0;
+      // Stopped once it has started: an unfinished scan is the latest one.
+      await scan(source, inventory, opts.stopEarly ? { shouldStop: async () => ++checks > 2 } : {});
       classification = await classifyLatest(inventory, nowMs);
     },
   };
@@ -58,13 +60,22 @@ describe('review decisions and the trash queue', () => {
   });
 
   it('a photo that became a favourite after approval is blocked, never sent', async () => {
-    const { review, deps, source, rescan } = await setup();
+    const { review, deps, source, rescan, trash } = await setup();
     await review.recordDecision('account-a', 'g1', 'APPROVED', [item(1)], members(0, 1), NOW);
     source.library[1] = fakeItem(1, { isFavourite: true });
     source.favourites = [source.library[1]!];
     await rescan();
     await processTrashQueue(deps);
     expect(await review.jobs('account-a', ['BLOCKED'])).toMatchObject([{ mediaKey: 'lib-1', lastError: 'No longer eligible (PROTECTED)' }]);
+    expect(await trash.inTrash('account-a', ['dedup-1'])).toEqual(new Map([['dedup-1', false]]));
+  });
+
+  it('a video that reached the queue is blocked, never sent', async () => {
+    const { review, trash, deps } = await setup({ videos: [2] });
+    await review.recordDecision('account-a', 'g1', 'APPROVED', [item(1), item(2)], members(0, 1, 2), NOW);
+    await processTrashQueue(deps);
+    expect(await review.jobs('account-a', ['BLOCKED'])).toMatchObject([{ mediaKey: 'lib-2', lastError: 'Not a photo: only photos are trashed' }]);
+    expect(await trash.inTrash('account-a', ['dedup-1', 'dedup-2'])).toEqual(new Map([['dedup-1', true], ['dedup-2', false]]));
   });
 
   it('a photo gone from the library is blocked', async () => {
@@ -103,6 +114,24 @@ describe('review decisions and the trash queue', () => {
     await processTrashQueue(deps);
     const completed = await review.jobs('account-a', ['COMPLETED']);
     expect(completed.map((j) => [j.mediaKey, j.attempts])).toEqual([['lib-1', 1], ['lib-2', 2]]);
+  });
+
+  it('a photo whose status became unknown is blocked, never sent', async () => {
+    const { review, trash, deps, source, rescan } = await setup();
+    await review.recordDecision('account-a', 'g1', 'APPROVED', [item(1)], members(0, 1), NOW);
+    source.library[1] = fakeItem(1, { isOwned: false }); // e.g. now only shared with this account
+    await rescan();
+    await processTrashQueue(deps);
+    expect(await review.jobs('account-a', ['BLOCKED'])).toMatchObject([{ mediaKey: 'lib-1', lastError: 'No longer eligible (UNKNOWN)' }]);
+    expect(await trash.inTrash('account-a', ['dedup-1'])).toEqual(new Map([['dedup-1', false]]));
+  });
+
+  it('an unfinished library scan holds the queue', async () => {
+    const { review, deps, rescan } = await setup();
+    await review.recordDecision('account-a', 'g1', 'APPROVED', [item(1)], members(0, 1), NOW);
+    await rescan(NOW, { stopEarly: true });
+    expect((await processTrashQueue(deps)).waitingReason).toBe('Waiting: the library scan is unfinished. Finish it to continue.');
+    expect(await review.jobs('account-a', ['QUEUED'])).toHaveLength(1);
   });
 
   it('an out-of-date library scan holds the queue', async () => {

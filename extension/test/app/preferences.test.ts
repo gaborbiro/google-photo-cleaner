@@ -10,10 +10,10 @@ import { newStore, NOW, scan, standardAccount } from './fakes';
 describe('protection choices', () => {
   it('everything is protected until the user changes it; each account keeps its own', async () => {
     const preferences = new IndexedDbPreferences(new IDBFactory());
-    expect(await preferences.protection('acc1')).toEqual(ALL_PROTECTED);
+    expect(await preferences.protection('acc1')).toEqual({ favourites: true, albums: true, archived: true });
     await preferences.setProtection('acc1', { favourites: true, albums: false, archived: true });
     expect(await preferences.protection('acc1')).toEqual({ favourites: true, albums: false, archived: true });
-    expect(await preferences.protection('acc2')).toEqual(ALL_PROTECTED);
+    expect(await preferences.protection('acc2')).toEqual({ favourites: true, albums: true, archived: true });
   });
 
   it('with albums unticked, photos protected only by an album become eligible; favourites stay protected', async () => {

@@ -27,4 +27,11 @@ class ExtensionManifestTest {
         val id = hex.take(32).map { 'a' + it.digitToInt(16) }.joinToString("")
         assertEquals(id, BridgeConfig.EXTENSION_ID)
     }
+
+    @Test
+    fun `pairing rejection code matches what the extension understands`() {
+        val background = Files.readString(Path.of("../../extension/src/background/main.ts"))
+        val code = Regex("TOKEN_REJECTED_CODE = ([0-9]+)").find(background)!!.groupValues[1].toShort()
+        assertEquals(code, TOKEN_REJECTED_CODE)
+    }
 }

@@ -3,6 +3,7 @@ import io
 import json
 
 import numpy as np
+import pytest
 from PIL import Image, ImageFilter
 
 from photocleaner_worker.protocol import serve
@@ -14,6 +15,7 @@ class FakeEmbedder:
 
     def __init__(self) -> None:
         self.budgets: list[int | None] = []
+        self.texts: list[str] = []
 
     def info(self) -> dict:
         return {"model": "fake"}
@@ -31,18 +33,48 @@ class FakeEmbedder:
 
 
     def embed_text(self, texts):
+        self.texts.extend(texts)
         return np.stack([np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32) for _ in texts])
 
 
 def test_embed_text_returns_one_vector_per_text_and_validates():
+    embedder = FakeEmbedder()
     responses = run(
         {"id": 1, "op": "embedText", "params": {"texts": ["meal prep boxes", "  documents  "]}},
         {"id": 2, "op": "embedText", "params": {"texts": []}},
         {"id": 3, "op": "embedText", "params": {"texts": ["   "]}},
+        embedder=embedder,
     )
     vectors = [np.frombuffer(base64.b64decode(v), dtype="<f2") for v in responses[0]["data"]["vectors"]]
     assert len(vectors) == 2 and vectors[0].shape == (4,)
     assert [r["ok"] for r in responses] == [True, False, False]
+    assert [r["error"]["kind"] for r in responses[1:]] == ["BAD_REQUEST", "BAD_REQUEST"]
+    assert embedder.texts == ["meal prep boxes", "documents"]
+
+
+@pytest.mark.parametrize("shape", [(1, 4), (3, 4), (2,), (2, 0)])
+def test_embed_text_refuses_a_model_returning_the_wrong_number_of_vectors(shape):
+    class ShortResult(FakeEmbedder):
+        def embed_text(self, texts):
+            return np.zeros(shape, dtype=np.float32)
+
+    responses = run(
+        {"id": 1, "op": "embedText", "params": {"texts": ["boxes", "documents"]}},
+        {"id": 2, "op": "info"},
+        embedder=ShortResult(),
+    )
+    assert responses[0]["ok"] is False
+    assert responses[0]["error"]["kind"] == "INTERNAL"
+    assert responses[1]["ok"] is True
+
+
+def test_malformed_json_does_not_stop_the_next_request():
+    stdout = io.StringIO()
+    serve(FakeEmbedder, stdin=io.StringIO('{broken\n{"id":2,"op":"info"}\n'), stdout=stdout)
+    failed, recovered = [json.loads(line) for line in stdout.getvalue().splitlines()]
+    assert failed["id"] is None
+    assert failed["error"]["kind"] == "BAD_REQUEST"
+    assert recovered == {"id": 2, "ok": True, "data": {"model": "fake"}}
 
 
 def png_base64(colour=(200, 50, 50), size=(32, 24)) -> str:

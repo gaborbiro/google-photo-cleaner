@@ -16,7 +16,7 @@ object ProtectionJs {
      */
     fun classifyInventoryJson(snapshotJson: String, nowMs: Double, maxAgeMs: Double, choicesJson: String): String {
         val snapshot = JsJson.inventorySnapshot(JSON.parse(snapshotJson))
-        val result = InventoryClassifier.classify(snapshot, nowMs.toLong(), maxAgeMs.toLong(), JsJson.protectionChoices(JSON.parse(choicesJson)))
+        val result = InventoryClassifier.classify(snapshot, JsJson.millis(nowMs, "nowMs"), JsJson.millis(maxAgeMs, "maxAgeMs"), JsJson.protectionChoices(JSON.parse(choicesJson)))
         return JSON.stringify(toJs(result))
     }
 
@@ -66,6 +66,8 @@ private fun toJs(result: InventoryClassification): dynamic {
         "items" to result.items.map {
             obj(
                 "mediaKey" to it.item.mediaKey,
+                "dedupKey" to it.item.dedupKey,
+                "mediaType" to it.item.mediaType?.name,
                 "eligibility" to it.eligibility.name,
                 "protectionReasons" to it.protectionReasons.map { r -> r.name }.toTypedArray(),
                 "unknownReasons" to it.unknownReasons.map { r -> r.name }.toTypedArray(),

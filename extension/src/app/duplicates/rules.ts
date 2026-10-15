@@ -2,7 +2,7 @@
 // from the shared Kotlin module (features/shared/duplicates, compiled to JavaScript), so the
 // browser and the desktop app group photos the same way. This file only types their answers.
 
-import { calibrationReportJson, defaultMaxAgeMs, reviewQueueJson } from '../../../generated/kotlin/PhotoCleaner-features-shared-duplicates.mjs';
+import { calibrationReportJson, decisionItemsJson, defaultMaxAgeMs, reviewQueueJson } from '../../../generated/kotlin/PhotoCleaner-features-shared-duplicates.mjs';
 import { DUPLICATE_THRESHOLD, type Detail } from '../ai/model';
 import type { Eligibility } from '../scan/report';
 import type { InventorySnapshot } from '../scan/model';
@@ -118,15 +118,13 @@ export function reviewQueue(
 }
 
 /**
- * What a decision records for the trash, as the shared rules' decisionItems: exactly the selected
- * photos when approving, which must be ones the rules marked selectable; nothing for keep and skip.
+ * What a decision records for the trash, by the shared rules: exactly the selected photos when
+ * approving, which must be ones the rules marked selectable; nothing for keep and skip. A selection
+ * the rules refuse throws.
  */
 export function decisionItems(group: DuplicateGroup, kind: DecisionKind, selected: Set<string>): { mediaKey: string; dedupKey: string }[] {
-  if (kind !== 'APPROVED') return [];
-  if (selected.size === 0) throw new Error('Nothing is selected for the trash');
-  const selectable = new Map(group.members.filter((m) => m.selectable).map((m) => [m.mediaKey, m.dedupKey]));
-  if (![...selected].every((k) => selectable.has(k))) throw new Error('Only eligible photos can be trashed');
-  return [...selected].sort().map((mediaKey) => ({ mediaKey, dedupKey: selectable.get(mediaKey)! }));
+  const members = group.members.map(({ mediaKey, dedupKey, selectable }) => ({ mediaKey, dedupKey, selectable }));
+  return JSON.parse(decisionItemsJson(JSON.stringify(members), kind, JSON.stringify([...selected]))) as { mediaKey: string; dedupKey: string }[];
 }
 
 export type PairLabel = 'SAME' | 'NEAR_DUPLICATE' | 'DIFFERENT';

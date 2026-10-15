@@ -6,7 +6,7 @@ import { PREFERRED_DETAIL } from '../ai/model';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { classify, type Classification } from '../scan/report';
 import { IndexedDbPreferences } from '../shared/preferences';
-import { previewDataUrl } from '../ui/hooks';
+import { previewDataUrl } from '../shared/previews';
 import type { ReviewDeps } from './reviewModel';
 import { IndexedDbReviewStore } from './reviewStore';
 import { groupingSettings, reviewQueue, type AnalysedPhoto, type ReviewQueue } from './rules';
@@ -64,7 +64,19 @@ export function reviewDeps(account: string, stores: DuplicatesStores = sharedSto
     },
     undo: () => stores.review.undoLast(account, now()),
     preview: (thumbUrl, sizePx) => previewDataUrl(account, thumbUrl, sizePx),
+    groupsLeft: async (count) => stores.review.saveSummary({ account, groupsToReview: count, atMs: now(), protection: await stores.preferences.protection(account) }),
   };
+}
+
+/**
+ * Works out how many groups [account] has waiting and saves it, so the popup can say so before the
+ * review tab is opened (the background page does this when an analysis finishes). Nothing is saved
+ * while the groups can't be built (no finished, recent scan).
+ */
+export async function refreshReviewSummary(account: string, stores: DuplicatesStores = sharedStores(), now: () => number = Date.now): Promise<void> {
+  const queue = await loadQueue(stores, account, now());
+  if (queue.blocked) return;
+  await stores.review.saveSummary({ account, groupsToReview: queue.pending.length, atMs: now(), protection: await stores.preferences.protection(account) });
 }
 
 /** The latest library scan, classified now with the account's current protection choices. */

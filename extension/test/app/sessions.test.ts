@@ -6,7 +6,7 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
 import { modelKey } from '../../src/app/ai/model';
-import { duplicatesStores, reviewDeps, trashQueueDeps } from '../../src/app/duplicates/session';
+import { duplicatesStores, refreshReviewSummary, reviewDeps, trashQueueDeps } from '../../src/app/duplicates/session';
 import { processTrashQueue } from '../../src/app/duplicates/trash';
 import { searchDeps, searchStores } from '../../src/app/search/session';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
@@ -38,6 +38,7 @@ async function library() {
     search: searchDeps('account-a', search, now),
     review: reviewDeps('account-a', duplicates, now),
     queue: trashQueueDeps('account-a', duplicates, now),
+    refreshSummary: () => refreshReviewSummary('account-a', duplicates, now),
     stores: search,
     /** As after a new library scan. */
     rescan: () => scan(source, search.inventory),
@@ -107,5 +108,17 @@ describe('protection choices reach every check', () => {
     await processTrashQueue(queue);
     expect(await stores.review.jobs('account-a', ['BLOCKED'])).toMatchObject([{ mediaKey: 'lib-0', lastError: 'No longer eligible (PROTECTED)' }]);
     expect(await queue.trash.inTrash('account-a', ['dedup-0', 'dedup-3'])).toEqual(new Map([['dedup-0', false], ['dedup-3', true]]));
+  });
+});
+
+describe('the count of groups waiting, for the popup', () => {
+  it('is worked out after an analysis and with the choices it was built with; nothing while blocked', async () => {
+    const { stores, refreshSummary } = await library();
+    await refreshSummary();
+    expect(await stores.review.summary('account-a')).toEqual({ account: 'account-a', groupsToReview: 1, atMs: NOW, protection: ALL_PROTECTED });
+
+    const later = searchStores(new IDBFactory());
+    await refreshReviewSummary('account-a', { ...duplicatesStores(new IDBFactory()), review: later.review }, () => NOW);
+    expect(await later.review.summary('account-a')).toBeNull(); // no scan: the groups can't be built
   });
 });

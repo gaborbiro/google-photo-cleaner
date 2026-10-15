@@ -131,7 +131,7 @@ class AnalysisSession {
     try {
       let settings = await this.deps.store.settings(account);
       if (settings) {
-        this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey), this.photoKeys);
+        this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey, this.deps.account), this.photoKeys);
         // Nothing new since the last run: no model to start, no library to read again.
         if (this.analysed.size === this.photoKeys.size) {
           this.progress = { ...this.progress, detail: settings.detail, newPhotos: 0 };
@@ -143,7 +143,7 @@ class AnalysisSession {
         await this.loadModel();
         settings = await this.speedCheck();
       }
-      this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey), this.photoKeys);
+      this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey, this.deps.account), this.photoKeys);
       this.progress = { ...this.progress, detail: settings.detail, stage: 'analysing', newPhotos: this.photoKeys.size - this.analysed.size, newAnalysed: 0 };
       this.speed = new SpeedMeter(this.now());
       await this.emit(true);
@@ -184,25 +184,39 @@ class AnalysisSession {
   private async speedCheck() {
     this.progress = { ...this.progress, stage: 'speed-check' };
     await this.emit(true);
-    const page = await this.readPage(null);
-    const sample = page.entries.filter((p) => this.photoKeys.has(p.mediaKey) && p.thumbUrl).slice(0, SPEED_CHECK_PHOTOS + 1);
     const images: { photo: LibraryPhoto; image: RgbaImage }[] = [];
-    for (const photo of sample) {
-      const image = await this.fetchImage(photo);
-      if (image) images.push({ photo, image });
-    }
-    if (images.length < 2) throw new Pause('Not enough photo previews could be fetched for the speed check. Resume to try again.');
-    // The first photo also prepares the graphics card, so it is not timed.
+    const sampled = new Set<string>();
+    let failedInARow = 0;
+    let token: string | null = null;
+    do {
+      await this.stopIfAsked();
+      const page = await this.readPage(token);
+      const photos = page.entries.filter((p) => this.photoKeys.has(p.mediaKey));
+      await this.deps.store.savePhotoInfo(photos.map((p) => ({ account: this.deps.account, mediaKey: p.mediaKey, uploadedAtMs: p.uploadedAtMs, width: p.width, height: p.height })));
+      for (const photo of page.entries) {
+        if (!this.photoKeys.has(photo.mediaKey) || !photo.thumbUrl || sampled.has(photo.mediaKey)) continue;
+        sampled.add(photo.mediaKey);
+        const image = await this.fetchImage(photo);
+        if (image) images.push({ photo, image });
+        // Previews failing one after another have stopped working altogether: don't try the whole library.
+        failedInARow = image ? 0 : failedInARow + 1;
+        if (images.length === SPEED_CHECK_PHOTOS + 1 || failedInARow >= MAX_FAILED_IN_A_ROW) break;
+      }
+      token = page.nextPageToken;
+    } while (token !== null && images.length < SPEED_CHECK_PHOTOS + 1 && failedInARow < MAX_FAILED_IN_A_ROW);
+    if (images.length === 0 && failedInARow >= MAX_FAILED_IN_A_ROW) throw new Pause(PREVIEWS_STOPPED_TEXT);
+    if (images.length === 0) throw new Pause('Not enough photo previews could be fetched for the speed check. Resume to try again.');
+    // The first photo also prepares the graphics card, so it is not timed unless it is the only sample.
     const fingerprints: { photo: LibraryPhoto; image: RgbaImage; vector: Float32Array }[] = [];
     let timedMs = 0;
     for (const [index, { photo, image }] of images.entries()) {
       await this.stopIfAsked();
       const start = this.now();
       const vector = await this.deps.embedder.embed(image, PREFERRED_DETAIL);
-      if (index > 0) timedMs += this.now() - start;
+      if (index > 0 || images.length === 1) timedMs += this.now() - start;
       fingerprints.push({ photo, image, vector });
     }
-    const rate = (images.length - 1) / Math.max(timedMs / 1000, 0.001);
+    const rate = Math.max(1, images.length - 1) / Math.max(timedMs / 1000, 0.001);
     const detail = chooseDetail(rate, this.photoKeys.size);
     const settings = { account: this.deps.account, detail, modelKey: modelKey(detail), measuredPhotosPerSecond: rate, chosenAtMs: this.now() };
     await this.deps.store.saveSettings(settings);
@@ -285,10 +299,11 @@ class AnalysisSession {
     if (!photo.thumbUrl) return null;
     let rateLimits = 0;
     for (;;) {
+      let preview: Preview;
       try {
-        return await this.deps.decode(await this.deps.source.preview(photo.thumbUrl, PREVIEW_SIZE_PX));
+        preview = await this.deps.source.preview(photo.thumbUrl, PREVIEW_SIZE_PX);
       } catch (e) {
-        if (!(e instanceof SourceError)) return null; // a preview that can't be decoded
+        if (!(e instanceof SourceError)) throw e; // a bug, not this photo's fault: stops the run with its reason
         switch (e.kind) {
           case 'RATE_LIMIT':
             if (++rateLimits > MAX_RATE_LIMITS) throw new Pause('Google is limiting preview downloads. Resume the analysis later.');
@@ -304,6 +319,13 @@ class AnalysisSession {
           default: // this photo's preview is missing, or the network hiccuped: counted as failed, tried next time
             return null;
         }
+        continue;
+      }
+      try {
+        return await this.deps.decode(preview);
+      } catch (e) {
+        console.warn('Photo Cleaner: a photo preview could not be decoded', e);
+        return null; // counted as failed, tried next time
       }
     }
   }

@@ -3,28 +3,17 @@
 
 import { useState } from 'react';
 import type { AppRequest } from '../shared/messages';
-import { pause, resume, setAnalysisFullSpeed, startAnalysis, startScan } from '../shared/actions';
+import { scanButton, setAnalysisFullSpeed } from '../shared/actions';
 import type { AnalysisJob, ScanJob } from '../shared/job';
 import { scanView } from '../shared/jobView';
 import type { ReportView } from '../scan/report';
 import type { ProtectionChoices } from '../shared/preferences';
-import { send, setProtectionChoices, store, useStorageProblem } from './hooks';
+import { logFailure, send, setProtectionChoices, store, useStorageProblem } from './hooks';
 
 /** One Scan in two stages: reading the photo list, then analysing the new photos. */
 export function ScanCard({ account, scan, analysis, report }: { account: string; scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null | undefined }) {
   const view = scanView(scan, analysis, Date.now());
-  const act = () => {
-    const now = Date.now();
-    switch (view.action) {
-      case 'start':
-      case 'restart':
-        return void (view.target === 'library-scan' ? startScan(store, send, account, now) : startAnalysis(store, send, account, now));
-      case 'pause':
-        return void pause(store, view.target, account, now);
-      case 'resume':
-        return void resume(store, send, view.target, account, now);
-    }
-  };
+  const act = () => void scanButton(view, store, send, account, Date.now()).catch(logFailure(view.actionLabel));
   return (
     <section className="card">
       <div className="row">
@@ -41,12 +30,12 @@ export function ScanCard({ account, scan, analysis, report }: { account: string;
       {view.timesText && <div className="muted mono">{view.timesText}</div>}
       {view.fullSpeed !== null && (
         <label className="muted small">
-          <input type="checkbox" checked={view.fullSpeed} onChange={(e) => void setAnalysisFullSpeed(store, account, e.target.checked, Date.now())} />{' '}
+          <input type="checkbox" checked={view.fullSpeed} onChange={(e) => void setAnalysisFullSpeed(store, account, e.target.checked, Date.now()).catch(logFailure('changing full speed'))} />{' '}
           Full speed (don't slow down while I use the computer or on battery)
         </label>
       )}
       {/* Incomplete protection data changes what can be done: said outside the folded part (an old scan says so above). */}
-      {view.protectionKnown && report && report.tone === 'bad' && <div className="warn">{report.title}</div>}
+      {view.protectionKnown && report?.warningText && <div className="warn">{report.warningText}</div>}
       {view.protectionKnown && report && <ProtectionDetails report={report} />}
     </section>
   );
@@ -55,7 +44,7 @@ export function ScanCard({ account, scan, analysis, report }: { account: string;
 /** Folded away by default: when the scan ran and how many photos are protected, eligible or unknown. */
 function ProtectionDetails({ report }: { report: ReportView }) {
   const [copied, setCopied] = useState(false);
-  const copy = () => void navigator.clipboard.writeText(report.copyText).then(() => setCopied(true));
+  const copy = () => void navigator.clipboard.writeText(report.copyText).then(() => setCopied(true), logFailure('copying the report'));
   return (
     <details className="protection">
       <summary className="muted">Protection details</summary>
@@ -85,7 +74,7 @@ function ProtectionDetails({ report }: { report: ReportView }) {
 export function ProtectionCard({ account, choices }: { account: string; choices: ProtectionChoices }) {
   const box = (key: keyof ProtectionChoices, label: string) => (
     <label>
-      <input type="checkbox" checked={choices[key]} onChange={(e) => void setProtectionChoices(account, { ...choices, [key]: e.target.checked })} /> {label}
+      <input type="checkbox" checked={choices[key]} onChange={(e) => void setProtectionChoices(account, { ...choices, [key]: e.target.checked }).catch(logFailure('saving the protection choices'))} /> {label}
     </label>
   );
   return (
@@ -128,7 +117,7 @@ export function EraseCard() {
         <>
           <p>
             Removes the library scan, the AI fingerprints and your review progress (which groups you've already gone through), as uninstalling would.{' '}
-            <strong>Your photos in Google Photos are not touched</strong>: photos you already trashed stay in Google Photos' trash.
+            <strong>Your photos in Google Photos are not touched</strong>: photos you already trashed stay in Google Photos' trash (kept there for 60 days), and Photo Cleaner can no longer undo them.
           </p>
           {problem && <div className="warn">{problem}</div>}
           <div className="row erase-buttons">

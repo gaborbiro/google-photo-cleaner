@@ -28,6 +28,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -82,7 +83,10 @@ class BridgeModuleTest {
     @Test
     fun `rejects an unexpected origin`() = bridgeTest {
         assertFailsWith<Exception> {
-            wsClient().webSocket("/bridge", request = { header(HttpHeaders.Origin, "https://evil.example") }) {
+            wsClient().webSocket("/bridge", request = {
+                header(HttpHeaders.Origin, "https://evil.example")
+                header(HttpHeaders.Host, "127.0.0.1:${config.port}")
+            }) {
                 send(Frame.Text(hello(tokens.token.value)))
                 incoming.receive()
             }
@@ -104,7 +108,11 @@ class BridgeModuleTest {
     @Test
     fun `rejects a missing origin`() = bridgeTest {
         assertFailsWith<Exception> {
-            wsClient().webSocket("/bridge") { incoming.receive() }
+            // A valid host and hello ensure the test can only be rejected for the missing origin.
+            wsClient().webSocket("/bridge", request = { header(HttpHeaders.Host, "127.0.0.1:${config.port}") }) {
+                send(Frame.Text(hello(tokens.token.value)))
+                incoming.receive()
+            }
         }
     }
 
@@ -112,7 +120,7 @@ class BridgeModuleTest {
     fun `closes the connection when the token is wrong`() = bridgeTest {
         wsClient().webSocket("/bridge", request = { extension() }) {
             send(Frame.Text(hello("WRONG-TOKEN")))
-            val reason = closeReason.await()
+            val reason = withTimeout(5_000) { closeReason.await() }
             assertEquals(TOKEN_REJECTED_CODE, reason?.code)
         }
         assertIs<BridgeState.Starting>(link.state.value)
@@ -121,7 +129,7 @@ class BridgeModuleTest {
     @Test
     fun `closes the connection when no hello arrives`() = bridgeTest {
         wsClient().webSocket("/bridge", request = { extension() }) {
-            assertEquals(TOKEN_REJECTED_CODE, closeReason.await()?.code)
+            assertEquals(TOKEN_REJECTED_CODE, withTimeout(5_000) { closeReason.await() }?.code)
         }
     }
 
@@ -202,11 +210,11 @@ class BridgeModuleTest {
             send(Frame.Text(hello(oldToken)))
             incoming.receive()
             KtorBridgeServer(config, tokens, link).regeneratePairingToken()
-            closeReason.await()
+            withTimeout(5_000) { closeReason.await() }
         }
         wsClient().webSocket("/bridge", request = { extension() }) {
             send(Frame.Text(hello(oldToken)))
-            assertEquals(TOKEN_REJECTED_CODE, closeReason.await()?.code)
+            assertEquals(TOKEN_REJECTED_CODE, withTimeout(5_000) { closeReason.await() }?.code)
         }
     }
 }

@@ -145,13 +145,20 @@ async function sendQueued(deps: TrashQueueDeps): Promise<string | null> {
   if (!coverage.isComplete) return 'Waiting: the library scan is unfinished. Finish it to continue.';
   if (coverage.isStale) return 'Waiting: the library scan is out of date. Check for new photos to continue.';
   const eligibility = new Map(classification.items.map((i) => [i.mediaKey, i.eligibility]));
+  const identities = new Map(classification.items.map((i) => [i.mediaKey, i.dedupKey]));
+  // Videos are never cleanup candidates, whatever approved them.
+  const photos = new Set(classification.items.filter((i) => i.mediaType === 'PHOTO').map((i) => i.mediaKey));
   const active = await activeIds(deps);
 
   const sendable: TrashJob[] = [];
   for (const job of queued) {
     const now = eligibility.get(job.mediaKey);
     if (!active.has(job.decisionId)) await deps.review.transition(job.id, 'QUEUED', 'CANCELLED', null, deps.now());
-    else if (now === 'ELIGIBLE') sendable.push(job);
+    else if (identities.has(job.mediaKey) && identities.get(job.mediaKey) !== job.dedupKey) {
+      await deps.review.transition(job.id, 'QUEUED', 'BLOCKED', 'Photo identity changed since approval', deps.now());
+    } else if (now === 'ELIGIBLE' && !photos.has(job.mediaKey)) {
+      await deps.review.transition(job.id, 'QUEUED', 'BLOCKED', 'Not a photo: only photos are trashed', deps.now());
+    } else if (now === 'ELIGIBLE') sendable.push(job);
     else if (now === undefined) await deps.review.transition(job.id, 'QUEUED', 'BLOCKED', 'No longer in the library', deps.now());
     else await deps.review.transition(job.id, 'QUEUED', 'BLOCKED', `No longer eligible (${now})`, deps.now());
   }

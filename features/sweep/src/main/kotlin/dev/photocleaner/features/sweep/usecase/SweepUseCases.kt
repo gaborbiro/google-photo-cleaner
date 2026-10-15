@@ -117,7 +117,8 @@ class ApproveSweepUseCase(
         classification.sweepBlockedReason()?.let { throw IllegalStateException(it) }
         val items = checkNotNull(classification).items.associateBy { it.item.mediaKey }
         val approved = review.approvedMediaKeys()
-        val refused = mediaKeys.filter { items[it]?.eligibility != Eligibility.ELIGIBLE || it in approved }
+        // Videos are never cleanup candidates, even if one reached the selection.
+        val refused = mediaKeys.filter { items[it]?.eligibility != Eligibility.ELIGIBLE || items[it]?.item?.mediaType != StoredMediaType.PHOTO || it in approved }
         require(refused.isEmpty()) { "${refused.size} selected photo(s) are no longer eligible or are already in the trash queue; search again" }
         val now = clock()
         val id = MessageDigest.getInstance("SHA-256").digest("$label|$now".toByteArray()).take(8).joinToString("") { "%02x".format(it) }

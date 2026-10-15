@@ -6,8 +6,6 @@ import { searchKey } from '../duplicates/keys';
 import { SORTS, type ExampleView, type SearchModel, type SearchTile } from '../search/searchModel';
 import { Toast, useFocusFeedback, useWorkbenchKeys, Viewer } from '../ui/Workbench';
 
-const TILE_PX = 160;
-const TILE_GAP_PX = 6;
 
 function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: number; focusPulse: number; model: SearchModel }) {
   const ref = useRef<HTMLElement>(null);
@@ -24,7 +22,7 @@ function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: num
   return (
     <figure ref={ref} className={`search-tile${tile.selected ? ' selected' : ''}${tile.focused ? ' focused' : ''}`}>
       <div className="search-tile-image" ref={image} onClick={(e) => model.tileClicked(index, e.shiftKey)}>
-        {tile.imageUrl ? <img src={tile.imageUrl} alt="" draggable={false} /> : <span className="muted small">…</span>}
+        {tile.imageUrl ? <img src={tile.imageUrl} alt="" draggable={false} /> : <span className="muted small">{tile.error ?? '…'}</span>}
         <button className="expand" title="View large (Enter)" tabIndex={-1} onClick={(e) => { e.stopPropagation(); model.openViewer(index); }}>⤢</button>
       </div>
       <figcaption className="small"><a href={tile.link} target="_blank" rel="noreferrer" tabIndex={-1}>{tile.caption}</a></figcaption>
@@ -74,27 +72,20 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
   useEffect(() => {
     const el = grid.current;
     if (!el) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const width = entry!.contentRect.width;
-      if (width > 0) model.gridMeasured(Math.floor((width + TILE_GAP_PX) / (TILE_PX + TILE_GAP_PX)));
-    });
+    const observer = new ResizeObserver(([entry]) => model.gridWidthMeasured(entry!.contentRect.width));
     observer.observe(el);
     return () => observer.disconnect();
   }, [model, view.tiles.length > 0]);
 
   // Thumbnails of the examples too.
   useEffect(() => {
-    for (const e of [...view.more, ...view.less]) if (!e.imageUrl) model.tileVisible(e.mediaKey);
+    model.loadExampleThumbs();
   }, [model, view.more, view.less]);
 
   return (
     <div className="search" hidden={!active}>
       <section className="collapsing search-head">
-        <p className="small">
-          Describe what to search for (for example “meal prep boxes in plastic containers”, “printed documents”, “screenshots”). The strongest matches are shown;
-          favourites, photos in albums, archived photos and photos of unknown status never appear. Click to select, Shift-click to select a range;
-          M finds more like the selected photos, L fewer.
-        </p>
+        <p className="small">{view.introText}</p>
         <form className="row search-form" onSubmit={(e) => { e.preventDefault(); model.searchText(); }}>
           <input
             ref={field}

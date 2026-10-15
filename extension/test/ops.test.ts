@@ -107,9 +107,9 @@ describe('read-only guarantee', () => {
   });
 
   it('contains no mutating RPC id in sources, vendored code or the built bundle', () => {
-    const roots = ['src', 'vendor', 'dist'].filter((dir) => existsSync(dir));
+    const roots = ['src', 'vendor', 'dist', 'dist-app'].filter((dir) => existsSync(dir));
     const offenders = roots.flatMap(files)
-      .filter((path) => /\.(ts|js)$/.test(path))
+      .filter((path) => /\.(tsx?|m?js)$/.test(path))
       .flatMap((path) => {
         const text = readFileSync(path, 'utf8');
         return MUTATING_RPC_IDS.filter((id) => text.includes(id)).map((id) => `${path}: ${id}`);

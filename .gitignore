@@ -24,11 +24,13 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 
-# Never commit model weights or local secrets
-*.safetensors
-*.onnx
-.env
-
 # OS clutter
 .DS_Store
 Thumbs.db
+
+# AI harness clutter
+.audit
+/audit-vitest-baseline.json
+*.safetensors
+*.onnx
+.env

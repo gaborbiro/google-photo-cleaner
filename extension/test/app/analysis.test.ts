@@ -1,7 +1,7 @@
 // The AI analysis, scenario by scenario, with a fake model and a fake clock against the real
 // IndexedDB stores (in memory).
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { runAnalysis, type AnalysisProgress, type Embedder } from '../../src/app/ai/analysis';
 import { IndexedDbAnalysisStore } from '../../src/app/ai/analysisStore';
@@ -47,7 +47,7 @@ async function analyse(
   env: Awaited<ReturnType<typeof setup>>,
   embedder: Embedder,
   clock: { now: number },
-  opts: { shouldStop?: () => Promise<boolean>; waiting?: string | null; account?: string } = {},
+  opts: { shouldStop?: () => Promise<boolean>; waiting?: string | null; account?: string; decode?: typeof decode } = {},
 ) {
   const progress: AnalysisProgress[] = [];
   const outcome = await runAnalysis({
@@ -56,7 +56,7 @@ async function analyse(
     inventory: env.inventory,
     store: env.store,
     embedder,
-    decode,
+    decode: opts.decode ?? decode,
     now: () => clock.now,
     sleep: async () => {},
     shouldStop: opts.shouldStop ?? (async () => false),
@@ -117,7 +117,7 @@ describe('AI analysis', () => {
     let checks = 0;
     const first = await analyse(env, embedder, clock, { shouldStop: async () => ++checks > 20 });
     expect(first.outcome).toEqual({ kind: 'stopped' });
-    const done = (await env.store.analysedKeys(modelKey(140))).size;
+    const done = (await env.store.analysedKeys(modelKey(140), 'account-a')).size;
     expect(done).toBeGreaterThan(11);
     expect(done).toBeLessThan(30);
 
@@ -125,7 +125,7 @@ describe('AI analysis', () => {
     const second = await analyse(env, embedder, clock);
     expect(second.outcome.kind).toBe('completed');
     expect(embedder.calls).toHaveLength(30 - done); // only the rest
-    expect((await env.store.analysedKeys(modelKey(140))).size).toBe(30);
+    expect((await env.store.analysedKeys(modelKey(140), 'account-a')).size).toBe(30);
   });
 
   it('a preview that cannot be fetched is counted and tried again next time', async () => {
@@ -154,7 +154,17 @@ describe('AI analysis', () => {
     env.source.failure = () => null;
     const resumed = await analyse(env, new FakeEmbedder(clock, 100), clock);
     expect(resumed.outcome.kind).toBe('completed');
-    expect((await env.store.analysedKeys(modelKey(140))).size).toBe(60);
+    expect((await env.store.analysedKeys(modelKey(140), 'account-a')).size).toBe(60);
+  });
+
+  it('when no preview works at all, the speed check gives up after 25 tries instead of trying the whole library', async () => {
+    const env = await setup(Array.from({ length: 200 }, (_, i) => fakeItem(i)));
+    let previews = 0;
+    env.source.failure = (op) => (op === 'preview' && ++previews > 0 ? new SourceError('PREVIEW_UNAVAILABLE', 'HTTP 404 fetching preview', 404) : null);
+    const clock = { now: 0 };
+    const { outcome } = await analyse(env, new FakeEmbedder(clock, 100), clock);
+    expect(outcome).toEqual({ kind: 'paused', reason: PREVIEWS_STOPPED_TEXT, untilPhotosOpen: false });
+    expect(previews).toBe(25);
   });
 
   it('an answer from Google it does not understand stops it, saying so, before counting anything as failed', async () => {
@@ -168,6 +178,39 @@ describe('AI analysis', () => {
       expect(outcome).toEqual({ kind: 'paused', reason: INCOMPATIBLE_TEXT, untilPhotosOpen: false });
       expect(progress.at(-1)?.failed ?? 0).toBe(0);
     }
+  });
+
+  it('a preview that cannot be decoded counts as one failed photo; a bug stops the run instead', async () => {
+    const env = await setup();
+    const clock = { now: 0 };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const brokenFive = async (p: { bytes: Uint8Array }) => {
+      if (p.bytes[0] === 5) throw new Error('not an image');
+      return decode(p);
+    };
+    const { progress } = await analyse(env, new FakeEmbedder(clock, 100), clock, { decode: brokenFive });
+    expect(progress.at(-1)).toMatchObject({ analysed: 9, failed: 1 });
+    warn.mockRestore();
+
+    const fresh = await setup();
+    fresh.source.failure = (op) => (op === 'preview' ? (new TypeError('a bug') as unknown as SourceError) : null);
+    await expect(analyse(fresh, new FakeEmbedder(clock, 100), clock)).rejects.toThrow('a bug');
+  });
+
+  it('each account has its own fingerprints, even for a photo key both share', async () => {
+    const env = await setup();
+    const clock = { now: 0 };
+    await analyse(env, new FakeEmbedder(clock, 100), clock);
+    // The same photo keys, signed in to another Google account.
+    env.source.accountFingerprint = 'account-b';
+    await scan(env.source, env.inventory, { account: 'account-b' });
+    const embedder = new FakeEmbedder(clock, 100);
+    const { outcome } = await analyse(env, embedder, clock, { account: 'account-b' });
+    expect(outcome.kind).toBe('completed');
+    expect(new Set(embedder.calls.map((c) => c.index)).size).toBe(10); // none skipped as "already analysed"
+    expect(await env.store.embeddings(modelKey(140), 'account-a')).toHaveLength(10);
+    expect(await env.store.embeddings(modelKey(140), 'account-b')).toHaveLength(10);
+    expect((await env.store.analysedKeys(modelKey(140), 'account-b')).size).toBe(10);
   });
 
   it('only photos are analysed, not videos', async () => {
@@ -249,7 +292,8 @@ describe('AI analysis', () => {
   });
 
   it('shows why it is going gently', async () => {
-    const env = await setup();
+    // More than the benchmark sample: exercise the paced analysis, not just the speed check.
+    const env = await setup(Array.from({ length: 30 }, (_, i) => fakeItem(i)));
     const clock = { now: 0 };
     const { progress } = await analyse(env, new FakeEmbedder(clock, 100), clock, { waiting: 'Going gently while you use the computer.' });
     expect(progress.some((p) => p.waiting === 'Going gently while you use the computer.')).toBe(true);

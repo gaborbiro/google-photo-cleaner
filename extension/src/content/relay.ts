@@ -1,6 +1,6 @@
 // Isolated-world relay: service worker command -> page script -> response.
 
-import { isReadOp, type OpResult, type PageRequest, type PageResponse, type TabCommand } from '../shared/protocol';
+import { isOpResult, isReadOp, type OpResult, type PageRequest, type PageResponse, type TabCommand } from '../shared/protocol';
 
 const PAGE_TIMEOUT_MS = 90_000;
 
@@ -13,10 +13,10 @@ export function installRelay(channel: string): void {
     const message = event.data as Partial<PageResponse> | null;
     if (message?.channel !== channel || message.dir !== 'response' || typeof message.id !== 'string') return;
     const resolve = pending.get(message.id);
-    if (resolve && message.result) {
-      pending.delete(message.id);
-      resolve(message.result);
-    }
+    if (!resolve) return;
+    pending.delete(message.id);
+    // Only the outer shape is checked here; the data is checked where it is read.
+    resolve(isOpResult(message.result) ? message.result : { ok: false, error: { kind: 'PROTOCOL', message: 'Malformed answer from the page script' } });
   });
 
   chrome.runtime.onMessage.addListener((message: Partial<TabCommand>, sender, sendResponse) => {

@@ -51,7 +51,11 @@ object ReviewQueues {
             .mapNotNull { it.withoutApproved(approved) }
             .filter { group -> group.members.any { it.photo.item.mediaKey !in reviewed } }
             .map { it.markReviewed(reviewed) }
+        // Skipping decides nothing, but what was decided elsewhere still counts: a photo already approved
+        // (e.g. from Search) is not offered twice, and a moment whose keeper is going away is dropped.
         val deferredGroups = result.groups.filter { it.id in deferred }
+            .mapNotNull { it.withoutApproved(approved) }
+            .map { it.markReviewed(reviewed) }
         return ReviewQueue(
             blocked = result.blocked,
             pending = undecided + deferredGroups,
@@ -95,14 +99,19 @@ fun DuplicateGroup.defaultSelection(): Set<String> =
  * which must be eligible members; nothing for keep and skip. Protected and unknown photos can never
  * be selected.
  */
-fun DuplicateGroup.decisionItems(kind: DecisionKind, selectedMediaKeys: Set<String>): List<DecisionItem> {
-    val proposable = selectableMembers().associateBy { it.photo.item.mediaKey }
-    return when (kind) {
+fun DuplicateGroup.decisionItems(kind: DecisionKind, selectedMediaKeys: Set<String>): List<DecisionItem> =
+    decisionItems(selectableMembers().associate { it.photo.item.mediaKey to it.photo.item.dedupKey }, kind, selectedMediaKeys)
+
+/**
+ * The rule behind [DuplicateGroup.decisionItems], for a group known only by its [selectable] members
+ * (media key to dedup key), as the browser extension holds it.
+ */
+fun decisionItems(selectable: Map<String, String>, kind: DecisionKind, selectedMediaKeys: Set<String>): List<DecisionItem> =
+    when (kind) {
         DecisionKind.APPROVED -> {
             require(selectedMediaKeys.isNotEmpty()) { "Nothing is selected for the trash" }
-            require(proposable.keys.containsAll(selectedMediaKeys)) { "Only eligible photos can be trashed" }
-            selectedMediaKeys.sorted().map { DecisionItem(it, proposable.getValue(it).photo.item.dedupKey) }
+            require(selectable.keys.containsAll(selectedMediaKeys)) { "Only eligible photos can be trashed" }
+            selectedMediaKeys.sorted().map { DecisionItem(it, selectable.getValue(it)) }
         }
         DecisionKind.KEPT, DecisionKind.DEFERRED -> emptyList()
     }
-}

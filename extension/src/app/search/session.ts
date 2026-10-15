@@ -7,7 +7,7 @@ import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { classify } from '../scan/report';
 import { count } from '../shared/format';
 import { IndexedDbPreferences } from '../shared/preferences';
-import { previewDataUrl } from '../ui/hooks';
+import { previewDataUrl } from '../shared/previews';
 import type { LibraryPhoto, SearchDeps, SearchLibrary } from './searchModel';
 
 /** The saved data Search reads and writes; tests pass their own. */
@@ -34,13 +34,14 @@ type TextModel = { embedQuery(text: string, onProgress: (fraction: number) => vo
 let textModel: Promise<TextModel> | null = null;
 
 async function loadLibrary({ inventory, analysis, review, preferences }: SearchStores, account: string, nowMs: number): Promise<SearchLibrary> {
+  const protection = await preferences.protection(account);
   const run = await inventory.latestRun(account);
-  if (!run) return { blocked: 'NOT_SCANNED', photos: new Map() };
+  if (!run) return { blocked: 'NOT_SCANNED', photos: new Map(), protection };
   const snapshot = await inventory.snapshot(run.id);
-  const classification = classify(snapshot, nowMs, await preferences.protection(account));
+  const classification = classify(snapshot, nowMs, protection);
   const coverage = classification.report.coverage;
-  if (!coverage.isComplete) return { blocked: 'SCAN_UNFINISHED', photos: new Map() };
-  if (coverage.isStale) return { blocked: 'SCAN_STALE', photos: new Map() };
+  if (!coverage.isComplete) return { blocked: 'SCAN_UNFINISHED', photos: new Map(), protection };
+  if (coverage.isStale) return { blocked: 'SCAN_STALE', photos: new Map(), protection };
   const settings = await analysis.settings(account);
   const vectors = new Map((settings ? await analysis.embeddings(settings.modelKey, account) : []).map((e) => [e.mediaKey, e.vector]));
   const eligibility = new Map(classification.items.map((i) => [i.mediaKey, i.eligibility]));
@@ -60,7 +61,7 @@ async function loadLibrary({ inventory, analysis, review, preferences }: SearchS
       approved: approved.has(item.mediaKey),
     });
   }
-  return { blocked: null, photos };
+  return { blocked: null, photos, protection };
 }
 
 /**

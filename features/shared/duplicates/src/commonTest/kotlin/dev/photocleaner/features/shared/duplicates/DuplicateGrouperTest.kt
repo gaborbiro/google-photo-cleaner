@@ -36,6 +36,7 @@ class DuplicateGrouperTest {
     fun members_always_match_the_keeper_directly_so_groups_never_chain() {
         // a-b-c-d each 20° apart: neighbours match (cos 20° = 0.94), a and d do not.
         val result = groups(listOf(Spec("a", 1_000, 0.0), Spec("b", 2_000, 20.0), Spec("c", 3_000, 40.0), Spec("d", 4_000, 60.0)))
+        assertTrue(result.groups.isNotEmpty(), "the chain scenario must actually produce a group")
         result.groups.forEach { group ->
             group.members.filter { it.role != MemberRole.KEEPER }.forEach { assertTrue(it.similarity >= 0.925) }
             val keys = group.members.map { it.photo.item.mediaKey }
@@ -119,6 +120,7 @@ class DuplicateGrouperTest {
 
     @Test
     fun random_libraries_never_propose_a_protected_or_unknown_photo() {
+        var groupsChecked = 0
         repeat(40) { seed ->
             val random = Random(seed)
             val specs = (0 until 60).map { i ->
@@ -138,6 +140,7 @@ class DuplicateGrouperTest {
             val vectors = specs.associate { it.key to unit(it.angleDeg) }
             val seen = mutableSetOf<String>()
             result.groups.forEach { group ->
+                groupsChecked++
                 val keeper = group.keeper
                 group.members.forEach { member ->
                     assertTrue(seen.add(member.photo.item.mediaKey), "seed $seed: photo in two groups")
@@ -151,5 +154,6 @@ class DuplicateGrouperTest {
                 assertTrue(group.members.any { it.role == MemberRole.PROPOSED }, "seed $seed: group without proposals")
             }
         }
+        assertTrue(groupsChecked > 0, "the safety checks must exercise actual groups")
     }
 }

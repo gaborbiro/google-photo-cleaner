@@ -4,8 +4,10 @@
 
 import { classifyInventoryJson, defaultMaxAgeMs } from '../../../generated/kotlin/PhotoCleaner-features-shared-duplicates.mjs';
 import { count, n } from '../shared/format';
+import type { Job } from '../shared/job';
 import type { ProtectionChoices } from '../shared/preferences';
-import type { InventorySnapshot } from './model';
+import type { IndexedDbInventoryStore } from './inventoryStore';
+import type { InventorySnapshot, StoredMediaType } from './model';
 
 export type Eligibility = 'PROTECTED' | 'ELIGIBLE' | 'UNKNOWN';
 export type UnknownReason = 'INVENTORY_INCOMPLETE' | 'INVENTORY_STALE' | 'FAVOURITE_FLAG_MISSING' | 'ARCHIVE_FLAG_MISSING' | 'NOT_OWNED' | 'MEDIA_TYPE_UNKNOWN';
@@ -44,7 +46,7 @@ export interface Classification {
     };
     counts: TypeCounts[];
   };
-  items: { mediaKey: string; eligibility: Eligibility; protectionReasons: string[]; unknownReasons: UnknownReason[] }[];
+  items: { mediaKey: string; dedupKey: string; mediaType: StoredMediaType | null; eligibility: Eligibility; protectionReasons: string[]; unknownReasons: UnknownReason[] }[];
 }
 
 /** How old a scan may be before it no longer proves what is protected (the shared rules' limit: a day). */
@@ -62,6 +64,8 @@ export type Tone = 'good' | 'warn' | 'bad';
 export interface ReportView {
   title: string;
   tone: Tone;
+  /** Said outside the folded details when it changes what can be done (incomplete protection data); else null. */
+  warningText: string | null;
   /** One line for the panel and popup: "17,196 photos · 3,021 protected · …". */
   summary: string;
   /** "Scan started 14 Oct 2026, 18:52, finished 14 Oct 2026, 18:56". */
@@ -143,5 +147,21 @@ export function reportView(classification: Classification): ReportView {
     ...(issueLines.length > 0 ? [`${issueLines.length} album issue(s)`] : []),
     ...tables.flatMap((t) => [t.title, ...t.rows.map((r) => `${r.indent ? '    ' : '  '}${r.label}: ${r.value}`)]),
   ].join('\n');
-  return { title, tone, summary, timesLine: coverageLines[0]!, coverageLines, issueLines, tables, copyText };
+  return { title, tone, warningText: tone === 'bad' ? title : null, summary, timesLine: coverageLines[0]!, coverageLines, issueLines, tables, copyText };
+}
+
+/**
+ * When the protection report must be worked out again: a key that changes when [account]'s scan
+ * settles (finishes, pauses or fails) or the choices change. Null while there's nothing to work out
+ * (no account, still loading, or a scan running, whose report would change at every page).
+ */
+export function reportKey(account: string | null, scan: Job | null | undefined, choices: ProtectionChoices | undefined): string | null {
+  if (account === null || scan === undefined || choices === undefined || scan?.status === 'running') return null;
+  return `${account}:${scan === null ? 'none' : `${scan.status}:${scan.updatedAtMs}`}:${JSON.stringify(choices)}`;
+}
+
+/** The report of [account]'s latest scan, classified at [nowMs] with [choices]; null before any scan. */
+export async function latestReport(inventory: IndexedDbInventoryStore, account: string, choices: ProtectionChoices, nowMs: number): Promise<ReportView | null> {
+  const run = await inventory.latestRun(account);
+  return run ? reportView(classify(await inventory.snapshot(run.id), nowMs, choices)) : null;
 }

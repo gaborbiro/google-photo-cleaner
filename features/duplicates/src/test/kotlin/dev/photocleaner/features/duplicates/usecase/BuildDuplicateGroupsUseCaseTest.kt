@@ -2,6 +2,7 @@ package dev.photocleaner.features.duplicates.usecase
 
 import dev.photocleaner.features.shared.duplicates.model.DuplicateGroupsResult
 import dev.photocleaner.features.shared.duplicates.model.GroupingSettings
+import dev.photocleaner.features.shared.duplicates.model.GroupsBlocked
 import dev.photocleaner.features.shared.duplicates.model.MemberRole
 import dev.photocleaner.features.shared.embeddings.EmbeddingSettings
 import dev.photocleaner.features.shared.duplicates.Vectors
@@ -27,7 +28,7 @@ import kotlinx.coroutines.test.runTest
 
 class BuildDuplicateGroupsUseCaseTest {
 
-    private val now = 5_000_000_000L
+    private var now = 5_000_000_000L
     private val inventory = SqlInventoryRepository.inMemory()
     private val analysis = SqlAnalysisRepository.inMemory()
     private val modelId = EmbeddingSettings.modelKey(280).id
@@ -82,6 +83,7 @@ class BuildDuplicateGroupsUseCaseTest {
         // a-b-c-d each 20° apart: neighbours match (cos 20° = 0.94), a and d do not.
         setUp(listOf(Spec("a", 1_000, 0.0), Spec("b", 2_000, 20.0), Spec("c", 3_000, 40.0), Spec("d", 4_000, 60.0)))
         val result = groups()
+        assertTrue(result.groups.isNotEmpty(), "the chain scenario must actually produce a group")
         result.groups.forEach { group ->
             group.members.filter { it.role != MemberRole.KEEPER }.forEach { assertTrue(it.similarity >= 0.925) }
             val keys = group.members.map { it.photo.item.mediaKey }
@@ -128,12 +130,18 @@ class BuildDuplicateGroupsUseCaseTest {
     fun `an incomplete or stale inventory produces no groups`() = runTest {
         setUp(listOf(Spec("a", 1_000, 0.0), Spec("b", 2_000, 1.0)), complete = false)
         val result = groups()
-        assertNotNull(result.blocked)
+        assertEquals(GroupsBlocked.SCAN_UNFINISHED, result.blocked)
         assertEquals(emptyList(), result.groups)
+        inventory.updateRunStatus(inventory.latestRun()!!.id, RunStatus.COMPLETED, null, now)
+        now += 25 * 3_600_000L
+        val stale = groups()
+        assertEquals(GroupsBlocked.SCAN_STALE, stale.blocked)
+        assertEquals(emptyList(), stale.groups)
     }
 
     @Test
     fun `random libraries never propose a protected or unknown photo`() = runTest {
+        var groupsChecked = 0
         repeat(40) { seed ->
             val random = Random(seed)
             val specs = (0 until 60).map { i ->
@@ -161,6 +169,7 @@ class BuildDuplicateGroupsUseCaseTest {
             assertNull(result.blocked)
             val seen = mutableSetOf<String>()
             result.groups.forEach { group ->
+                groupsChecked++
                 val keeper = group.keeper
                 group.members.forEach { member ->
                     assertTrue(seen.add(member.photo.item.mediaKey), "seed $seed: photo in two groups")
@@ -174,5 +183,6 @@ class BuildDuplicateGroupsUseCaseTest {
                 assertTrue(group.members.any { it.role == MemberRole.PROPOSED }, "seed $seed: group without proposals")
             }
         }
+        assertTrue(groupsChecked > 0, "the safety checks must exercise actual groups")
     }
 }

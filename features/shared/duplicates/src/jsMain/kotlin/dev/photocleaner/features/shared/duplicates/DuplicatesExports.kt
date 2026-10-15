@@ -28,6 +28,22 @@ fun classifyInventoryJson(snapshotJson: String, nowMs: Double, maxAgeMs: Double,
 fun defaultMaxAgeMs(): Double = ProtectionJs.defaultMaxAgeMs()
 
 /**
+ * What a decision on a group records for the trash (see [decisionItems]): [membersJson] is the group's
+ * members as the review queue returned them (`[{mediaKey, dedupKey, selectable}]`), [selectedJson] the
+ * selected media keys. Returns `[{mediaKey, dedupKey}]`; a selection the rules refuse throws.
+ */
+@JsExport
+fun decisionItemsJson(membersJson: String, kind: String, selectedJson: String): String {
+    val selectable = JsJson.list(JSON.parse(membersJson), "members")
+        .filter { JsJson.bool(it, "selectable") }
+        .associate { JsJson.string(it, "mediaKey") to JsJson.string(it, "dedupKey") }
+    val selected = JsJson.list(JSON.parse(selectedJson), "selected")
+        .map { (it as Any?) as? String ?: throw IllegalArgumentException("selected must hold media keys") }.toSet()
+    val items = decisionItems(selectable, DecisionKind.valueOf(kind), selected)
+    return JSON.stringify(items.map { JsJson.obj("mediaKey" to it.mediaKey, "dedupKey" to it.dedupKey) }.toTypedArray())
+}
+
+/**
  * The duplicate review queue for the browser extension, by the same rules as the desktop app.
  *
  * - [snapshotJson]: the latest library scan (as for classifyInventoryJson), or null before any scan.
@@ -52,7 +68,7 @@ fun reviewQueueJson(
     choicesJson: String,
 ): String {
     val chosen = JsJson.protectionChoices(JSON.parse(choicesJson))
-    val classification = snapshotJson?.let { InventoryClassifier.classify(JsJson.inventorySnapshot(JSON.parse(it)), nowMs.toLong(), maxAgeMs.toLong(), chosen) }
+    val classification = snapshotJson?.let { InventoryClassifier.classify(JsJson.inventorySnapshot(JSON.parse(it)), JsJson.millis(nowMs, "nowMs"), JsJson.millis(maxAgeMs, "maxAgeMs"), chosen) }
     val photos = JsJson.list(JSON.parse(photosJson), "photos")
     require(photos.size == vectors.size) { "photos and vectors differ in length (${photos.size} vs ${vectors.size})" }
     val analyses = photos.withIndex().associate { (index, p) ->

@@ -10,6 +10,7 @@ describe('choosing the detail', () => {
   it('keeps detail 140 when the whole library takes at most 4 hours', () => {
     expect(chooseDetail(5.7, 17_202)).toBe(140); // RTX: ~50 min
     expect(chooseDetail(1.5, 17_202)).toBe(140); // built-in graphics: ~3¼ h
+    expect(chooseDetail(1, 14_400)).toBe(140); // exactly four hours is still preferred detail
   });
 
   it('drops to detail 70 beyond 4 hours', () => {

@@ -80,8 +80,8 @@ grows into the product; a new shared Kotlin module holds the tested rules, compi
 - [x] **M2 Library scan in the browser** (2026-10-14, commit `34e39d2` on the M1 branch; 69 extension tests + 128 desktop tests pass; checked on my library: every count identical to the desktop app, 19,021 entries, 17,202 photos, 2,088 protected, 15,028 eligible, 86 unknown; ~2 min vs the desktop's 2 min 18 s): protection rules and inventory types are now Kotlin Multiplatform (desktop uses the JVM build, the extension the JavaScript one via `npm run kotlin`); the scan itself is TypeScript, ported with the desktop's scenarios. The panel's Scan lists library, favourites, archive, albums
       and works out protection, saved per account. Check: counts match the desktop app's report exactly
 - [x] **M3 AI analysis** (commit c838df1 on branch `claude/extension-m3-34e39d2`, 110 extension tests pass): model download with space check; capability and speed check with an honest
-      time estimate; background analysis, newest first, resumable; stays out of the way (pause while
-      the user is busy or on battery, a "full speed" switch). Check: embeddings match the desktop's
+      time estimate; background analysis, newest first, resumable; stays out of the way (about half speed while
+      the user is busy, waits on battery for the charger, a "full speed" switch). Check: embeddings match the desktop's
   - [x] My library on the RTX, detail 140: all 17,202 photos analysed. Speed check said 4.9 photos/s,
         about 59 min; at full speed it ran at 5.2 photos/s (per photo: AI 182 ms, everything else
         12 ms; the graphics card is ~92% busy, so this is the hardware's limit)

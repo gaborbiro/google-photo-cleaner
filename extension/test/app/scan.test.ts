@@ -4,6 +4,8 @@
 
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 import { describe, expect, it } from 'vitest';
+import { latestReport, reportKey, reportView } from '../../src/app/scan/report';
+import { endJob, startScanJob } from '../../src/app/shared/job';
 import { SourceError } from '../../src/app/scan/source';
 import { INCOMPATIBLE_TEXT, refusedText } from '../../src/app/shared/googleProblems';
 import {
@@ -262,6 +264,55 @@ describe('library scan', () => {
     expect(dayLater.report.coverage.isStale).toBe(true);
     expect(eligibleIndexes(dayLater)).toEqual([]);
     expect(eligibilityOf(dayLater, 0).unknownReasons).toContain('INVENTORY_STALE');
+  });
+
+  it('an unfinished scan is said as a warning outside the folded details; a complete one is not', async () => {
+    const store = newStore();
+    await scan(standardAccount(), store);
+    expect(reportView(await classifyLatest(store)).warningText).toBeNull();
+    let checks = 0;
+    await scan(standardAccount(), store, { shouldStop: async () => ++checks > 2 });
+    expect(reportView(await classifyLatest(store)).warningText).toBe('Protection coverage incomplete: no photo can be trashed');
+  });
+
+  it('the report is worked out again when a scan settles or the choices change, not while it runs', async () => {
+    const running = startScanJob('account-a', NOW);
+    const done = endJob(running, 'completed', null, NOW + 1);
+    expect(reportKey('account-a', running, ALL_PROTECTED)).toBeNull();
+    expect(reportKey('account-a', undefined, ALL_PROTECTED)).toBeNull();
+    expect(reportKey('account-a', done, undefined)).toBeNull();
+    expect(reportKey(null, done, ALL_PROTECTED)).toBeNull();
+    const key = reportKey('account-a', done, ALL_PROTECTED);
+    expect(reportKey('account-a', null, ALL_PROTECTED)).not.toBe(key);
+    expect(reportKey('account-a', done, { ...ALL_PROTECTED, albums: false })).not.toBe(key);
+
+    const store = newStore();
+    expect(await latestReport(store, 'account-a', ALL_PROTECTED, NOW)).toBeNull();
+    await scan(standardAccount(), store);
+    expect((await latestReport(store, 'account-a', ALL_PROTECTED, NOW))!.title).toBe('Protection coverage complete');
+  });
+
+  it('a failure for an album the scan never listed is refused, not dropped', async () => {
+    const store = newStore();
+    await scan(standardAccount(), store);
+    const run = (await store.latestRun('account-a'))!;
+    await expect(store.markAlbumFailed(run.id, 'no-such-album', 'Access denied')).rejects.toThrow(/no-such-album/);
+  });
+
+  it('a scan that finished "in the future" (the clock moved back) proves nothing', async () => {
+    const store = newStore();
+    await scan(standardAccount(), store);
+    const clockBack = await classifyLatest(store, NOW - 60_000);
+    expect(clockBack.report.coverage.isStale).toBe(true);
+    expect(eligibleIndexes(clockBack)).toEqual([]);
+  });
+
+  it('a broken clock is refused, not read as zero', async () => {
+    const store = newStore();
+    await scan(standardAccount(), store);
+    await expect(classifyLatest(store, Number.NaN)).rejects.toThrow(/nowMs/);
+    await expect(classifyLatest(store, NOW + 0.5)).rejects.toThrow(/whole number/);
+    await expect(classifyLatest(store, -1)).rejects.toThrow(/negative/);
   });
 
   it('a completed scan replaces the previous one; until it completes nothing is eligible', async () => {

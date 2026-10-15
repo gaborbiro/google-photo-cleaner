@@ -8,6 +8,7 @@ import { NO_ANALYSIS, runAnalysis } from '../ai/analysis';
 import { IndexedDbAnalysisStore } from '../ai/analysisStore';
 import { decodePreview, TransformersEmbedder } from '../ai/embedder';
 import { decidePace, WAIT_CHECK_MS } from '../ai/gentle';
+import { refreshReviewSummary } from '../duplicates/session';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { runScan } from '../scan/session';
 import { OpPhotosSource } from '../scan/source';
@@ -100,6 +101,10 @@ async function runAnalysisJob(job: AnalysisJob): Promise<void> {
     onProgress: async (progress) => void (await jobs.update(job.id, (j) => (j?.kind === 'analysis' ? reportProgress(j, progress, Date.now()) : j))),
   });
   await finish(job, outcome);
+  // The popup can then say how many groups are waiting, before the review tab is ever opened.
+  if (outcome.kind === 'completed') {
+    await refreshReviewSummary(job.account).catch((error: unknown) => console.warn('Photo Cleaner: could not work out the groups to review', error));
+  }
 }
 
 /** Starts a run for every running job that doesn't have one (one analysis at a time); asks to be closed when none is left. */

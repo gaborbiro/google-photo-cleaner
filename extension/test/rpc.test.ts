@@ -70,7 +70,8 @@ describe('callRpc', () => {
   });
 
   it('treats a redirect to sign-in as a lost session', async () => {
-    const fetcher = respond(200, '<html></html>', { redirected: true, url: 'https://accounts.google.com/ServiceLogin' });
+    // Valid RPC data prevents the HTML-body fallback from masking a broken redirect check.
+    const fetcher = respond(200, envelope('lcxiM', [null, null]), { redirected: true, url: 'https://accounts.google.com/ServiceLogin' });
     expect(await kindOfAsync(callRpc('lcxiM', [], tokens, '/', fetcher))).toBe('SESSION');
   });
 
@@ -81,12 +82,23 @@ describe('callRpc', () => {
 
   it('posts to the batchexecute endpoint of the signed-in path', async () => {
     let seenUrl = '';
-    const fetcher: Fetcher = async (url) => {
+    let seenRequest: RequestInit = {};
+    const fetcher: Fetcher = async (url, init) => {
       seenUrl = url;
+      seenRequest = init;
       return respond(200, envelope('lcxiM', [null, null]))(url, {});
     };
     await callRpc('lcxiM', [null], tokens, '/photos', fetcher);
     expect(seenUrl.startsWith('https://photos.google.com/_/PhotosUi/data/batchexecute?rpcids=lcxiM')).toBe(true);
+    expect(seenRequest).toMatchObject({ method: 'POST', credentials: 'include' });
+    expect(seenRequest.headers).toEqual({ 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' });
+    const form = new URLSearchParams(String(seenRequest.body));
+    expect(form.get('at')).toBe('AT_TOKEN');
+    expect(JSON.parse(form.get('f.req')!)).toEqual([[['lcxiM', '[null]', null, 'generic']]]);
+    const query = new URL(seenUrl).searchParams;
+    expect(query.get('source-path')).toBe('/photos');
+    expect(query.get('f.sid')).toBe('123');
+    expect(query.get('bl')).toBe('boq');
   });
 });
 

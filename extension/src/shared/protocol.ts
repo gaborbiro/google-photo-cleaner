@@ -18,15 +18,18 @@ export function isReadOp(value: unknown): value is ReadOp {
   return typeof value === 'string' && (READ_OPS as readonly string[]).includes(value);
 }
 
-export type ErrorKind =
-  | 'NO_PHOTOS_TAB'
-  | 'SESSION'
-  | 'RATE_LIMIT'
-  | 'TRANSIENT'
-  | 'RPC_ERROR'
-  | 'PROTOCOL'
-  | 'PREVIEW_UNAVAILABLE'
-  | 'BAD_REQUEST';
+export const ERROR_KINDS = [
+  'NO_PHOTOS_TAB',
+  'SESSION',
+  'RATE_LIMIT',
+  'TRANSIENT',
+  'RPC_ERROR',
+  'PROTOCOL',
+  'PREVIEW_UNAVAILABLE',
+  'BAD_REQUEST',
+] as const;
+
+export type ErrorKind = (typeof ERROR_KINDS)[number];
 
 export interface OpError {
   kind: ErrorKind;
@@ -36,6 +39,15 @@ export interface OpError {
 }
 
 export type OpResult = { ok: true; data: unknown } | { ok: false; error: OpError };
+
+/** Whether [value] has the shape of an [OpResult] (its data is checked where it is read). */
+export function isOpResult(value: unknown): value is OpResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const r = value as { ok?: unknown; data?: unknown; error?: { kind?: unknown; message?: unknown } };
+  if (r.ok === true) return 'data' in r;
+  return r.ok === false && typeof r.error === 'object' && r.error !== null &&
+    (ERROR_KINDS as readonly unknown[]).includes(r.error.kind) && typeof r.error.message === 'string';
+}
 
 /**
  * Page script <-> content script, over window.postMessage. Each extension that installs

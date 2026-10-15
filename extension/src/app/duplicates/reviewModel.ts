@@ -2,12 +2,14 @@
 // desktop's ReviewViewModel: the state machine (focus, selection, decisions, undo, previews,
 // viewer) lives here, and view() works out every text and colour the screen shows.
 
-import { SourceError } from '../scan/source';
 import { count, n } from '../shared/format';
-import { previewProblemText } from '../shared/googleProblems';
+import { previewProblem, previewProblemText } from '../shared/googleProblems';
 import type { StoredDecision } from './reviewStore';
 import { decisionItems, type Blocked, type DecisionKind, type DuplicateGroup, type GroupMember, type ReviewQueue } from './rules';
 import type { TrashQueueStatus } from './trash';
+
+/** When saving or reading the decisions failed (details in the log). */
+export const ACTION_FAILED = "That didn't work: Photo Cleaner couldn't read or save its data. Try again.";
 
 export type Tone = 'positive' | 'caution' | 'negative' | 'neutral';
 
@@ -29,6 +31,8 @@ export interface ReviewDeps {
   undo(): Promise<StoredDecision | null>;
   /** A preview as an image address, fetched through Google Photos; throws (a SourceError saying why) when it can't be had. */
   preview(thumbUrl: string, sizePx: number): Promise<string>;
+  /** How many groups are left to review now (skipped ones included), for the popup to say. */
+  groupsLeft(count: number): Promise<void>;
 }
 
 export const TILE_PX = 300;
@@ -198,6 +202,9 @@ export class DuplicatesReview {
   private async run(work: () => Promise<void>): Promise<void> {
     try {
       await work();
+    } catch (error) {
+      console.error('Photo Cleaner: a Duplicates action failed', error);
+      this.say(ACTION_FAILED, 'negative');
     } finally {
       this.busy = false;
       this.working = null;
@@ -233,8 +240,13 @@ export class DuplicatesReview {
     this.photosNotAnalysed = queue.photosNotAnalysed;
     this.settings = queue.settings;
     this.loaded = true;
+    if (!queue.blocked) this.reportGroupsLeft();
     this.publish();
     this.preload();
+  }
+
+  private reportGroupsLeft(): void {
+    this.deps.groupsLeft(this.pending.length).catch((error: unknown) => console.warn('Photo Cleaner: could not save how many groups are left', error));
   }
 
   setQueueStatus(status: TrashQueueStatus): void {
@@ -259,7 +271,7 @@ export class DuplicatesReview {
       this.previews.set(m.mediaKey, url);
       while (this.previews.size > PREVIEW_CACHE) this.previews.delete(this.previews.keys().next().value!);
     } catch (e) {
-      this.previewErrors.set(m.mediaKey, previewProblemText(e instanceof SourceError ? e.kind : null));
+      this.previewErrors.set(m.mediaKey, previewProblem('Duplicates', e));
     } finally {
       this.loading.delete(m.mediaKey);
       this.publish();
@@ -435,6 +447,7 @@ export class DuplicatesReview {
       }
       // The next group appearing is the feedback; a message about the old one would mislead.
       this.notice = null;
+      this.reportGroupsLeft();
       this.preload();
     });
   }
@@ -466,6 +479,7 @@ export class DuplicatesReview {
           this.decidedGroups--;
         }
         this.pending.unshift(local.group);
+        this.reportGroupsLeft();
       } else {
         await this.reload();
         const index = this.pending.findIndex((g) => g.id === undone.groupId);
@@ -531,12 +545,12 @@ export class DuplicatesReview {
       this.large.set(m.mediaKey, null);
       void this.deps.preview(m.thumbUrl, VIEWER_PX).then(
         (url) => {
-          if (url === null) this.large.set(m.mediaKey, 'failed');
-          else this.large.set(m.mediaKey, url);
+          this.large.set(m.mediaKey, url);
           while (this.large.size > VIEWER_CACHE) this.large.delete(this.large.keys().next().value!);
           this.publish();
         },
-        () => {
+        (e: unknown) => {
+          previewProblem('Duplicates viewer', e);
           this.large.set(m.mediaKey, 'failed');
           this.publish();
         },

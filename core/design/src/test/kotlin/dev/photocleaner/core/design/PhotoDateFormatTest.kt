@@ -22,6 +22,8 @@ class PhotoDateFormatTest {
     @Test
     fun `real dates are shown`() {
         assertEquals("24 May 2025", format.format(ms("2025-05-24T21:00:07+01:00")))
+        // A midnight-adjacent instant distinguishes the configured zone from UTC.
+        assertEquals("25 May 2025", format.format(ms("2025-05-25T00:30:00+01:00")))
         assertEquals("3 Jan 1980", format.format(ms("1980-01-03T12:00:00Z")))
     }
 }

@@ -39,9 +39,9 @@ class TrashQueueTest {
     private fun item(key: String) = InventoryItem(key, "d-$key", 1_000, StoredMediaType.PHOTO, false, false, true, 1, 1, null)
 
     /** A completed inventory in which [favourites] are protected and everything else is eligible. */
-    private suspend fun scan(keys: List<String>, favourites: Set<String> = emptySet()) {
+    private suspend fun scan(keys: List<String>, favourites: Set<String> = emptySet(), dedupKeys: Map<String, String> = emptyMap(), videos: Set<String> = emptySet()) {
         val run = inventory.createRun("account-a", now)
-        inventory.saveLibraryPage(run.id, keys.map { item(it).copy(isFavourite = it in favourites) }, null)
+        inventory.saveLibraryPage(run.id, keys.map { item(it).copy(isFavourite = it in favourites, dedupKey = dedupKeys[it] ?: "d-$it", mediaType = if (it in videos) StoredMediaType.VIDEO else StoredMediaType.PHOTO) }, null)
         inventory.saveFavouritesPage(run.id, emptyList(), null)
         inventory.saveArchivePage(run.id, emptyList(), null)
         inventory.saveAlbumsPage(run.id, emptyList(), null)
@@ -61,6 +61,15 @@ class TrashQueueTest {
     private suspend fun runQueueOnce() = ProcessTrashQueueUseCase(review, trash, classify, { now }, idleMs = 0).execute().take(1).toList().single()
 
     private suspend fun states() = review.jobs(TrashJobState.entries.toSet()).associate { it.mediaKey to it.state }
+
+    @Test
+    fun `a video that reached the queue is blocked, never sent`() = runTest {
+        scan(listOf("k", "a", "v"), videos = setOf("v"))
+        decide.execute(group("g", "k", listOf("a", "v")), DecisionKind.APPROVED, setOf("a", "v"))
+        runQueueOnce()
+        assertEquals(mapOf("a" to TrashJobState.COMPLETED, "v" to TrashJobState.BLOCKED), states())
+        assertEquals("Not a photo: only photos are trashed", review.jobs(setOf(TrashJobState.BLOCKED)).single().lastError)
+    }
 
     @Test
     fun `an approval trashes exactly the selected photos`() = runTest {
@@ -122,6 +131,16 @@ class TrashQueueTest {
         assertEquals(TrashJobState.COMPLETED, states()["a"])
         assertEquals(TrashJobState.BLOCKED, states()["b"])
         assertEquals(false, trash.inTrash(listOf("d-b"))["d-b"])
+    }
+
+    @Test
+    fun `an approval whose photo identity changed is blocked before sending`() = runTest {
+        scan(listOf("k", "a"))
+        decide.execute(group("g", "k", listOf("a")), DecisionKind.APPROVED, setOf("a"))
+        scan(listOf("k", "a"), dedupKeys = mapOf("a" to "changed-identity"))
+        runQueueOnce()
+        assertEquals(TrashJobState.BLOCKED, states()["a"])
+        assertEquals(false, trash.inTrash(listOf("d-a"))["d-a"])
     }
 
     @Test

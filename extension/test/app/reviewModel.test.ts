@@ -1,8 +1,8 @@
 // The Duplicates review's state machine and texts, with fake decisions and previews: the twin of
 // the desktop's ReviewViewModel behaviour.
 
-import { describe, expect, it } from 'vitest';
-import { DuplicatesReview, type ReviewDeps } from '../../src/app/duplicates/reviewModel';
+import { describe, expect, it, vi } from 'vitest';
+import { ACTION_FAILED, DuplicatesReview, type ReviewDeps } from '../../src/app/duplicates/reviewModel';
 import type { StoredDecision } from '../../src/app/duplicates/reviewStore';
 import type { DecisionKind, DuplicateGroup, GroupMember, ReviewQueue } from '../../src/app/duplicates/rules';
 import { SourceError } from '../../src/app/scan/source';
@@ -30,6 +30,12 @@ class Fakes implements ReviewDeps {
   loads = 0;
   /** When set, undo waits for it, so the screen can be checked meanwhile. */
   undoGate: Promise<void> | null = null;
+  /** Every "groups left" the review reported, oldest first. */
+  groupsLeftReported: number[] = [];
+
+  async groupsLeft(count: number) {
+    this.groupsLeftReported.push(count);
+  }
 
   async loadQueue(): Promise<ReviewQueue> {
     this.loads++;
@@ -45,8 +51,10 @@ class Fakes implements ReviewDeps {
     this.decisions.unshift({ id: this.decisions.length + 1, account: 'acc', groupId: g.id, kind, items, members: g.members.map((m) => m.mediaKey), createdAtMs: 0, undoneAtMs: null });
   }
 
+  undoError: Error | null = null;
   async undo() {
     await this.undoGate;
+    if (this.undoError) throw this.undoError;
     return this.decisions.shift() ?? null;
   }
 
@@ -356,5 +364,35 @@ describe('the Duplicates review', () => {
     expect(view().group!.tiles[2]).toMatchObject({ imageUrl: null, error: 'Preview unavailable: Photo Cleaner needs an update' });
     review.setQueueStatus({ counts: { QUEUED: 1, COMPLETED: 3, RESTORED: 1 }, simulated: true, waitingReason: null });
     expect(view().queueText).toBe('Trash queue (SIMULATED, nothing is sent to Google): 1 queued · 3 in trash · 0 blocked · 0 failed · 0 cancelled · 1 restored');
+  });
+
+  it('a failed undo says so and leaves the review usable', async () => {
+    const fakes = new Fakes();
+    fakes.undoError = new Error('database closed');
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { review, view } = await opened(fakes);
+    review.undo();
+    await settle();
+    expect(view().notice).toMatchObject({ text: ACTION_FAILED, tone: 'negative' });
+    expect(view().workingText).toBeNull();
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
+  it('says how many groups are left as they change, for the popup; nothing while the groups are blocked', async () => {
+    const fakes = new Fakes();
+    const { review } = await opened(fakes);
+    expect(fakes.groupsLeftReported).toEqual([2]);
+    review.keep();
+    await settle();
+    expect(fakes.groupsLeftReported).toEqual([2, 1]);
+    review.undo();
+    await settle();
+    expect(fakes.groupsLeftReported.at(-1)).toBe(2);
+
+    const blocked = new Fakes();
+    blocked.blocked = 'SCAN_STALE';
+    await opened(blocked);
+    expect(blocked.groupsLeftReported).toEqual([]);
   });
 });

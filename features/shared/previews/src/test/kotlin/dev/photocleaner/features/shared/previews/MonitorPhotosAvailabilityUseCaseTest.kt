@@ -7,6 +7,7 @@ import dev.photocleaner.services.connector.domain.fake.FakePhotosConnector
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -31,7 +32,7 @@ class MonitorPhotosAvailabilityUseCaseTest {
     private val connector = FakePhotosConnector(emptyList())
 
     @Test
-    fun `waiting until the extension connects, then ready`() = runTest {
+    fun `waiting until the extension connects, then ready`() = runTest(timeout = 5.seconds) {
         val bridge = FakeBridge(BridgeState.WaitingForExtension)
         val monitor = MonitorPhotosAvailabilityUseCase(bridge, connector, intervalMs = 1_000)
         val seen = mutableListOf<PhotosAvailability>()
@@ -43,7 +44,7 @@ class MonitorPhotosAvailabilityUseCaseTest {
     }
 
     @Test
-    fun `a missing Photos tab and a signed-out session are told apart`() = runTest {
+    fun `a missing Photos tab and a signed-out session are told apart`() = runTest(timeout = 5.seconds) {
         val bridge = FakeBridge(BridgeState.ExtensionConnected("0.3.0"))
         connector.failure = { _, _ -> ConnectorException.NoPhotosTab("Open photos.google.com") }
         assertEquals(PhotosAvailability.NoPhotosTab("Open photos.google.com"), MonitorPhotosAvailabilityUseCase(bridge, connector).execute().first())
@@ -52,7 +53,7 @@ class MonitorPhotosAvailabilityUseCaseTest {
     }
 
     @Test
-    fun `recovery is noticed at the next check`() = runTest {
+    fun `recovery is noticed at the next check`() = runTest(timeout = 5.seconds) {
         val bridge = FakeBridge(BridgeState.ExtensionConnected("0.3.0"))
         var failing = true
         connector.failure = { _, _ -> if (failing) ConnectorException.NoPhotosTab("Open photos.google.com") else null }

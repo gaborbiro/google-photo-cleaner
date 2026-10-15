@@ -31,13 +31,30 @@ object JsJson {
         return v as? String ?: throw IllegalArgumentException("'$name' must be a string")
     }
     fun double(o: dynamic, name: String): Double = (value(o, name) as? Number ?: throw IllegalArgumentException("'$name' must be a number")).toDouble()
-    fun long(o: dynamic, name: String): Long = (value(o, name) as? Number ?: throw IllegalArgumentException("'$name' must be a number")).toLong()
+    fun long(o: dynamic, name: String): Long = wholeNumber(value(o, name) as? Number ?: throw IllegalArgumentException("'$name' must be a number"), name)
     fun longOrNull(o: dynamic, name: String): Long? {
         val v = value(o, name) ?: return null
-        return (v as? Number ?: throw IllegalArgumentException("'$name' must be a number")).toLong()
+        return wholeNumber(v as? Number ?: throw IllegalArgumentException("'$name' must be a number"), name)
     }
-    fun int(o: dynamic, name: String): Int = long(o, name).toInt()
-    fun intOrNull(o: dynamic, name: String): Int? = longOrNull(o, name)?.toInt()
+    fun int(o: dynamic, name: String): Int = toInt(long(o, name), name)
+    fun intOrNull(o: dynamic, name: String): Int? = longOrNull(o, name)?.let { toInt(it, name) }
+
+    /** A whole number JavaScript holds exactly; a fraction, NaN or one too big to be exact is refused, not rounded. */
+    fun wholeNumber(value: Number, name: String): Long {
+        val d = value.toDouble()
+        require(d.isFinite() && d == kotlin.math.floor(d) && kotlin.math.abs(d) <= MAX_SAFE_INTEGER) { "'$name' must be a whole number" }
+        return d.toLong()
+    }
+
+    /** A time or duration in milliseconds from the extension: a whole number, not negative. */
+    fun millis(value: Double, name: String): Long = wholeNumber(value, name).also { require(it >= 0) { "'$name' must not be negative" } }
+
+    private fun toInt(value: Long, name: String): Int {
+        require(value in Int.MIN_VALUE..Int.MAX_VALUE) { "'$name' is out of range" }
+        return value.toInt()
+    }
+
+    private const val MAX_SAFE_INTEGER = 9_007_199_254_740_991.0
     fun bool(o: dynamic, name: String): Boolean = value(o, name) as? Boolean ?: throw IllegalArgumentException("'$name' must be true or false")
     fun boolOrNull(o: dynamic, name: String): Boolean? {
         val v = value(o, name) ?: return null

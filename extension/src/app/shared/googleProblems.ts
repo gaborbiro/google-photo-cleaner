@@ -3,7 +3,8 @@
 // document and can change at any time. When an answer doesn't fit, everything stops before anything
 // is changed and says so plainly; the technical details go to the log (and later to error reports).
 
-import type { ErrorKind } from '../../shared/protocol';
+import type { ErrorKind, OpError } from '../../shared/protocol';
+import { SourceError } from '../scan/source';
 
 /**
  * Google's answer didn't have the shape this version expects (PROTOCOL), or a request no longer fits
@@ -34,6 +35,30 @@ export function previewProblemText(kind: ErrorKind | null): string {
   if (kind === 'SESSION') return 'Preview unavailable: Google Photos is signed out';
   if (kind !== null && isIncompatible(kind)) return 'Preview unavailable: Photo Cleaner needs an update';
   return 'Preview unavailable';
+}
+
+export const NO_PHOTOS_TAB: OpError = { kind: 'NO_PHOTOS_TAB', message: 'Open photos.google.com, signed in to the account being scanned.' };
+
+/**
+ * When no Google Photos tab is signed in to the account, why: of the tabs' failed account checks, the
+ * one that tells the user most. A changed answer from Google first (waiting won't help), then a
+ * signed-out tab, then any other failure; "open Google Photos" only when no tab answered at all.
+ */
+export function tabProblem(failures: OpError[]): OpError {
+  return failures.find((e) => isIncompatible(e.kind)) ?? failures.find((e) => e.kind === 'SESSION') ?? failures[0] ?? NO_PHOTOS_TAB;
+}
+
+/**
+ * A preview that couldn't be had, in [where]: logs a changed answer from Google (and anything
+ * unexpected), and returns what to show for it.
+ */
+export function previewProblem(where: string, error: unknown): string {
+  if (error instanceof SourceError) {
+    if (isIncompatible(error.kind)) logGoogleProblem(`${where}: preview`, error);
+    return previewProblemText(error.kind);
+  }
+  console.warn(`Photo Cleaner: a preview failed (${where})`, error);
+  return previewProblemText(null);
 }
 
 /** The details behind an INCOMPATIBLE_TEXT or refusedText, for whoever fixes it. Never photo data. */

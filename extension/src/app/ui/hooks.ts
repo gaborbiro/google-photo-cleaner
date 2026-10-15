@@ -2,19 +2,20 @@
 // re-read whenever any surface or the background page saves a change.
 
 import { useCallback, useEffect, useState } from 'react';
-import type { OpResult } from '../../shared/protocol';
 import { jobId, type AnalysisJob, type Job, type JobKind, type ScanJob } from '../shared/job';
 import type { AccountAnswer, AppRequest } from '../shared/messages';
-import { openDatabase } from '../shared/db';
+import { openDatabase, storageProblemText } from '../shared/db';
 import { IndexedDbJobStore, onErased, onJobsChanged } from '../shared/store';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
-import { SourceError } from '../scan/source';
-import { classify, reportView, type ReportView } from '../scan/report';
+import { latestReport, reportKey, type ReportView } from '../scan/report';
 import { IndexedDbPreferences, type ProtectionChoices } from '../shared/preferences';
+import { reviewButtonText, surfaceView, type SurfaceView } from '../shared/jobView';
+import { IndexedDbReviewStore, type ReviewSummary } from '../duplicates/reviewStore';
 
 export const store = new IndexedDbJobStore();
 const inventory = new IndexedDbInventoryStore();
 const preferences = new IndexedDbPreferences();
+const review = new IndexedDbReviewStore();
 
 /**
  * The protection report of [account]'s latest scan, by the shared rules: null before any scan,
@@ -22,24 +23,22 @@ const preferences = new IndexedDbPreferences();
  */
 export function useReport(account: string | null, job: Job | null | undefined, choices: ProtectionChoices | undefined): ReportView | null | undefined {
   const [report, setReport] = useState<ReportView | null | undefined>(undefined);
-  const settled = job === undefined ? 'loading' : job === null ? 'none' : job.status === 'running' ? 'running' : `${job.status}:${job.updatedAtMs}`;
-  const chosen = choices === undefined ? null : JSON.stringify(choices);
+  const key = reportKey(account, job, choices);
   useEffect(() => {
-    if (account === null || chosen === null || settled === 'loading' || settled === 'running') return;
+    if (key === null || account === null || choices === undefined) return;
     let alive = true;
-    void (async () => {
-      const run = await inventory.latestRun(account);
-      if (!run) return alive && setReport(null);
-      const view = reportView(classify(await inventory.snapshot(run.id), Date.now(), JSON.parse(chosen) as ProtectionChoices));
-      if (alive) setReport(view);
-    })().catch((error: unknown) => {
-      console.error('Could not work out the report', error);
-      if (alive) setReport(null);
-    });
+    latestReport(inventory, account, choices, Date.now()).then(
+      (view) => alive && setReport(view),
+      (error: unknown) => {
+        console.error('Photo Cleaner: could not work out the report', error);
+        if (alive) setReport(null);
+      },
+    );
     return () => {
       alive = false;
     };
-  }, [account, settled, chosen]);
+    // The key says when to work it out again; account and choices are part of it.
+  }, [key]);
   return report;
 }
 
@@ -67,7 +66,21 @@ const reloadPage = () => location.reload();
  * says so; otherwise a plain reload), so it never shows what is gone.
  */
 export function useStartOverWhenErased(then: () => void = reloadPage): void {
-  useEffect(() => onErased(then), [then]);
+  useEffect(() => {
+    return onErased(() => {
+      forgetPageSettings();
+      then();
+    });
+  }, [then]);
+}
+
+/** What the extension's pages remember for convenience (e.g. the review tab's last tab) goes with the erased data. */
+function forgetPageSettings(): void {
+  try {
+    localStorage.clear();
+  } catch (error) {
+    console.warn('Photo Cleaner: could not clear what this page remembers', error);
+  }
 }
 
 /** Saves the account's protection choices; every surface hears of it. */
@@ -75,8 +88,49 @@ export function setProtectionChoices(account: string, choices: ProtectionChoices
   return preferences.setProtection(account, choices);
 }
 
+/** For actions started from a click: a failure goes to the log rather than vanishing ([what]: "starting the scan"). */
+export function logFailure(what: string): (error: unknown) => void {
+  return (error) => console.error(`Photo Cleaner: ${what} failed`, error);
+}
+
 export function send(request: AppRequest): Promise<unknown> {
   return chrome.runtime.sendMessage(request);
+}
+
+/**
+ * The popup's and the panel's data: which account is signed in, its Scan (undefined while loading),
+ * and the "Review 1,731 groups" button's text (null when there's no count to trust).
+ */
+export function useSignedInScan(): {
+  view: SurfaceView; scan: ScanJob | null | undefined; analysis: AnalysisJob | null | undefined; report: ReportView | null | undefined; reviewText: string | null;
+} {
+  const view = surfaceView(useAccount().answer);
+  const scan = useScanJob(view.account);
+  const analysis = useAnalysisJob(view.account);
+  const choices = useProtectionChoices(view.account);
+  const report = useReport(view.account, scan, choices);
+  const reviewText = reviewButtonText(useReviewSummary(view.account), scan, analysis, choices, Date.now());
+  return { view, scan, analysis, report, reviewText };
+}
+
+/** How many duplicate groups [account] has waiting, as last worked out, kept up to date; null when unknown. */
+export function useReviewSummary(account: string | null): ReviewSummary | null {
+  const [summary, setSummary] = useState<ReviewSummary | null>(null);
+  useEffect(() => {
+    if (account === null) return;
+    let alive = true;
+    const load = () => void review.summary(account).then(
+      (s) => alive && setSummary(s),
+      (error: unknown) => console.warn('Photo Cleaner: could not read how many groups are waiting', error),
+    );
+    load();
+    const stop = onJobsChanged(load);
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, [account]);
+  return summary;
 }
 
 /** The library scan of [account], kept up to date; undefined while loading. */
@@ -101,7 +155,8 @@ function useJob(account: string | null, kind: JobKind): Job | null | undefined {
     // If the saved data can't be opened yet (see useStorageProblem), try again shortly.
     const load = () => void store.get(jobId(kind, account)).then(
       (j) => alive && setJob(j),
-      () => {
+      (error: unknown) => {
+        console.warn('Photo Cleaner: could not read the saved jobs; trying again shortly', error);
         if (alive) retry = setTimeout(load, RETRY_MS);
       },
     );
@@ -134,7 +189,7 @@ export function useStorageProblem(): string | null {
       },
       (error: unknown) => {
         if (!alive) return;
-        setProblem(error instanceof Error ? error.message : String(error));
+        setProblem(storageProblemText(error));
         retry = setTimeout(probe, RETRY_MS);
       },
     );
@@ -147,18 +202,6 @@ export function useStorageProblem(): string | null {
   return problem;
 }
 
-/** Fetches a photo's preview through the account's Photos tab, as an image address; null when unavailable. */
-/** Throws a SourceError saying why when the preview can't be had. */
-export async function previewDataUrl(account: string, thumbUrl: string, sizePx: number): Promise<string> {
-  const result = (await send({ kind: 'app-run-op', account, op: 'fetchPreview', params: { thumbUrl, sizePx } })) as OpResult;
-  if (!result.ok) {
-    const { kind, message, httpStatus, rpcCode } = result.error;
-    throw new SourceError(kind, message, httpStatus ?? null, rpcCode ?? null);
-  }
-  const { contentType, base64 } = result.data as { contentType: string; base64: string };
-  return `data:${contentType};base64,${base64}`;
-}
-
 /** All saved jobs (every account), kept up to date. */
 export function useAllJobs(): Job[] {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -167,7 +210,8 @@ export function useAllJobs(): Job[] {
     let retry: ReturnType<typeof setTimeout> | undefined;
     const load = () => void store.all().then(
       (all) => alive && setJobs(all),
-      () => {
+      (error: unknown) => {
+        console.warn('Photo Cleaner: could not read the saved jobs; trying again shortly', error);
         if (alive) retry = setTimeout(load, RETRY_MS);
       },
     );
@@ -192,8 +236,10 @@ const ACCOUNT_REFRESH_MS = 5_000;
 export function useAccount(): { answer: AccountAnswer | undefined; refresh: () => void } {
   const [answer, setAnswer] = useState<AccountAnswer | undefined>(undefined);
   const refresh = useCallback(() => {
-    void (send({ kind: 'app-account' }) as Promise<AccountAnswer>).then(setAnswer, () =>
-      setAnswer({ account: null, problem: 'The extension is restarting; try again in a moment.', photosTabOpen: false }));
+    void (send({ kind: 'app-account' }) as Promise<AccountAnswer>).then(setAnswer, (error: unknown) => {
+      console.warn('Photo Cleaner: the extension did not answer which account is signed in', error);
+      setAnswer({ account: null, problem: 'The extension is restarting; try again in a moment.', photosTabOpen: false });
+    });
   }, []);
   useEffect(() => {
     refresh();

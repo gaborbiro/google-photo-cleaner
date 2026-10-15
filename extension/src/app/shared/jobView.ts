@@ -5,7 +5,10 @@
 
 import { SCAN_MAX_AGE_MS } from '../scan/report';
 import { count, n } from './format';
-import type { AnalysisJob, JobKind, ScanJob } from './job';
+import type { AnalysisJob, Job, JobKind, ScanJob } from './job';
+import type { AccountAnswer } from './messages';
+import type { ReviewSummary } from '../duplicates/reviewStore';
+import type { ProtectionChoices } from './preferences';
 
 /**
  * How an account is named on screen: its email when a Photos tab is signed in to it right
@@ -47,7 +50,20 @@ export interface ScanView {
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 const day = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
+/** Calendar days from [a] to [b] in local time: 0 the same day, 1 the day before… */
+function daysBetween(a: number, b: number): number {
+  const midnight = (ms: number) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+  return Math.round((midnight(b) - midnight(a)) / 86_400_000);
+}
+
+/** "Checked today 21:40", "Checked yesterday 18:52", "Checked 6 days ago", then the date. */
+export function checkedText(finishedAt: number, nowMs: number): string {
+  const days = daysBetween(finishedAt, nowMs);
+  if (days <= 0) return `Checked today ${clock(finishedAt)}`;
+  if (days === 1) return `Checked yesterday ${clock(finishedAt)}`;
+  if (days < 30) return `Checked ${days} days ago`;
+  return `Checked ${day(finishedAt)}`;
+}
 
 function duration(seconds: number): string {
   const minutes = Math.max(1, Math.round(seconds / 60));
@@ -116,7 +132,7 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanView
       lines: [
         count(p.photos, 'photo', 'photos') +
           (p.failed > 0 ? ` · ${n(p.failed)} could not be read (tried again next time)` : stale ? '' : ' · ready to review'),
-        `Checked ${sameDay(finishedAt, nowMs) ? 'today' : day(finishedAt)} ${clock(finishedAt)}`,
+        checkedText(finishedAt, nowMs),
       ],
       notice: stale ? 'More than a day old: check for new photos before anything can be trashed.' : null,
       // A repeat Scan only re-reads the list of photos (minutes) and analyses the new ones; nothing is analysed twice.
@@ -162,4 +178,103 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanView
     default:
       return { ...base, title: 'Scan stopped', action: 'restart', actionLabel: 'Try again', tabStatus: 'needed' };
   }
+}
+
+// --- the review tab's page ---
+
+/** The account the review tab shows: the one in its address (a link from another account's row), else the one signed in. */
+export function reviewAccount(requested: string | null, signedIn: { fingerprint: string } | null): string | null {
+  return requested ?? signedIn?.fingerprint ?? null;
+}
+
+export interface OtherAccountRow {
+  account: string;
+  href: string;
+  label: string;
+  scanTitle: string;
+}
+
+export interface ReviewPageView {
+  /** "Account: someone@example.com"; null with no account yet. */
+  accountText: string | null;
+  /**
+   * The tabs' labels, numbered as on the desktop (which has Calibration as its step 2); Search is not a
+   * step. The Scan tab's carries its status: "1 · Scan (done)".
+   */
+  tabLabels: { scan: string; duplicates: string; search: string };
+  /** Other accounts scanned on this computer, each a link to its own review. */
+  otherAccounts: OtherAccountRow[];
+  /**
+   * Changes when the duplicate groups must be built again: when a library scan or the analysis
+   * finishes (their finish time changes; pausing and progress don't) or the protection choices
+   * change. Null while the jobs and the choices are still loading.
+   */
+  refreshKey: string | null;
+}
+
+export function reviewPageView(input: {
+  selected: string | null;
+  signedIn: { fingerprint: string; email: string | null } | null;
+  jobs: Job[];
+  scan: ScanJob | null | undefined;
+  analysis: AnalysisJob | null | undefined;
+  choices: ProtectionChoices | undefined;
+  nowMs: number;
+}): ReviewPageView {
+  const { selected, signedIn, jobs, scan, analysis, choices, nowMs } = input;
+  const emailOf = (account: string) => (signedIn?.fingerprint === account ? signedIn.email : null);
+  const analysisOf = (account: string) => jobs.find((j): j is AnalysisJob => j.kind === 'analysis' && j.account === account) ?? null;
+  const shown = selected !== null && scan !== undefined && analysis !== undefined ? scanView(scan, analysis, nowMs) : null;
+  return {
+    accountText: selected === null ? null : `Account: ${accountLabel(selected, emailOf(selected))}`,
+    tabLabels: { scan: shown ? scanTabTitle(shown) : '1 · Scan', duplicates: '2 · Duplicates', search: 'Search' },
+    otherAccounts: jobs
+      .filter((j): j is ScanJob => j.kind === 'library-scan' && j.account !== selected)
+      .map((j) => ({
+        account: j.account,
+        href: `?account=${encodeURIComponent(j.account)}`,
+        label: accountLabel(j.account, emailOf(j.account)),
+        scanTitle: scanView(j, analysisOf(j.account), nowMs).title,
+      })),
+    refreshKey: scan === undefined || analysis === undefined || choices === undefined ? null
+      : `${scan?.finishedAtMs ?? '-'}:${analysis?.finishedAtMs ?? '-'}:${JSON.stringify(choices)}`,
+  };
+}
+
+// --- the popup and the panel ---
+
+export interface SurfaceView {
+  /**
+   * `looking`: still asking which account is signed in; `no-photos`: no Google Photos tab is open;
+   * `problem`: a tab is open but can't say; `account`: signed in to [account]. [problemText] says why
+   * there's no account.
+   */
+  state: 'looking' | 'no-photos' | 'problem' | 'account';
+  problemText: string | null;
+  account: string | null;
+  /** "Account: someone@example.com". */
+  accountText: string | null;
+}
+
+export function surfaceView(answer: AccountAnswer | undefined): SurfaceView {
+  const none = { problemText: null, account: null, accountText: null };
+  if (answer === undefined) return { ...none, state: 'looking' };
+  if (answer.account) {
+    const { fingerprint, email } = answer.account;
+    return { state: 'account', problemText: null, account: fingerprint, accountText: `Account: ${accountLabel(fingerprint, email)}` };
+  }
+  return { ...none, state: answer.photosTabOpen ? 'problem' : 'no-photos', problemText: answer.problem };
+}
+
+/**
+ * The popup's "Review 1,731 groups" (it opens the review tab), from the last count of groups waiting.
+ * Null when there's nothing to review, or the count may be wrong: a scan or analysis finished since, the
+ * scan is out of date (nothing can be offered), or the protection choices changed.
+ */
+export function reviewButtonText(summary: ReviewSummary | null, scan: ScanJob | null | undefined, analysis: AnalysisJob | null | undefined, choices: ProtectionChoices | undefined, nowMs: number): string | null {
+  if (!summary || summary.groupsToReview === 0 || !scan || scan.finishedAtMs === null || choices === undefined) return null;
+  if (scan.finishedAtMs > summary.atMs || (analysis?.finishedAtMs ?? 0) > summary.atMs) return null;
+  if (nowMs - scan.finishedAtMs > SCAN_MAX_AGE_MS) return null;
+  if (JSON.stringify(choices) !== JSON.stringify(summary.protection)) return null;
+  return `Review ${count(summary.groupsToReview, 'group', 'groups')}`;
 }

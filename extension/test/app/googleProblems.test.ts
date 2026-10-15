@@ -1,6 +1,7 @@
 // What the user is told when Google Photos answers in a way Photo Cleaner can't use.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { PlainError, plainMessage } from '../../src/app/shared/errors';
 import { NO_PHOTOS_TAB, previewProblemText, tabProblem } from '../../src/app/shared/googleProblems';
 import type { OpError } from '../../src/shared/protocol';
 
@@ -22,5 +23,13 @@ describe('Google Photos problems', () => {
     expect(previewProblemText('PROTOCOL')).toBe('Preview unavailable: Photo Cleaner needs an update');
     expect(previewProblemText('PREVIEW_UNAVAILABLE')).toBe('Preview unavailable');
     expect(previewProblemText(null)).toBe('Preview unavailable');
+  });
+
+  it('only messages written for the user are shown as they are; anything else gets the plain fallback', () => {
+    expect(plainMessage(new PlainError('Free up some space, then resume.'), 'fallback')).toBe('Free up some space, then resume.');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(plainMessage(new DOMException('QuotaExceededError'), 'Something went wrong.')).toBe('Something went wrong.');
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

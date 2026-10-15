@@ -79,7 +79,17 @@ export class OpPhotosSource implements PhotosSource, AnalysisSource {
   constructor(private readonly run: RunOp) {}
 
   private async call<T>(op: ReadOp, params: Record<string, unknown>): Promise<T> {
-    const result = await this.run(op, params);
+    let result: OpResult | undefined;
+    try {
+      result = await this.run(op, params);
+    } catch (error) {
+      // Chrome restarted the extension's service worker mid-request, or the extension was reloaded:
+      // a hiccup like a network blip, retried as one ("A listener indicated an asynchronous response…").
+      console.warn('Photo Cleaner: a request to Google Photos was cut off; trying again', error);
+      throw new SourceError('TRANSIENT', 'The request was cut off inside the browser');
+    }
+    // No answer at all: the service worker went away before replying.
+    if (result === undefined) throw new SourceError('TRANSIENT', 'No answer from the extension');
     if (!result.ok) {
       const e = result.error;
       throw new SourceError(e.kind, e.message, e.httpStatus ?? null, e.rpcCode ?? null);

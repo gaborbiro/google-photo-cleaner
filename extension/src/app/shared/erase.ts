@@ -3,6 +3,7 @@
 // trash queue, choices) and the AI model's downloaded files. Photos in Google Photos are not touched.
 
 import { DB_NAME } from './constants';
+import { PlainError } from './errors';
 
 /** How long to wait for other Photo Cleaner pages to let go of the database. */
 const BLOCKED_TIMEOUT_MS = 15_000;
@@ -30,7 +31,7 @@ function deleteDatabase(factory: IDBFactory, blockedTimeoutMs: number): Promise<
     };
     request.onblocked = () => {
       timer ??= setTimeout(
-        () => reject(new Error('Another Photo Cleaner page is still holding the saved data. Reload your Google Photos tabs and close other Photo Cleaner tabs, then try again.')),
+        () => reject(new PlainError('Another Photo Cleaner page is still holding the saved data. Reload your Google Photos tabs and close other Photo Cleaner tabs, then try again.')),
         blockedTimeoutMs,
       );
     };

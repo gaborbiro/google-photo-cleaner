@@ -26,6 +26,9 @@ function sourceFor(account: string) {
     chrome.runtime.sendMessage({ kind: 'app-run-op', account, op, params }) as Promise<OpResult>);
 }
 
+/** When a scan or analysis stopped for a reason nobody foresaw. Nothing in the library was changed. */
+const UNEXPECTED_STOP_TEXT = 'Something unexpected went wrong, so the scan stopped. Nothing in your library was changed. Resume to try again.';
+
 const isRunning = async (id: string) => (await jobs.get(id))?.status === 'running';
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -96,6 +99,8 @@ async function runAnalysisJob(job: AnalysisJob): Promise<void> {
     store: analysis,
     embedder,
     decode: decodePreview,
+    // A resumed job goes on counting; a new one (Scan, Check for new photos) starts with no progress.
+    newPhotosThisJob: job.progress.newPhotos,
     shouldStop: async () => !(await isRunning(job.id)),
     pace: (lastPhotoMs, show) => pace(job.id, lastPhotoMs, show),
     onProgress: async (progress) => void (await jobs.update(job.id, (j) => (j?.kind === 'analysis' ? reportProgress(j, progress, Date.now()) : j))),
@@ -116,9 +121,9 @@ async function check(): Promise<void> {
     active.add(job.id);
     (job.kind === 'library-scan' ? runScanJob(job) : runAnalysisJob(job))
       .catch(async (error: unknown) => {
-        console.error('Stopped by an unexpected error', error);
-        const message = error instanceof Error ? error.message : String(error);
-        await jobs.update(job.id, (j) => (j ? endJob(j, 'paused', `Stopped by an unexpected error: ${message}. Resume to try again.`, Date.now()) : null));
+        // A bug or something truly unexpected: the details go to the log (and later to error reports).
+        console.error('Photo Cleaner: the scan stopped because of an unexpected error', error);
+        await jobs.update(job.id, (j) => (j ? endJob(j, 'paused', UNEXPECTED_STOP_TEXT, Date.now()) : null));
       })
       .finally(() => {
         active.delete(job.id);

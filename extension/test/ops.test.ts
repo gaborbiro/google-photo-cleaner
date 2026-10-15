@@ -2,7 +2,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { previewUrl, runOp, type PageEnvironment } from '../src/page/ops';
-import { isReadOp, READ_OPS } from '../src/shared/protocol';
+import { runWriteOp } from '../src/page/trashOps';
+import { isAllowedOp, isReadOp, READ_OPS, WRITE_OPS } from '../src/shared/protocol';
 import { envelope, rawLibraryItem, timelinePayload } from './fixtures';
 
 const wiz = { SNlM0e: 'AT', FdrFJe: '1', cfb2h: 'bl', eptZe: '/_/PhotosUi/', oPEP7c: 'someone@example.com' };
@@ -74,6 +75,57 @@ describe('runOp', () => {
   });
 });
 
+describe('the trash requests', () => {
+  const ACCOUNT = 'abcdef0123456789'; // what the fake page's account hashes to
+  /** A page that records what it sent to Google. */
+  function recording(reply = envelope('XwAOJf', [null])) {
+    const sent: string[] = [];
+    const e = env((url, init) => {
+      sent.push(`${url} ${decodeURIComponent(String(init.body))}`);
+      return reply;
+    });
+    return { e, sent };
+  }
+
+  it('trash and restore send exactly the named photos', async () => {
+    const trash = recording();
+    expect(await runWriteOp(trash.e, 'moveToTrash', { account: ACCOUNT, dedupKeys: ['d1', 'd2'] })).toEqual({ ok: true, data: { sent: 2, accountFingerprint: ACCOUNT } });
+    expect(trash.sent).toHaveLength(1);
+    expect(trash.sent[0]).toContain('rpcids=XwAOJf');
+    expect(trash.sent[0]).toContain('[null,1,[\\"d1\\",\\"d2\\"],3]');
+
+    const restore = recording();
+    await runWriteOp(restore.e, 'restoreFromTrash', { account: ACCOUNT, dedupKeys: ['d1'] });
+    expect(restore.sent[0]).toContain('[null,3,[\\"d1\\"],2]');
+  });
+
+  it('nothing is sent for another account, or for photos that are not plainly dedup keys', async () => {
+    const cases: [Record<string, unknown>, string][] = [
+      [{ account: 'someone-else', dedupKeys: ['d1'] }, 'NO_PHOTOS_TAB'],
+      [{ dedupKeys: ['d1'] }, 'BAD_REQUEST'], // no account named
+      [{ account: ACCOUNT, dedupKeys: [] }, 'BAD_REQUEST'],
+      [{ account: ACCOUNT, dedupKeys: Array.from({ length: 51 }, (_, i) => `d${i}`) }, 'BAD_REQUEST'],
+      [{ account: ACCOUNT, dedupKeys: ['d1', 'd1'] }, 'BAD_REQUEST'],
+      [{ account: ACCOUNT, dedupKeys: ['d1 d2'] }, 'BAD_REQUEST'],
+      [{ account: ACCOUNT, dedupKeys: [42] }, 'BAD_REQUEST'],
+      [{ account: ACCOUNT, dedupKeys: 'd1' }, 'BAD_REQUEST'],
+    ];
+    for (const [params, kind] of cases) {
+      const { e, sent } = recording();
+      expect(await runWriteOp(e, 'moveToTrash', params), JSON.stringify(params)).toMatchObject({ ok: false, error: { kind } });
+      expect(sent, JSON.stringify(params)).toEqual([]);
+    }
+  });
+
+  it('the trash is read page by page as dedup keys', async () => {
+    const page = [[['mk1', ['https://photos.fife.usercontent.google.com/pw/M', 1, 1], 1, 'dk1', 0, 0], ['mk2', null, 2, 'dk2', 0, 0]], 'next'];
+    const result = await runOp(env(() => envelope('zy0IHe', page)), 'listTrashPage', {});
+    expect(result).toEqual({ ok: true, data: { dedupKeys: ['dk1', 'dk2'], nextPageToken: 'next', accountFingerprint: ACCOUNT } });
+    const malformed = await runOp(env(() => envelope('zy0IHe', [[['mk1', null, 1, null]]])), 'listTrashPage', {});
+    expect(malformed).toMatchObject({ ok: false, error: { kind: 'PROTOCOL' } });
+  });
+});
+
 describe('previewUrl', () => {
   it('sizes Google image URLs', () => {
     expect(previewUrl('https://photos.fife.usercontent.google.com/pw/ABC', 256)).toBe('https://photos.fife.usercontent.google.com/pw/ABC=w256-h256-k-no');
@@ -88,11 +140,14 @@ describe('previewUrl', () => {
   });
 });
 
-describe('read-only guarantee', () => {
+describe('nothing changes Google Photos but the trash request, and only from Photo Cleaner', () => {
+  /** Every mutating request GPTK knows; only the trash one (XwAOJf) may appear, and only where allowed below. */
   const MUTATING_RPC_IDS = [
     'XwAOJf', 'ycV3Nd', 'LjmOue', 'E1Cajb', 'laUYf', 'OXvT9d', 'QD9nKf', 'Ftfh0',
     'w7TP3c', 'StLnCe', 'Pp2Xxe', 'V8RKJ', 'Es7fke', 'EtUHOe', 'DaSgWe', 'AQNOFd',
   ];
+  /** The trash request's source, and Photo Cleaner's own page script bundle. Never the desktop connector's (dist/). */
+  const TRASH_ALLOWED_IN = ['src/page/trashOps.ts', 'dist-app/page.js'];
 
   function files(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {
@@ -100,20 +155,32 @@ describe('read-only guarantee', () => {
       return statSync(path).isDirectory() ? files(path) : [path];
     });
   }
+  const sourceFiles = () => ['src', 'vendor', 'dist', 'dist-app'].filter((dir) => existsSync(dir)).flatMap(files)
+    .map((path) => path.replace(/\\/g, '/'))
+    .filter((path) => /\.(tsx?|m?js)$/.test(path));
 
-  it('exposes only read operations', () => {
-    expect([...READ_OPS].sort()).toEqual(['fetchPreview', 'listAlbumItemsPage', 'listAlbumsPage', 'listArchivePage', 'listFavouritesPage', 'listLibraryPage', 'status']);
-    expect(isReadOp('moveItemsToTrash')).toBe(false);
+  it('the read operations are exactly these, and the only writes are trash and restore', () => {
+    expect([...READ_OPS].sort()).toEqual(['fetchPreview', 'listAlbumItemsPage', 'listAlbumsPage', 'listArchivePage', 'listFavouritesPage', 'listLibraryPage', 'listTrashPage', 'status']);
+    expect([...WRITE_OPS].sort()).toEqual(['moveToTrash', 'restoreFromTrash']);
+    expect(isReadOp('moveToTrash')).toBe(false);
+    // Where writes aren't allowed (the desktop connector's relay), a write is refused like an unknown operation.
+    expect(isAllowedOp('moveToTrash', false)).toBe(false);
+    expect(isAllowedOp('moveToTrash', true)).toBe(true);
+    expect(isAllowedOp('removeItemsFromAlbum', true)).toBe(false);
   });
 
-  it('contains no mutating RPC id in sources, vendored code or the built bundle', () => {
-    const roots = ['src', 'vendor', 'dist', 'dist-app'].filter((dir) => existsSync(dir));
-    const offenders = roots.flatMap(files)
-      .filter((path) => /\.(tsx?|m?js)$/.test(path))
-      .flatMap((path) => {
-        const text = readFileSync(path, 'utf8');
-        return MUTATING_RPC_IDS.filter((id) => text.includes(id)).map((id) => `${path}: ${id}`);
-      });
+  it("no mutating request appears anywhere but the trash one, in the trash module and Photo Cleaner's page bundle", () => {
+    const offenders = sourceFiles().flatMap((path) => {
+      const text = readFileSync(path, 'utf8');
+      return MUTATING_RPC_IDS.filter((id) => text.includes(id) && !(id === 'XwAOJf' && TRASH_ALLOWED_IN.includes(path))).map((id) => `${path}: ${id}`);
+    });
     expect(offenders).toEqual([]);
+  });
+
+  it("only Photo Cleaner's own page script includes the trash module, and only its relay allows writes", () => {
+    const importers = sourceFiles().filter((path) => path.startsWith('src/') && /from '[./]+\/(page\/)?trashOps'/.test(readFileSync(path, 'utf8')));
+    expect(importers).toEqual(['src/app/page/main.ts']);
+    expect(readFileSync('src/content/main.ts', 'utf8')).not.toMatch(/installRelay\([^)]*true/);
+    expect(readFileSync('src/app/content/main.ts', 'utf8')).toMatch(/installRelay\(APP_PAGE_CHANNEL, true\)/);
   });
 });

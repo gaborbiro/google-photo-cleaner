@@ -1,6 +1,7 @@
 // Messages exchanged between the layers of the extension and the desktop app.
-// Everything here is read-only by construction: there is no operation that
-// changes anything in Google Photos.
+// The read operations change nothing in Google Photos. The only operations that do are the two
+// in WRITE_OPS (move to the trash, restore from it); they are accepted only where a page script and
+// relay are installed with writes allowed (Photo Cleaner's own, never the desktop connector's).
 
 export const READ_OPS = [
   'status',
@@ -10,12 +11,32 @@ export const READ_OPS = [
   'listAlbumsPage',
   'listAlbumItemsPage',
   'fetchPreview',
+  'listTrashPage',
 ] as const;
 
 export type ReadOp = (typeof READ_OPS)[number];
 
 export function isReadOp(value: unknown): value is ReadOp {
   return typeof value === 'string' && (READ_OPS as readonly string[]).includes(value);
+}
+
+/** The only operations that change the user's Google Photos. Params: `{ account, dedupKeys }`. */
+export const WRITE_OPS = ['moveToTrash', 'restoreFromTrash'] as const;
+
+export type WriteOp = (typeof WRITE_OPS)[number];
+
+export function isWriteOp(value: unknown): value is WriteOp {
+  return typeof value === 'string' && (WRITE_OPS as readonly string[]).includes(value);
+}
+
+export type PageOp = ReadOp | WriteOp;
+
+/** At most this many photos in one trash or restore request. */
+export const MAX_TRASH_BATCH = 50;
+
+/** Whether [op] may run where writes are [writesAllowed]. */
+export function isAllowedOp(op: unknown, writesAllowed: boolean): op is PageOp {
+  return isReadOp(op) || (writesAllowed && isWriteOp(op));
 }
 
 export const ERROR_KINDS = [
@@ -59,7 +80,7 @@ export interface PageRequest {
   channel: string;
   dir: 'request';
   id: string;
-  op: ReadOp;
+  op: PageOp;
   params: Record<string, unknown>;
 }
 
@@ -73,7 +94,7 @@ export interface PageResponse {
 /** Service worker <-> content script, over chrome.runtime messaging. */
 export interface TabCommand {
   kind: 'pc-command';
-  op: ReadOp;
+  op: PageOp;
   params: Record<string, unknown>;
 }
 

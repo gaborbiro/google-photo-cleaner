@@ -16,6 +16,17 @@ describe('protection choices', () => {
     expect(await preferences.protection('acc2')).toEqual({ favourites: true, albums: true, archived: true });
   });
 
+  it('trashing is simulated until the user turns real trashing on; changing one choice keeps the other', async () => {
+    const preferences = new IndexedDbPreferences(new IDBFactory());
+    expect(await preferences.trashForReal('acc1')).toBe(false);
+    await preferences.setTrashForReal('acc1', true);
+    await preferences.setProtection('acc1', { ...ALL_PROTECTED, archived: false });
+    expect(await preferences.trashForReal('acc1')).toBe(true); // not reset by saving the protection choices
+    await preferences.setTrashForReal('acc1', false);
+    expect(await preferences.protection('acc1')).toEqual({ ...ALL_PROTECTED, archived: false }); // nor the other way round
+    expect(await preferences.trashForReal('acc2')).toBe(false);
+  });
+
   it('with albums unticked, photos protected only by an album become eligible; favourites stay protected', async () => {
     // Photos 1 and 2 are favourites; album A holds 2, 3 and 4, album B 4 and 5.
     const store = newStore();

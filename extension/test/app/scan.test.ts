@@ -3,10 +3,10 @@
 // Kotlin protection rules.
 
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { latestReport, reportKey, reportView } from '../../src/app/scan/report';
 import { endJob, startScanJob } from '../../src/app/shared/job';
-import { SourceError } from '../../src/app/scan/source';
+import { OpPhotosSource, SourceError } from '../../src/app/scan/source';
 import { INCOMPATIBLE_TEXT, refusedText } from '../../src/app/shared/googleProblems';
 import {
   classifyLatest,
@@ -346,5 +346,16 @@ describe('the shared protection rules from JavaScript', () => {
   it('refuses a snapshot with a missing field instead of guessing', async () => {
     const { classify } = await import('../../src/app/scan/report');
     expect(() => classify({ run: { id: 1 } } as never, NOW, ALL_PROTECTED)).toThrow();
+  });
+
+  it('a request cut off inside the browser (the service worker restarted) is a hiccup to retry, not a crash', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const cutOff = new OpPhotosSource(async () => {
+      throw new Error('A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received');
+    });
+    await expect(cutOff.status()).rejects.toMatchObject({ kind: 'TRANSIENT' });
+    const noAnswer = new OpPhotosSource(async () => undefined as never);
+    await expect(noAnswer.status()).rejects.toMatchObject({ kind: 'TRANSIENT' });
+    warn.mockRestore();
   });
 });

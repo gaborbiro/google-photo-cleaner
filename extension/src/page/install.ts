@@ -1,8 +1,11 @@
 // Runs in the photos.google.com page (MAIN world) so requests carry the page's
 // own session. Session tokens are read here and never posted anywhere.
 
-import { isReadOp, type PageRequest, type PageResponse } from '../shared/protocol';
+import { isReadOp, isWriteOp, type OpResult, type PageRequest, type PageResponse, type WriteOp } from '../shared/protocol';
 import { runOp, type PageEnvironment } from './ops';
+
+/** Runs a trash operation (trashOps.ts's runWriteOp); passed in only by Photo Cleaner's own page script. */
+export type WriteHandler = (env: PageEnvironment, op: WriteOp, params: Record<string, unknown>) => Promise<OpResult>;
 
 declare global {
   interface Window {
@@ -20,6 +23,12 @@ export interface PageScriptConfig {
    * It is displayed, never stored: stored data is labelled with the account fingerprint.
    */
   exposeAccountEmail?: boolean;
+  /**
+   * Also answers the trash operations (WRITE_OPS) with this handler. Only Photo Cleaner's own page
+   * script passes one; the desktop connector's has none, so its bundle doesn't even contain them.
+   * (Any script in the page could call Google directly anyway: this adds nothing for it.)
+   */
+  writes?: WriteHandler;
 }
 
 /**
@@ -28,7 +37,7 @@ export interface PageScriptConfig {
  * older instances stop answering, so a request is never executed twice and never by
  * outdated code.
  */
-export function installPageScript({ channel, ownerKey, exposeAccountEmail = false }: PageScriptConfig): void {
+export function installPageScript({ channel, ownerKey, exposeAccountEmail = false, writes }: PageScriptConfig): void {
   const owners = window as unknown as Record<string, string | undefined>;
   const instanceId = crypto.randomUUID();
   owners[ownerKey] = instanceId;
@@ -51,11 +60,15 @@ export function installPageScript({ channel, ownerKey, exposeAccountEmail = fals
     const params = typeof message.params === 'object' && message.params !== null ? message.params : {};
 
     const respond = (response: PageResponse) => window.postMessage(response, window.location.origin);
-    if (!isReadOp(message.op)) {
+    const op = message.op;
+    if (writes && isWriteOp(op)) {
+      void writes(env, op, params).then((result) => respond({ channel, dir: 'response', id, result }));
+      return;
+    }
+    if (!isReadOp(op)) {
       respond({ channel, dir: 'response', id, result: { ok: false, error: { kind: 'BAD_REQUEST', message: 'Unknown operation' } } });
       return;
     }
-    const op = message.op;
     void runOp(env, op, params).then((result) => {
       const email = window.WIZ_global_data?.['oPEP7c'];
       const withEmail = exposeAccountEmail && op === 'status' && result.ok && typeof email === 'string'

@@ -1,11 +1,14 @@
 // Isolated-world relay: service worker command -> page script -> response.
 
-import { isOpResult, isReadOp, type OpResult, type PageRequest, type PageResponse, type TabCommand } from '../shared/protocol';
+import { isAllowedOp, isOpResult, type OpResult, type PageRequest, type PageResponse, type TabCommand } from '../shared/protocol';
 
 const PAGE_TIMEOUT_MS = 90_000;
 
-/** Relays this extension's tab commands to its page script on [channel]. */
-export function installRelay(channel: string): void {
+/**
+ * Relays this extension's tab commands to its page script on [channel]. [writesAllowed]: also the
+ * trash operations (Photo Cleaner's own relay; the desktop connector's stays read-only).
+ */
+export function installRelay(channel: string, writesAllowed = false): void {
   const pending = new Map<string, (result: OpResult) => void>();
 
   window.addEventListener('message', (event: MessageEvent) => {
@@ -21,7 +24,7 @@ export function installRelay(channel: string): void {
 
   chrome.runtime.onMessage.addListener((message: Partial<TabCommand>, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id || message?.kind !== 'pc-command') return false;
-    if (!isReadOp(message.op)) {
+    if (!isAllowedOp(message.op, writesAllowed)) {
       sendResponse({ ok: false, error: { kind: 'BAD_REQUEST', message: 'Unknown operation' } } satisfies OpResult);
       return false;
     }

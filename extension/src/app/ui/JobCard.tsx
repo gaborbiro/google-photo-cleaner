@@ -8,7 +8,7 @@ import type { AnalysisJob, ScanJob } from '../shared/job';
 import { scanView } from '../shared/jobView';
 import type { ReportView } from '../scan/report';
 import type { ProtectionChoices } from '../shared/preferences';
-import { logFailure, send, setProtectionChoices, store, useStorageProblem } from './hooks';
+import { logFailure, send, setProtectionChoices, setTrashForReal, store, useStorageProblem } from './hooks';
 
 /** One Scan in two stages: reading the photo list, then analysing the new photos. */
 export function ScanCard({ account, scan, analysis, report }: { account: string; scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null | undefined }) {
@@ -24,7 +24,6 @@ export function ScanCard({ account, scan, analysis, report }: { account: string;
       {view.percent !== null && <div className="bar"><div style={{ width: `${view.percent}%` }} /></div>}
       {view.stage && <div>{view.stage}</div>}
       {view.lines.map((line) => <div key={line} className="mono">{line}</div>)}
-      {view.speedCheck && <div>{view.speedCheck}</div>}
       {view.waiting && <div className="muted">{view.waiting}</div>}
       {view.notice && <div className="warn">{view.notice}</div>}
       {view.timesText && <div className="muted mono">{view.timesText}</div>}
@@ -87,6 +86,21 @@ export function ProtectionCard({ account, choices }: { account: string; choices:
       </div>
       <p className="muted small">
         Photos of unknown status, such as ones saved from someone else's share, are always kept. Trashing a photo also removes it from every album it's in.
+      </p>
+    </section>
+  );
+}
+
+/** Whether approved photos really go to Google Photos' trash; simulated until the user turns it on. */
+export function TrashModeCard({ account, trashForReal }: { account: string; trashForReal: boolean }) {
+  return (
+    <section className="card trash-mode-card">
+      <label>
+        <input type="checkbox" checked={trashForReal} onChange={(e) => void setTrashForReal(account, e.target.checked).catch(logFailure('saving "Trash for real"'))} />{' '}
+        <strong>Trash for real</strong>
+      </label>
+      <p className="muted small">
+        Off: trashing is simulated, nothing is sent to Google. On: approved photos go to Google Photos' trash, where they stay for 60 days; Z undoes it.
       </p>
     </section>
   );

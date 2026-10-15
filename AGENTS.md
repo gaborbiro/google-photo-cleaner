@@ -64,9 +64,13 @@ say so, run `npm run kotlin` (or `npm run check`, which does it).
 
 **Safety comes first.** The app moves photos to the trash. Nothing may ever be offered for the trash
 unless the shared rules call it ELIGIBLE with the user's protection choices. Photos of unknown status
-are never trashable. Trashing is still **simulated** (`SimulatedTrash`). Do not add any request that
-changes the user's Google Photos (trash, album edits, favourites…) unless the user explicitly asked for
-that change. Every new write path needs tests for refusing protected photos.
+are never trashable. Trashing is **simulated** (`SimulatedTrash`) unless the account has "Trash for
+real" on; then photos go to Google Photos' trash (`duplicates/googleTrash.ts`), and what counts is
+where each photo is afterwards, read back from the trash. The only requests that change the user's
+Google Photos are trash and restore, in `extension/src/page/trashOps.ts`, which only Photo Cleaner's
+own page script includes (the tripwire tests in `extension/test/ops.test.ts` enforce this). Do not add
+any other (album edits, favourites…) unless the user explicitly asked for that change. Every write goes
+through the trash queue; every new write path needs tests for refusing protected photos.
 - Search's sweep and the trash queue check every photo again against a fresh scan and the current
   protection choices just before acting. `extension/test/app/sessions.test.ts` tests this through the
   real wiring (`duplicates/session.ts`, `search/session.ts`); a change to that wiring needs tests there.
@@ -130,7 +134,7 @@ log photo keys, URLs, album titles, tokens or account details. Never commit secr
 
 1. `cd extension && npm run kotlin && npm run build`
 2. Chrome → `chrome://extensions` → Developer mode → **Load unpacked** → `extension/dist-app`
-   ("Photo Cleaner (preview)").
+   ("Photo Cleaner").
 3. Open photos.google.com, signed in.
 4. After changes, press ↻ on the extension, then reload the Google Photos tab.
 

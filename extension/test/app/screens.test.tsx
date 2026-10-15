@@ -325,6 +325,28 @@ describe('clicks and keys reach what they should', () => {
     expect(examples(root, 'More like:')).toBe(0);
   });
 
+  it("Scan tab: Trash for real is off until ticked; then Search's question says the photos really go to the trash", async () => {
+    await scannedAndAnalysed(indexedDB);
+    const root = await open('review', '?account=account-a');
+    const real = await vi.waitFor(() => {
+      const box = root.querySelector<HTMLInputElement>('.trash-mode-card input[type="checkbox"]');
+      if (!box) throw new Error('no Trash for real switch yet');
+      return box;
+    }, { timeout: 3_000 });
+    expect(real.checked).toBe(false);
+    real.click();
+    await vi.waitFor(async () => expect(await new IndexedDbPreferences(indexedDB).trashForReal('account-a')).toBe(true));
+
+    await click(root, '2 · Duplicates');
+    await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(3), { timeout: 3_000 });
+    await click(root, 'Search more like these');
+    await vi.waitFor(() => expect(searchTiles(root).length).toBeGreaterThan(0), { timeout: 3_000 });
+    searchTiles(root)[0]!.querySelector<HTMLElement>('.search-tile-image')!.click();
+    press('d');
+    await shows(root, "They go to Google Photos' trash, where they stay for 60 days.");
+    expect(root.textContent).not.toContain('Simulated');
+  }, 15_000);
+
   it('Scan tab: the protection checkboxes are saved and change the counts; the Scan button starts a scan', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('review', '?account=account-a');

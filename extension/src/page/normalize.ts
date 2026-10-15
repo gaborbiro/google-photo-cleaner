@@ -241,3 +241,18 @@ export function normalizeAlbumItemsPage(payload: unknown): AlbumItemsPageDto {
     ownerActorId: stringOrNull(parsed?.owner?.actorId),
   };
 }
+
+export interface TrashPageDto {
+  /** The dedup keys of the photos in the trash, as the trash and restore requests name them. */
+  dedupKeys: string[];
+  nextPageToken: string | null;
+}
+
+/** zy0IHe: the trash, as GPTK's parser reads it (trashPage: items at 0, next page at 1; trashItemParse: dedup key at 3). */
+export function normalizeTrashPage(payload: unknown): TrashPageDto {
+  const raw = asArray(payload, 'Trash page');
+  return {
+    dedupKeys: itemList(raw, 0, 'Trash items').map((item) => requireKey(asArray(item, 'Trash item')[3], 'dedupKey')),
+    nextPageToken: tokenOrNull(raw[1]),
+  };
+}

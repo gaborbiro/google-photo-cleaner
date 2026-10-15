@@ -1,5 +1,6 @@
-// Moving approved photos to the trash: the browser twin of the desktop's ProcessTrashQueueUseCase
-// and SimulatedTrashService. Until M6 the trash is simulated: nothing is sent to Google.
+// Moving approved photos to the trash: the browser twin of the desktop's ProcessTrashQueueUseCase.
+// The trash is simulated (nothing is sent to Google) unless the account has "Trash for real" on:
+// then it is Google Photos' own (googleTrash.ts).
 
 import { committed, openDatabase, request, STORES } from '../shared/db';
 import type { Classification } from '../scan/report';
@@ -13,6 +14,8 @@ export interface TrashTarget {
 export interface TrashOutcome {
   dedupKey: string;
   succeeded: boolean;
+  /** Failed for a passing reason, or couldn't be checked: checked again on the next pass, and sent again if needed. */
+  uncertain?: boolean;
   error: string | null;
 }
 
@@ -22,6 +25,8 @@ export interface TrashService {
   restore(account: string, targets: TrashTarget[]): Promise<TrashOutcome[]>;
   /** Whether each dedup key is in the trash now. */
   inTrash(account: string, dedupKeys: string[]): Promise<Map<string, boolean>>;
+  /** Why the queue should wait before contacting the trash again (e.g. Google is limiting requests); null to go on. */
+  waitingReason?(): string | null;
 }
 
 /** Records what would be trashed, in the browser database; Google is never contacted. */
@@ -97,6 +102,8 @@ export async function recoverInterrupted(deps: TrashQueueDeps): Promise<void> {
  *    (now a favourite, in an album, archived, unknown) is BLOCKED; the rest are sent.
  */
 export async function processTrashQueue(deps: TrashQueueDeps): Promise<TrashQueueStatus> {
+  const resting = deps.trash.waitingReason?.() ?? null;
+  if (resting !== null) return { counts: await deps.review.jobCounts(deps.account), simulated: deps.trash.simulated, waitingReason: resting };
   await reconcileUncertain(deps);
   await restoreRequested(deps);
   const waitingReason = await sendQueued(deps);
@@ -169,10 +176,12 @@ async function sendQueued(deps: TrashQueueDeps): Promise<string | null> {
   for (const job of sending) {
     const outcome = outcomes.get(job.dedupKey);
     if (outcome?.succeeded) await deps.review.transition(job.id, 'SENDING', 'COMPLETED', null, deps.now());
+    // Checked again on the next pass: sent again if it isn't in the trash and still approved.
+    else if (outcome?.uncertain) await deps.review.transition(job.id, 'SENDING', 'UNCERTAIN', outcome.error, deps.now());
     else await deps.review.transition(job.id, 'SENDING', 'FAILED', outcome?.error ?? 'No result for this photo', deps.now());
   }
   await markUndoneCompletions(deps, sending);
-  return null;
+  return deps.trash.waitingReason?.() ?? null;
 }
 
 /** Jobs whose decision was undone while they were in flight are restored rather than left in the trash. */

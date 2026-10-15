@@ -4,7 +4,9 @@ Finds duplicates and clutter in very large Google Photos libraries and moves wha
 trash. Favourites, photos in albums and archived photos are protected (each can be turned off), and
 photos whose status isn't certain are never offered.
 
-**Current state:** nothing is sent to Google yet. Trashing is simulated in both products.
+**Current state:** trashing is simulated unless you tick "Trash for real" for the account (browser
+extension only; the desktop app always simulates). Then approved photos go to Google Photos' trash,
+where they stay for 60 days, and undo restores them.
 
 Agents and contributors: read [`AGENTS.md`](AGENTS.md) first. Where things stand: [`docs/roadmap.md`](docs/roadmap.md).
 

@@ -1,4 +1,4 @@
-import type { ReadOp } from '../../shared/protocol';
+import type { PageOp } from '../../shared/protocol';
 
 // Messages from the surfaces (popup, panel, review tab) and the background page to the
 // service worker. The service worker starts and stops the background page and talks to
@@ -13,8 +13,11 @@ export type AppRequest =
   | { kind: 'app-engine-idle' }
   /** Gentle mode: has the keyboard or mouse been used in the last minute? Answers 'active', 'idle' or 'locked'. */
   | { kind: 'app-idle-state' }
-  /** The background page's scan: one read operation, in a Photos tab signed in to [account]. */
-  | { kind: 'app-run-op'; account: string; op: ReadOp; params: Record<string, unknown> }
+  /**
+   * One operation in a Photos tab signed in to [account]: a read for a scan or a preview, or a trash
+   * request (only from the trash queue, which checks every photo again first).
+   */
+  | { kind: 'app-run-op'; account: string; op: PageOp; params: Record<string, unknown> }
   | { kind: 'app-open-review'; account: string | null }
   | { kind: 'app-open-photos' }
   | { kind: 'app-show-panel' }

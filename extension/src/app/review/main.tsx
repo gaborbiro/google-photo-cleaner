@@ -5,8 +5,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { documentTitle, reviewAccount, reviewPageView, scanView } from '../shared/jobView';
-import { send, useAccount, useAllJobs, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useSpinningTabIcon, useStartOverWhenErased } from '../ui/hooks';
-import { EraseCard, ProtectionCard, ScanCard, StorageProblem } from '../ui/JobCard';
+import { send, useAccount, useAllJobs, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useSpinningTabIcon, useStartOverWhenErased, useTrashForReal } from '../ui/hooks';
+import { EraseCard, ProtectionCard, ScanCard, StorageProblem, TrashModeCard } from '../ui/JobCard';
 import { DuplicatesReview } from '../duplicates/reviewModel';
 import { reviewDeps } from '../duplicates/session';
 import { SearchModel } from '../search/searchModel';
@@ -55,6 +55,7 @@ function Review() {
   const choices = useProtectionChoices(selected);
   const report = useReport(selected, job, choices);
   const analysis = useAnalysisJob(selected);
+  const trashForReal = useTrashForReal(selected);
   const page = reviewPageView({ selected, signedIn, jobs, scan: job, analysis, choices, nowMs: Date.now() });
   const [tab, setTab] = useState<Tab>(rememberedTab);
   // A tab, once opened, stays alive while hidden: its groups, selections and place are kept.
@@ -83,7 +84,7 @@ function Review() {
   // The workbenches, once per account; the trash queue runs for both whichever tab is open.
   const duplicates = useMemo(() => (selected === null ? null : new DuplicatesReview(reviewDeps(selected))), [selected]);
   const search = useMemo(() => (selected === null ? null : new SearchModel(searchDeps(selected))), [selected]);
-  useTrashQueue(selected, duplicates);
+  useTrashQueue(selected, duplicates, search);
   useEffect(() => {
     if (refreshKey !== null) search?.libraryChanged();
   }, [search, refreshKey]);
@@ -124,6 +125,7 @@ function Review() {
             <div className="scan-tab" hidden={tab !== 'scan'}>
               {job !== undefined && analysis !== undefined && <ScanCard account={selected} scan={job} analysis={analysis} report={report} />}
               {choices !== undefined && <ProtectionCard account={selected} choices={choices} />}
+              {trashForReal !== undefined && <TrashModeCard account={selected} trashForReal={trashForReal} />}
               <EraseCard />
             </div>
           )}

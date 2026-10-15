@@ -139,11 +139,22 @@ grows into the product; a new shared Kotlin module holds the tested rules, compi
         example drops out. The examples show above the results as +/− thumbnails, each removable
 - [ ] **M6 Real trashing + data controls**: move to Google Photos' trash with undo and safety checks;
       storage line, "Forget this account", the erase button (Erase Photo Cleaner's data), goodbye page
+  - [x] (2026-10-15) Real trashing, behind a per-account "Trash for real" switch (off by default):
+        Google Photos' own trash and restore requests, at most 50 photos each, refused for a tab signed
+        in to another account; only Photo Cleaner's page script contains them (tripwire tests). What
+        counts is where each photo is afterwards, read back from the trash; passing failures are
+        checked and sent again; the queue rests while Google limits requests. Undo restores. To check
+        by hand with a few photos first (docs/extension-manual-checks.md, 5b)
+  - [ ] Send the queue from the background page, not the review tab: approved photos keep going after
+        the review tab closes (today they wait until it is open again)
+  - [ ] Work out the "still eligible?" check once per scan and protection setting, not per batch
+  - [ ] Reading the trash back gets slower as the trash fills up (one page of the listing per ~500
+        photos): use Google's reply once we know what it says, and read back only on surprises
   - [x] (done 2026-10-15, before real trashing) Protection choices as checkboxes, all on by default: never trash photos that are
         ☑ favourites ☑ in an album ☑ archived. Photos of unknown status are always kept (not a
         choice). Shared Kotlin rules take the choices; the trash queue re-checks with them. Say
         plainly that trashing a photo also takes it out of every album
-  - [ ] Review every error the user can see and handle each properly: plain words, what to do,
+  - [x] (2026-10-15) Review every error the user can see and handle each properly: plain words, what to do,
         and retry by itself whatever is only a hiccup. Example seen: "Stopped by an unexpected
         error: A listener indicated an asynchronous response by returning true, but the message
         channel closed before a response was received" (Chrome stopped the service worker mid-
@@ -162,8 +173,8 @@ grows into the product; a new shared Kotlin module holds the tested rules, compi
     - [ ] Signed-in check reads values from Google's page; if Google renames them, users are told
           "signed out" when they aren't. Tell the two apart, or word it "signed out, or Google
           changed something"
-    - [ ] Before real trashing: the trash request is the riskiest one. Read back the result
-          (is the photo really in the trash?) and stop at the first surprise
+    - [x] (2026-10-15) The trash request is the riskiest one: the result is read back (is the photo
+          really in the trash?); a reply Google changed fails with the plain message, never retried
     - [ ] Early warning: a daily automatic check against a test account (the read requests, a
           trash and restore) so we hear of a change before users do
     - [ ] A remote "pause trashing" switch (a setting fetched as data, e.g. Firebase Remote
@@ -209,7 +220,7 @@ Scanning and reviewing
 - [x] Pick the detail level from the computer's speed (140 on a good graphics card, 70 on a weak one), fixed per library, each with its own tuned threshold (70's threshold still provisional)
 - [x] Calibration becomes a developer tool; users get the tuned threshold
 - [x] Review tab: Duplicates and Search & sweep (carry over the UX decisions from phase 0)
-- [ ] Real trashing in Google Photos (still simulated today), with undo and safety checks
+- [x] Real trashing in Google Photos, with undo and safety checks (behind "Trash for real" while testing)
 
 Data controls (details in the Data privacy chapter)
 

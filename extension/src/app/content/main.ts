@@ -16,7 +16,7 @@ const OWN_ELEMENT = 'data-photo-cleaner';
 const PANEL_URL = chrome.runtime.getURL('panel.html');
 
 function install(): void {
-  installRelay(APP_PAGE_CHANNEL);
+  installRelay(APP_PAGE_CHANNEL, true);
 
   // After an extension update or reload, Chrome cuts the old copy of this script off but leaves
   // its panel and button on the page; without this the tab would show two of each.

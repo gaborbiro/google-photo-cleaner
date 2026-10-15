@@ -222,8 +222,8 @@ export class DuplicatesReview {
     try {
       queue = await this.deps.loadQueue();
     } catch (error) {
-      console.error('Could not build the duplicate groups', error);
-      this.problem = `The duplicate groups could not be built: ${error instanceof Error ? error.message : String(error)}`;
+      console.error('Photo Cleaner: could not build the duplicate groups', error);
+      this.problem = 'The duplicate groups could not be built. Reload this tab to try again.';
       return;
     }
     this.problem = null;

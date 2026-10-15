@@ -6,7 +6,8 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
 import { modelKey } from '../../src/app/ai/model';
-import { duplicatesStores, refreshReviewSummary, reviewDeps, trashQueueDeps } from '../../src/app/duplicates/session';
+import type { RunPageOp } from '../../src/app/duplicates/googleTrash';
+import { duplicatesStores, refreshReviewSummary, reviewDeps, trashQueueDeps, trashQueuePass } from '../../src/app/duplicates/session';
 import { processTrashQueue } from '../../src/app/duplicates/trash';
 import { searchDeps, searchStores } from '../../src/app/search/session';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
@@ -21,10 +22,25 @@ const NO_FAVOURITES = { ...ALL_PROTECTED, favourites: false };
  * Six photos, scanned and analysed, in one database that both Search and Duplicates use. Photos
  * 0–2 are a burst (near-identical); photo 0 is a favourite.
  */
+/** Google Photos' trash, as the real trash reaches it: what was sent, and what is in it. */
+function pretendGoogle() {
+  const trash = new Set<string>();
+  const sent: string[] = [];
+  const run: RunPageOp = async (account, op, params) => {
+    if (op === 'listTrashPage') return { ok: true, data: { dedupKeys: [...trash], nextPageToken: null, accountFingerprint: account } };
+    const keys = params['dedupKeys'] as string[];
+    sent.push(`${op}: ${keys.join(',')}`);
+    for (const k of keys) (op === 'moveToTrash' ? trash.add(k) : trash.delete(k));
+    return { ok: true, data: { sent: keys.length } };
+  };
+  return { trash, sent, run };
+}
+
 async function library() {
   const factory = new IDBFactory();
   const search = searchStores(factory);
-  const duplicates = duplicatesStores(factory);
+  const google = pretendGoogle();
+  const duplicates = duplicatesStores(factory, google.run);
   const source = new FakePhotos(Array.from({ length: 6 }, (_, i) => fakeItem(i, { isFavourite: i === 0 })));
   await scan(source, search.inventory);
   await search.analysis.saveSettings({ account: 'account-a', detail: 140, modelKey: modelKey(140), measuredPhotosPerSecond: 5, chosenAtMs: NOW });
@@ -39,6 +55,8 @@ async function library() {
     review: reviewDeps('account-a', duplicates, now),
     queue: trashQueueDeps('account-a', duplicates, now),
     refreshSummary: () => refreshReviewSummary('account-a', duplicates, now),
+    queuePass: () => trashQueuePass('account-a', duplicates, now),
+    google,
     stores: search,
     /** As after a new library scan. */
     rescan: () => scan(source, search.inventory),
@@ -120,5 +138,28 @@ describe('the count of groups waiting, for the popup', () => {
     const later = searchStores(new IDBFactory());
     await refreshReviewSummary('account-a', { ...duplicatesStores(new IDBFactory()), review: later.review }, () => NOW);
     expect(await later.review.summary('account-a')).toBeNull(); // no scan: the groups can't be built
+  });
+});
+
+describe('Trash for real', () => {
+  it('off (the default): trashing is simulated and nothing reaches Google', async () => {
+    const { search, queuePass, google } = await library();
+    await search.sweep(['lib-3']);
+    expect(await queuePass()).toMatchObject({ simulated: true, counts: { COMPLETED: 1 } });
+    expect(google.sent).toEqual([]);
+  });
+
+  it("on: approved photos go to Google Photos' trash, protected ones never; turning it off stops sending", async () => {
+    const { search, stores, queuePass, google } = await library();
+    await stores.preferences.setTrashForReal('account-a', true);
+    await search.sweep(['lib-3', 'lib-4']);
+    expect(await queuePass()).toMatchObject({ simulated: false, counts: { COMPLETED: 2 } });
+    expect(google.sent).toEqual(['moveToTrash: dedup-3,dedup-4']);
+    expect([...google.trash].sort()).toEqual(['dedup-3', 'dedup-4']);
+
+    await stores.preferences.setTrashForReal('account-a', false);
+    await search.sweep(['lib-5']);
+    await queuePass();
+    expect(google.sent).toHaveLength(1); // the simulated trash took it
   });
 });

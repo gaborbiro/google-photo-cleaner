@@ -2,10 +2,11 @@
 // state: it starts and stops the background page (which does the work), talks to the
 // Photos tabs, and opens the app's tabs. Job state lives in the job store.
 
-import type { OpError, OpResult, ReadOp, TabCommand } from '../../shared/protocol';
+import type { OpError, OpResult, PageOp, TabCommand } from '../../shared/protocol';
 import { resumeWaitingForPhotos } from '../shared/actions';
 import { CHANGES_CHANNEL } from '../shared/constants';
 import { eraseAllData } from '../shared/erase';
+import { plainMessage } from '../shared/errors';
 import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, tabProblem } from '../shared/googleProblems';
 import { IndexedDbJobStore } from '../shared/store';
 import { isAppRequest, type AccountAnswer, type AppRequest, type TabRequest } from '../shared/messages';
@@ -123,7 +124,7 @@ async function tabFor(account: string): Promise<{ tabId: number } | { failure: O
   return { failure: tabProblem(failures) };
 }
 
-async function runOp(account: string, op: ReadOp, params: Record<string, unknown>): Promise<OpResult> {
+async function runOp(account: string, op: PageOp, params: Record<string, unknown>): Promise<OpResult> {
   const found = await tabFor(account);
   if ('failure' in found) return { ok: false, error: found.failure };
   const { tabId } = found;
@@ -278,8 +279,8 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || !isAppRequest(message)) return false;
   handle(message, sender).then(sendResponse, (error: unknown) => {
-    console.error('Request failed', message.kind, error);
-    sendResponse({ error: error instanceof Error ? error.message : String(error) });
+    console.error('Photo Cleaner: a request to the extension failed', message.kind, error);
+    sendResponse({ error: plainMessage(error, 'Something went wrong inside the extension. Try again; if it keeps happening, reload the extension.') });
   });
   return true; // answered asynchronously
 });

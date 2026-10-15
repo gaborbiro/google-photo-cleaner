@@ -3,7 +3,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
-import { runAnalysis, type AnalysisProgress, type Embedder } from '../../src/app/ai/analysis';
+import { MODEL_FAILED_TEXT, runAnalysis, type AnalysisProgress, type Embedder } from '../../src/app/ai/analysis';
+import { PlainError } from '../../src/app/shared/errors';
 import { IndexedDbAnalysisStore } from '../../src/app/ai/analysisStore';
 import { modelKey, type Detail } from '../../src/app/ai/model';
 import type { RgbaImage } from '../../src/app/ai/quality';
@@ -47,7 +48,7 @@ async function analyse(
   env: Awaited<ReturnType<typeof setup>>,
   embedder: Embedder,
   clock: { now: number },
-  opts: { shouldStop?: () => Promise<boolean>; waiting?: string | null; account?: string; decode?: typeof decode } = {},
+  opts: { shouldStop?: () => Promise<boolean>; waiting?: string | null; account?: string; decode?: typeof decode; newPhotosThisJob?: number | null } = {},
 ) {
   const progress: AnalysisProgress[] = [];
   const outcome = await runAnalysis({
@@ -63,6 +64,7 @@ async function analyse(
     pace: async (_last, show) => show(opts.waiting ?? null),
     onProgress: async (p) => void progress.push(p),
     prefetch: 2,
+    newPhotosThisJob: opts.newPhotosThisJob,
   });
   return { outcome, progress };
 }
@@ -126,6 +128,27 @@ describe('AI analysis', () => {
     expect(second.outcome.kind).toBe('completed');
     expect(embedder.calls).toHaveLength(30 - done); // only the rest
     expect((await env.store.analysedKeys(modelKey(140), 'account-a')).size).toBe(30);
+  });
+
+  it('a resumed analysis goes on counting where the job stopped, instead of from 0 of the photos left', async () => {
+    const env = await setup(Array.from({ length: 80 }, (_, i) => fakeItem(i)));
+    const clock = { now: 0 };
+    let checks = 0;
+    const first = await analyse(env, new FakeEmbedder(clock, 100), clock, { shouldStop: async () => ++checks > 80 });
+    const stoppedAt = first.progress.at(-1)!;
+    expect(stoppedAt.newPhotos).toBe(80 - 11); // the job's total; the speed check analysed the first 11
+    const done = (await env.store.analysedKeys(modelKey(140), 'account-a')).size - 11;
+    expect(done).toBeGreaterThan(0);
+
+    const resumed = await analyse(env, new FakeEmbedder(clock, 100), clock, { newPhotosThisJob: stoppedAt.newPhotos });
+    const firstShown = resumed.progress.find((p) => p.stage === 'analysing')!;
+    // e.g. "46 of 69", not "0 of 23": exact, although progress was last saved a little before the pause.
+    expect(firstShown).toMatchObject({ newPhotos: 69, newAnalysed: done });
+    expect(resumed.progress.at(-1)).toMatchObject({ newPhotos: 69, newAnalysed: 69 });
+
+    // A new job (Check for new photos) counts only what is left, from 0.
+    const fresh = await analyse(env, new FakeEmbedder(clock, 100), clock, { newPhotosThisJob: null });
+    expect(fresh.progress.at(-1)).toMatchObject({ newPhotos: 0 }); // nothing new: done at once
   });
 
   it('a preview that cannot be fetched is counted and tried again next time', async () => {
@@ -244,9 +267,16 @@ describe('AI analysis', () => {
     const env = await setup();
     const clock = { now: 0 };
     const embedder = new FakeEmbedder(clock, 100);
-    embedder.loadError = new Error('Not enough free disk space for the AI model: about 368 MB is needed.');
+    embedder.loadError = new PlainError('Not enough free disk space for the AI model: about 368 MB is needed.');
     const { outcome } = await analyse(env, embedder, clock);
     expect(outcome).toEqual({ kind: 'paused', reason: 'Not enough free disk space for the AI model: about 368 MB is needed.', untilPhotosOpen: false });
+
+    // A failure the model didn't explain (e.g. the download broke off): plain words, details in the log.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    embedder.loadError = new TypeError('Failed to fetch');
+    const second = await analyse(env, embedder, clock);
+    expect(second.outcome).toEqual({ kind: 'paused', reason: MODEL_FAILED_TEXT, untilPhotosOpen: false });
+    warn.mockRestore();
   });
 
   it('reports the speed and where each photo\'s time goes', async () => {

@@ -28,8 +28,6 @@ export interface ScanView {
   /** Reading the photo list: the bar moves without a measure. */
   indeterminate: boolean;
   lines: string[];
-  /** The speed check's verdict; shown until the analysis is done. */
-  speedCheck: string | null;
   /** Why it is going slower or waiting right now. */
   waiting: string | null;
   /** A retry, a reset or why it stopped; null when all is well. */
@@ -70,7 +68,7 @@ function duration(seconds: number): string {
   return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 }
 
-const NONE = { stage: null, percent: null, indeterminate: false, lines: [], speedCheck: null, waiting: null, notice: null, timesText: null, fullSpeed: null, protectionKnown: false };
+const NONE = { stage: null, percent: null, indeterminate: false, lines: [], waiting: null, notice: null, timesText: null, fullSpeed: null, protectionKnown: false };
 
 /** The Scan step's tab title with its status, as on the desktop: "1 · Scan (done)". */
 export function scanTabTitle(view: ScanView): string {
@@ -164,8 +162,8 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanView
     protectionKnown: true,
     stage: `Stage 2 of 2 · ${stages[p.stage ?? 'analysing']}`,
     percent,
+    // (The speed check's verdict isn't shown: the live speed and time left say it better.)
     lines,
-    speedCheck: p.speedCheckText,
     notice: p.notice,
     target: 'analysis' as const,
     fullSpeed: job.fullSpeed,

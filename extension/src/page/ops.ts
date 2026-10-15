@@ -1,5 +1,6 @@
-// Read-only operation dispatcher. Request shapes follow GPTK src/api/api.ts at
-// the pinned revision (line numbers in comments). No mutating RPC is reachable.
+// Read-only operation dispatcher. Request shapes follow GPTK src/api/api.ts at the pinned revision
+// (line numbers in comments). No mutating RPC is reachable from here: the trash operations live in
+// trashOps.ts, which only Photo Cleaner's own page script includes.
 
 import type { OpResult, ReadOp } from '../shared/protocol';
 import {
@@ -7,6 +8,7 @@ import {
   normalizeAlbumsPage,
   normalizeGenericPage,
   normalizeTimelinePage,
+  normalizeTrashPage,
 } from './normalize';
 import { callRpc, OpFailure, readSessionTokens, type Fetcher, type SessionTokens } from './rpc';
 import { skeleton } from './skeleton';
@@ -29,7 +31,7 @@ const PREVIEW_HOST_SUFFIXES = ['.googleusercontent.com'];
 const MIN_PREVIEW_PX = 32;
 const MAX_PREVIEW_PX = 1024;
 
-function badRequest(message: string): OpFailure {
+export function badRequest(message: string): OpFailure {
   return new OpFailure({ kind: 'BAD_REQUEST', message });
 }
 
@@ -40,7 +42,7 @@ function optionalString(params: Record<string, unknown>, name: string): string |
   return value;
 }
 
-function requiredString(params: Record<string, unknown>, name: string): string {
+export function requiredString(params: Record<string, unknown>, name: string): string {
   const value = optionalString(params, name);
   if (value === null) throw badRequest(`${name} is required`);
   return value;
@@ -53,7 +55,7 @@ function optionalInteger(params: Record<string, unknown>, name: string): number 
   return value;
 }
 
-async function accountFingerprint(env: PageEnvironment, tokens: SessionTokens): Promise<string> {
+export async function accountFingerprint(env: PageEnvironment, tokens: SessionTokens): Promise<string> {
   return (await env.sha256Hex(tokens.account.trim().toLowerCase())).slice(0, 16);
 }
 
@@ -148,6 +150,12 @@ async function dispatch(env: PageEnvironment, op: ReadOp, params: Record<string,
       const albumKey = requiredString(params, 'albumKey');
       const payload = await rpc('snAcKc', [albumKey, optionalString(params, 'pageToken'), null, optionalString(params, 'authKey')]);
       return { ...withShape(params, payload, normalizeAlbumItemsPage(payload)), accountFingerprint: account };
+    }
+
+    case 'listTrashPage': {
+      // api.ts getTrashItems
+      const payload = await rpc('zy0IHe', [optionalString(params, 'pageToken')]);
+      return { ...withShape(params, payload, normalizeTrashPage(payload)), accountFingerprint: account };
     }
   }
 }

@@ -6,6 +6,7 @@
 // the detail for this library.
 
 import type { IndexedDbInventoryStore } from '../scan/inventoryStore';
+import { plainMessage } from '../shared/errors';
 import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, PREVIEWS_STOPPED_TEXT, refusedText } from '../shared/googleProblems';
 import { SourceError, waitingForPhotosText, waitsForPhotos, type AnalysisSource, type LibraryPhoto, type Preview } from '../scan/source';
 import type { IndexedDbAnalysisStore } from './analysisStore';
@@ -77,6 +78,12 @@ export interface AnalysisDeps {
   onProgress: (progress: AnalysisProgress) => Promise<void>;
   /** Previews fetched ahead while the model works. */
   prefetch?: number;
+  /**
+   * How many new photos this job set out to analyse, when it was paused (or the browser closed) and
+   * is now resumed: it goes on counting ("4,300 of 17,202": that total, less what is left now)
+   * instead of from 0 of the photos left. Null for a new job.
+   */
+  newPhotosThisJob?: number | null;
 }
 
 class Pause extends Error {
@@ -87,6 +94,8 @@ class Pause extends Error {
 class UserStop extends Error {}
 
 const MAX_PAGE_ATTEMPTS = 3;
+/** The AI model failed to download or start for a reason it didn't explain itself (details in the log). */
+export const MODEL_FAILED_TEXT = 'The AI model could not be downloaded or started. Check the internet connection, then resume.';
 const MAX_RATE_LIMITS = 3;
 const RATE_LIMIT_WAIT_MS = 30_000;
 /**
@@ -144,7 +153,10 @@ class AnalysisSession {
         settings = await this.speedCheck();
       }
       this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey, this.deps.account), this.photoKeys);
-      this.progress = { ...this.progress, detail: settings.detail, stage: 'analysing', newPhotos: this.photoKeys.size - this.analysed.size, newAnalysed: 0 };
+      // (New photos found since the job started can make what is left larger than its total: then that counts.)
+      const left = this.photoKeys.size - this.analysed.size;
+      const total = Math.max(this.deps.newPhotosThisJob ?? 0, left);
+      this.progress = { ...this.progress, detail: settings.detail, stage: 'analysing', newPhotos: total, newAnalysed: total - left };
       this.speed = new SpeedMeter(this.now());
       await this.emit(true);
       await this.analyseLibrary(settings.detail, settings.modelKey);
@@ -172,7 +184,7 @@ class AnalysisSession {
       });
     } catch (e) {
       // No graphics card access, no disk space, no network for the download: say why, resumable.
-      throw new Pause(e instanceof Error ? e.message : `The AI model could not start: ${String(e)}`);
+      throw new Pause(plainMessage(e, MODEL_FAILED_TEXT));
     }
     this.progress = { ...this.progress, modelPercent: null };
   }

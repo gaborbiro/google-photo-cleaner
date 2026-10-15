@@ -96,8 +96,6 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
             aria-label="Describe the photos"
           />
           <button type="submit" className="primary" disabled={view.searching}>Search</button>
-          <button type="button" tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('more')}>M · More like selected</button>
-          <button type="button" tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('less')}>L · Less like selected</button>
           {view.canStartOver && <button type="button" tabIndex={-1} disabled={view.searching} onClick={() => model.startOver()}>Start over</button>}
         </form>
         {view.progressText && <p className="working"><span className="spinner-inline" />{view.progressText}</p>}
@@ -116,6 +114,8 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
           <div className="action-bar">
             <div className="buttons">
               <button tabIndex={-1} className="primary" onClick={() => model.approve()}>D · Trash selected</button>
+              <button tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('more')}>M · More like selected</button>
+              <button tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('less')}>L · Less like selected</button>
               <button tabIndex={-1} onClick={() => model.focusAll()}>A · Focus all</button>
               <button tabIndex={-1} onClick={() => model.toggleFocused()}>Space · Toggle trash</button>
               <button tabIndex={-1} onClick={() => model.undo()}>Z · Undo</button>

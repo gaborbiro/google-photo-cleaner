@@ -215,14 +215,14 @@ class ScanSession {
       });
     } catch (e) {
       if (e instanceof RpcFailed) {
-        await this.deps.store.markAlbumFailed(this.run.id, album.albumKey, `Google returned error code ${e.error.rpcCode ?? e.error.httpStatus ?? '?'}`);
+        await this.deps.store.markAlbumFailed(this.run.id, album.albumKey, `Google Photos refused to list it (code ${e.error.rpcCode ?? e.error.httpStatus ?? 'unknown'})`);
         await this.emitProgress();
         return;
       }
       // Google reports some inaccessible shared albums as "permission denied", which looks like a
       // lost session. Only a fresh session check can tell the two apart.
       if (e instanceof ScanStop && e.cause instanceof SourceError && e.cause.kind === 'SESSION' && (await this.sessionStillValid())) {
-        await this.deps.store.markAlbumFailed(this.run.id, album.albumKey, 'Access denied while the session is valid');
+        await this.deps.store.markAlbumFailed(this.run.id, album.albumKey, "This account isn't allowed to open it (for example a shared album you were removed from)");
         await this.emitProgress();
         return;
       }

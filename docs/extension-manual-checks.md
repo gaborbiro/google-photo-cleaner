@@ -81,6 +81,25 @@ and copy the console (right-click the page → Inspect → Console).
    **Z** undoes it.
 4. From Duplicates, **Search more like these** opens Search with that group as examples.
 
+## 5b. Real trashing (Google Photos changes: start small)
+
+Use photos you don't mind losing, a few at first. Everything trashed stays in Google Photos' trash
+for 60 days.
+
+1. Scan tab: **Trash for real** is off. Approve a group: the trash queue line says SIMULATED, and the
+   photos are still in Google Photos.
+2. Tick **Trash for real**. Approve a group of 2–3 photos. Within a few seconds the queue line counts
+   them in the trash, and Google Photos' **Trash** shows them (reload it). Nothing else is there that
+   you didn't approve.
+3. **Z**: the line counts them restored, and they are back in Google Photos (reload), in their albums
+   as before, not in the trash.
+4. Search: select 2 photos, **D**: the question says they go to Google Photos' trash (no
+   "Simulated"); **Enter**: they appear in Google Photos' trash.
+5. Approve a group, then close the Google Photos tab at once: the queue line says it is waiting for
+   Google Photos; reopen it: the photos are trashed, once (not twice, nothing else).
+6. Approve groups quickly (D, D, D…): the line's queued count rises, then drains to "in trash".
+7. Untick **Trash for real**: new approvals are simulated again.
+
 ## 6. Erase Photo Cleaner's data
 
 1. Popup → **Erase Photo Cleaner's data from this computer**: the explanation appears with

@@ -5,6 +5,7 @@
 import { AutoConfig, AutoModel, AutoProcessor, RawImage, env } from '@huggingface/transformers';
 import type { Embedder } from './analysis';
 import { MODEL_DOWNLOAD_BYTES, MODEL_DTYPE, MODEL_ID, MODEL_REVISION, type Detail } from './model';
+import { PlainError } from '../shared/errors';
 import type { RgbaImage } from './quality';
 
 env.allowLocalModels = false;
@@ -29,7 +30,7 @@ export class TransformersEmbedder implements Embedder {
   async load(onProgress: (fraction: number) => void): Promise<void> {
     if (this.model) return;
     if (!('gpu' in navigator) || !(await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }))) {
-      throw new Error('This browser cannot use the graphics card (WebGPU), which the AI analysis needs. Update the browser, or try Chrome or Edge.');
+      throw new PlainError('This browser cannot use the graphics card (WebGPU), which the AI analysis needs. Update the browser, or try Chrome or Edge.');
     }
     await checkSpace();
     const loaded = new Map<string, number>();
@@ -79,7 +80,7 @@ async function checkSpace(): Promise<void> {
   if (cached) return; // downloaded before (or partly): the browser already made room
   const { quota, usage } = await navigator.storage.estimate();
   if (quota !== undefined && usage !== undefined && quota - usage < MODEL_DOWNLOAD_BYTES * SPACE_MARGIN) {
-    throw new Error(`Not enough free disk space for the AI model: about ${Math.ceil((MODEL_DOWNLOAD_BYTES * SPACE_MARGIN) / 1e6)} MB is needed. Free up some space, then resume.`);
+    throw new PlainError(`Not enough free disk space for the AI model: about ${Math.ceil((MODEL_DOWNLOAD_BYTES * SPACE_MARGIN) / 1e6)} MB is needed. Free up some space, then resume.`);
   }
 }
 

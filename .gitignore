@@ -34,3 +34,6 @@ Thumbs.db
 *.safetensors
 *.onnx
 .env
+
+# Calibration labels exported from the desktop app (extension/scripts/export-calibration-labels.py): they name photos of the library.
+labels.json

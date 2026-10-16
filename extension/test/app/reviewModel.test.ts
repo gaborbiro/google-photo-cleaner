@@ -82,7 +82,7 @@ describe('the Duplicates review', () => {
     expect(view()).toMatchObject({
       groupsText: '2 groups', progressText: '0 decided · 2 to go', emptyText: null, blockedText: null,
       missingText: null,
-      ruleText: 'Photos count as duplicates when they are at least 91.5% similar and taken within 2 minutes of each other. The threshold was chosen from your calibration labels.',
+      ruleText: 'Photos count as duplicates when they are at least 91.5% similar and taken within 2 minutes of each other. Nothing is trashed without your approval.',
     });
     const g = view().group!;
     expect(g.selectionText).toBe('1 of 3 photos selected for the trash');

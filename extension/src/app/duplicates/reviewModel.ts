@@ -579,7 +579,7 @@ export class DuplicatesReview {
       // What counts as a duplicate, in the same terms as each photo's "% similar".
       ruleText: this.settings
         ? `Photos count as duplicates when they are at least ${percent(this.settings.threshold)} similar and taken within ${this.settings.windowMs / 60_000} minutes of each other. ` +
-          'The threshold was chosen from your calibration labels.'
+          'Nothing is trashed without your approval.'
         : null,
       blockedText: this.blocked ? BLOCKED_TEXT[this.blocked] : null,
       emptyText: loaded && this.blocked === null && group === null ? 'No groups left to review.' : null,

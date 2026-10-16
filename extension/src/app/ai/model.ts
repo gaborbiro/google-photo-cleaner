@@ -41,6 +41,8 @@ export function chooseDetail(photosPerSecondAtPreferred: number, photosToAnalyse
  * detail 280: the lowest threshold that wrongly flags only one of the labelled pairs.
  * - 140: from the 180 calibration labels (dev-calibration.html, 2026-10-14): 98.7% precision,
  *   86.0% of duplicates found (desktop: 99%, 88%). Only zero wrong pairs would mean 0.970 and 41%.
- * - 70: PROVISIONAL, the desktop's value; not calibrated (needs the labelled photos analysed at 70).
+ * - 70: from the same labels (179 scored, dev-calibration.html, 2026-10-16): 0.915 groups none of
+ *   the different pairs and finds 83.7% of duplicates. One wrong pair would mean 0.910, which finds
+ *   no more; the desktop's 0.925 (used before) found 75.6%.
  */
-export const DUPLICATE_THRESHOLD: Record<Detail, number> = { 140: 0.915, 70: 0.925 };
+export const DUPLICATE_THRESHOLD: Record<Detail, number> = { 140: 0.915, 70: 0.915 };

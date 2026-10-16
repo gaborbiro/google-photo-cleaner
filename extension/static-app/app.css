@@ -180,6 +180,9 @@ table.counts tr.count-total th { color: var(--pc-text); font-weight: 600; }
 table.counts tr.count-total td { font-weight: 600; }
 table.counts tr.count-detail th { padding-left: var(--space-4); }
 table.counts tr.count-detail td { color: var(--pc-muted); }
+/* Column headings over right-aligned numbers sit right too (the calibration page's table). */
+table.counts thead th:not(:first-child) { text-align: right; padding-right: 0; padding-left: var(--space-4); }
+table.counts tr.recommended td { color: var(--pc-accent); font-weight: 600; }
 
 /* The protection choices on the Scan tab. */
 .protection-boxes { justify-content: flex-start; gap: var(--space-2) var(--space-6); }

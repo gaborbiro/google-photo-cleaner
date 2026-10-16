@@ -51,13 +51,14 @@ function Calibration() {
   };
 
   return (
-    <main className="review">
-      <h1>Photo Cleaner · calibration (developer tool)</h1>
-      <p className="muted">
-        Scores the pairs labelled in the desktop app's Calibration tab with this account's fingerprints and recommends the duplicate threshold.
-        Export the labels with <span className="mono">python -I extension/scripts/export-calibration-labels.py labels.json</span>, then choose that file.
-      </p>
-      <h2>{account ? accountLabel(account, answer?.account?.email ?? null) : 'No account yet'}</h2>
+    <main className="review calibration">
+      <header>
+        <h1>Photo Cleaner <span className="muted">/ calibration (developer tool)</span></h1>
+        <p className="account mono">{account ? accountLabel(account, answer?.account?.email ?? null) : 'No account yet'}</p>
+        <p className="muted">
+          Scores the pairs labelled in the desktop app's Calibration tab with this library's fingerprints and recommends the duplicate threshold.
+        </p>
+      </header>
       {settings === null && (
         <p className="warn">
           This library hasn't been analysed yet (or Photo Cleaner's data was erased): run a Scan first. Once its analysis has started, the detail can be switched here.
@@ -65,7 +66,8 @@ function Calibration() {
       )}
       {settings && (
         <section className="card">
-          <strong>This library is analysed at detail <span className="mono">{settings.detail}</span>, and scored with those fingerprints.</strong>
+          <h2>Detail</h2>
+          <p>This library is analysed at detail <span className="mono">{settings.detail}</span>, and scored with those fingerprints.</p>
           <div className="buttons">
             {[PREFERRED_DETAIL, FALLBACK_DETAIL].map((d) => (
               <button key={d} disabled={d === settings.detail} onClick={() => void switchTo(d).catch((error: unknown) => setProblem(String(error)))}>Use detail {d}</button>
@@ -73,17 +75,23 @@ function Calibration() {
           </div>
           <p className="muted">
             To calibrate another detail: switch to it, press Check for new photos (it fingerprints every photo not yet done at that detail; the other detail's
-            fingerprints are kept), then choose the labels file. Switch back when done. Not while a scan is running.
+            fingerprints are kept), then score the labels below. Switch back when done. Not while a scan is running.
           </p>
           {switched && <p className="warn">Switched to detail {settings.detail}. Press Check for new photos before scoring.</p>}
         </section>
       )}
-      <input type="file" accept=".json,application/json" onChange={(e) => e.target.files?.[0] && void load(e.target.files[0])} />
-      {problem && <div className="warn">{problem}</div>}
+      <section className="card">
+        <h2>Score the labels</h2>
+        <p className="muted">
+          Export them with <span className="mono">python -I extension/scripts/export-calibration-labels.py labels.json</span>, then choose that file.
+        </p>
+        <div><input type="file" accept=".json,application/json" onChange={(e) => e.target.files?.[0] && void load(e.target.files[0])} /></div>
+        {problem && <p className="warn">{problem}</p>}
+      </section>
       {view && (
         <section className="card">
-          {view.lines.map((line) => <div key={line} className="mono">{line}</div>)}
-          <table className="counts">
+          <div className="report-lines">{view.lines.map((line) => <p key={line} className="mono">{line}</p>)}</div>
+          <table className="counts calibration-table">
             <thead><tr><th>Threshold</th><th>Flagged</th><th>Wrong</th><th>Precision</th><th>Recall</th><th>Same recall</th></tr></thead>
             <tbody>
               {view.rows.map((r) => (

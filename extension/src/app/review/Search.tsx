@@ -4,7 +4,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { searchKey } from '../duplicates/keys';
 import { SORTS, type ExampleView, type SearchModel, type SearchTile } from '../search/searchModel';
-import { Toast, useFocusFeedback, useWorkbenchKeys, Viewer } from '../ui/Workbench';
+import { Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
 
 
 function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: number; focusPulse: number; model: SearchModel }) {
@@ -23,7 +23,7 @@ function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: num
     <figure ref={ref} className={`search-tile${tile.selected ? ' selected' : ''}${tile.focused ? ' focused' : ''}`}>
       <div className="search-tile-image" ref={image} onClick={(e) => model.tileClicked(index, e.shiftKey)}>
         {tile.imageUrl ? <img src={tile.imageUrl} alt="" draggable={false} /> : <span className="muted small">{tile.error ?? '…'}</span>}
-        <button className="expand" title="View large (Enter)" tabIndex={-1} onClick={(e) => { e.stopPropagation(); model.openViewer(index); }}>⤢</button>
+        <button className="expand" title="View large (Enter)" aria-label="View large" tabIndex={-1} onClick={(e) => { e.stopPropagation(); model.openViewer(index); }}>⤢</button>
       </div>
       <figcaption className="small"><a href={tile.link} target="_blank" rel="noreferrer" tabIndex={-1}>{tile.caption}</a></figcaption>
     </figure>
@@ -34,11 +34,11 @@ function Examples({ label, examples, model }: { label: string; examples: Example
   if (examples.length === 0) return null;
   return (
     <div className="examples">
-      <span className="small muted">{label}</span>
+      <span className="muted">{label}</span>
       {examples.map((e) => (
         <span key={e.mediaKey} className="example">
           {e.imageUrl ? <img src={e.imageUrl} alt="" /> : <span className="muted small">…</span>}
-          <button className="remove" title="No longer an example" tabIndex={-1} onClick={() => model.removeExample(e.mediaKey)}>×</button>
+          <button className="remove" title="No longer an example" aria-label="Remove this example" tabIndex={-1} onClick={() => model.removeExample(e.mediaKey)}>×</button>
         </span>
       ))}
     </div>
@@ -50,6 +50,8 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
   const view = useSyncExternalStore(model.subscribe, model.getView);
   const field = useRef<HTMLInputElement>(null);
   const grid = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLElement>(null);
+  usePinnedHeight(bar, '--bar-h');
 
   useWorkbenchKeys({
     active,
@@ -85,59 +87,57 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
   return (
     <div className="search" hidden={!active}>
       <section className="collapsing search-head">
-        <p className="small">{view.introText}</p>
+        <label htmlFor="search-query">Describe the photos</label>
+        <p className="muted">{view.introText}</p>
         <form className="row search-form" onSubmit={(e) => { e.preventDefault(); model.searchText(); }}>
           <input
             ref={field}
+            id="search-query"
             type="search"
-            placeholder="Describe the photos"
             value={view.query}
             onChange={(e) => model.setQueryText(e.target.value)}
-            aria-label="Describe the photos"
           />
           <button type="submit" className="primary" disabled={view.searching}>Search</button>
           {view.canStartOver && <button type="button" tabIndex={-1} disabled={view.searching} onClick={() => model.startOver()}>Start over</button>}
         </form>
-        {view.progressText && <p className="working"><span className="spinner-inline" />{view.progressText}</p>}
+        {view.progressText && <p className="working" role="status"><span className="spinner-inline" />{view.progressText}</p>}
         <Examples label="More like:" examples={view.more} model={model} />
         <Examples label="Less like:" examples={view.less} model={model} />
-        {view.hiddenText && <p className="small muted">{view.hiddenText}</p>}
+        {view.hiddenText && <p className="muted small">{view.hiddenText}</p>}
       </section>
       <div className="search-body">
-        <section className="pinned-bar" onMouseDown={() => field.current?.blur()}>
+        <section className="pinned-bar" ref={bar} onMouseDown={() => field.current?.blur()}>
           {view.blockedText && (
             <div className="banner tone-caution">
               <strong>⚠ {view.blockedText}</strong>
               <button onClick={openScan}>Open Scan</button>
             </div>
           )}
-          <div className="action-bar">
-            <div className="buttons">
-              <button tabIndex={-1} className="primary" onClick={() => model.approve()}>D · Trash selected</button>
-              <button tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('more')}>M · More like selected</button>
-              <button tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('less')}>L · Less like selected</button>
-              <button tabIndex={-1} onClick={() => model.focusAll()}>A · Focus all</button>
-              <button tabIndex={-1} onClick={() => model.toggleFocused()}>Space · Toggle trash</button>
-              <button tabIndex={-1} onClick={() => model.undo()}>Z · Undo</button>
+          {view.resultText && (
+            <div className="action-bar">
+              <div className="selection">{view.resultText}</div>
+              <span className="segmented" role="group" aria-label="Order">
+                {SORTS.map((s) => (
+                  <button key={s.id} tabIndex={-1} className={s.id === view.sort ? 'selected' : ''} aria-pressed={s.id === view.sort} onClick={() => model.setSort(s.id)}>{s.label}</button>
+                ))}
+              </span>
             </div>
-            {view.resultText && (
-              <div className="selection row">
-                <strong>{view.resultText}</strong>
-                <span className="segmented">
-                  {SORTS.map((s) => (
-                    <button key={s.id} tabIndex={-1} className={s.id === view.sort ? 'selected' : ''} onClick={() => model.setSort(s.id)}>{s.label}</button>
-                  ))}
-                </span>
-              </div>
-            )}
+          )}
+          <div className="buttons">
+            <button tabIndex={-1} className="danger" onClick={() => model.approve()}><kbd>D</kbd> · Trash selected</button>
+            <button tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('more')}><kbd>M</kbd> · More like selected</button>
+            <button tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('less')}><kbd>L</kbd> · Less like selected</button>
+            <button tabIndex={-1} onClick={() => model.focusAll()}><kbd>A</kbd> · Focus all</button>
+            <button tabIndex={-1} onClick={() => model.toggleFocused()}><kbd>Space</kbd> · Toggle trash</button>
+            <button tabIndex={-1} onClick={() => model.undo()}><kbd>Z</kbd> · Undo</button>
           </div>
           {view.confirmText && (
-            <div className="banner tone-negative">
-              <strong className="tone-text-negative">{view.confirmText}</strong>
-              <span className="row">
-                <button className="primary" onClick={() => model.enter()}>Enter · Move to trash</button>
-                <button onClick={() => model.cancel()}>Esc · Cancel</button>
-              </span>
+            <div className="confirm" role="alertdialog" aria-label="Move to the trash?">
+              <strong>{view.confirmText}</strong>
+              <div className="buttons">
+                <button className="danger" onClick={() => model.enter()}><kbd>Enter</kbd> · Move to trash</button>
+                <button onClick={() => model.cancel()}><kbd>Esc</kbd> · Cancel</button>
+              </div>
             </div>
           )}
         </section>

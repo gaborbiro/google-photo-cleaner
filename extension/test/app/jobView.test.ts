@@ -73,6 +73,19 @@ describe('one Scan in two stages', () => {
     expect(scanView(scanned, withFailures, NOW).lines[0]).toBe('17,202 photos · 2 could not be read (tried again next time)');
   });
 
+  it('the status dot: green when complete, amber when paused or out of date, red when stopped, none while scanning', () => {
+    const done = endJob(reportProgress(analysing, { ...analysing.progress, analysed: 17_202 }, 2), 'completed', null, NOW);
+    expect(scanView(scanned, done, NOW).tone).toBe('positive');
+    expect(scanView(scanned, done, NOW + 2 * 86_400_000).tone).toBe('caution');
+    expect(scanView(endJob(reading, 'paused', null, 2_000), null, NOW).tone).toBe('caution');
+    expect(scanView(scanned, pauseJob(analysing, 2), NOW).tone).toBe('caution');
+    expect(scanView(endJob(reading, 'failed', 'Not understood.', 2_000), null, NOW).tone).toBe('negative');
+    expect(scanView(scanned, endJob(analysing, 'failed', 'Broken.', 2), NOW).tone).toBe('negative');
+    expect(scanView(reading, null, NOW).tone).toBeNull();
+    expect(scanView(scanned, analysing, NOW).tone).toBeNull();
+    expect(scanView(null, null, NOW).tone).toBeNull();
+  });
+
   it('after a day the scan is out of date: it no longer proves what is protected', () => {
     const done = endJob(reportProgress(analysing, { ...analysing.progress, analysed: 17_202 }, 2), 'completed', null, NOW);
     expect(scanView(scanned, done, NOW + 2 * 86_400_000)).toMatchObject({
@@ -133,7 +146,7 @@ describe('the review tab', () => {
       selected: 'acc1', signedIn: { fingerprint: 'acc1', email: 'someone@example.com' },
       jobs: [finishedScan('acc1'), finishedScan('acc2-0123456789')], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW,
     });
-    expect(page.accountText).toBe('Account: someone@example.com');
+    expect(page.accountName).toBe('someone@example.com');
     expect(page.tabLabels).toEqual({ scan: '1 · Scan (needed)', duplicates: '2 · Duplicates', search: 'Search' });
     expect(page.otherAccounts).toEqual([{ account: 'acc2-0123456789', href: '?account=acc2-0123456789', label: 'account acc2-012…', scanTitle: 'Photos not analysed yet' }]);
   });
@@ -146,7 +159,7 @@ describe('the review tab', () => {
     expect(reviewPageView({ ...input, choices: { ...ALL_PROTECTED, favourites: false } }).refreshKey).not.toBe(key);
     expect(reviewPageView({ ...input, scan: endJob(startScanJob('acc1', 0), 'completed', null, NOW + 5) }).refreshKey).not.toBe(key);
     expect(reviewPageView({ ...input, choices: undefined }).refreshKey).toBeNull(); // still loading
-    expect(reviewPageView({ ...input, selected: null }).accountText).toBeNull();
+    expect(reviewPageView({ ...input, selected: null }).accountName).toBeNull();
   });
 });
 
@@ -156,7 +169,7 @@ describe('the popup and the panel', () => {
     expect(surfaceView({ account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false })).toMatchObject({ state: 'no-photos', problemText: 'No Google Photos tab is open.' });
     expect(surfaceView({ account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true })).toMatchObject({ state: 'problem', problemText: 'Google Photos is signed out in this tab.' });
     expect(surfaceView({ account: { fingerprint: 'acc1', email: 'someone@example.com' }, problem: null, photosTabOpen: true }))
-      .toEqual({ state: 'account', problemText: null, account: 'acc1', accountText: 'Account: someone@example.com' });
+      .toEqual({ state: 'account', problemText: null, account: 'acc1', accountName: 'someone@example.com' });
   });
 });
 

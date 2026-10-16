@@ -8,26 +8,30 @@ function Panel() {
   useStartOverWhenErased();
   const { view, scan, analysis, report } = useSignedInScan();
   return (
-    <main>
-      <header className="row">
-        <h1>Photo Cleaner</h1>
-        <button className="ghost" title="Close the panel (a scan keeps running)" onClick={() => window.parent.postMessage({ kind: 'app-close-panel' }, 'https://photos.google.com')}>✕</button>
+    <main className="panel">
+      <header className="surface-header">
+        <div>
+          <h1>Photo Cleaner</h1>
+          {view.accountName && <p className="account mono" title="The Google account signed in to Google Photos">{view.accountName}</p>}
+        </div>
+        <button className="ghost" title="Close the panel (a scan keeps running)" aria-label="Close the panel" onClick={() => window.parent.postMessage({ kind: 'app-close-panel' }, 'https://photos.google.com')}>×</button>
       </header>
       <StorageProblem />
       {view.state === 'looking' && <p className="muted">Checking which account is signed in…</p>}
       {view.problemText && <p className="warn">{view.problemText}</p>}
+      {view.account && scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} />}
+      <div className="explanation">
+        <p>
+          Reads the list of your photos, favourites, archive and every album (read-only) and works out which photos are protected; then the AI analyses the new photos on this computer's graphics card.
+        </p>
+        <p>
+          <strong>Photos never leave your computer.</strong> It runs in the extension's background, so closing this panel doesn't stop it; pausing keeps its progress.
+        </p>
+      </div>
       {view.account && (
-        <>
-          <p className="mono">{view.accountText}</p>
-          {scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} />}
-        </>
-      )}
-      <p className="muted small">
-        Reads the list of your photos, favourites, archive and every album (read-only) and works out which photos are protected; then the AI analyses the new photos on this computer's graphics card. Photos never leave your computer.
-        It runs in the extension's background, so closing this panel doesn't stop it; pausing keeps its progress.
-      </p>
-      {view.account && (
-        <button onClick={() => void send({ kind: 'app-open-review', account: view.account })}>Open in tab <span aria-hidden="true">⤢</span></button>
+        <div className="launch">
+          <button onClick={() => void send({ kind: 'app-open-review', account: view.account })}>Open in tab <span aria-hidden="true">↗</span></button>
+        </div>
       )}
     </main>
   );

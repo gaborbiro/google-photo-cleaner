@@ -1,241 +1,356 @@
-/* Techy and in control: plain, dense, monospace for numbers, follows the system's light/dark mode. */
+/* A quiet, precise control console: graphite surfaces, purple for scanning and searching, green
+   keep, red trash, grey protected. Dense through alignment and tabular numbers; body text 16 px.
+   Follows the system's light/dark mode. */
+
+/* --- Tokens --- */
 
 :root {
   color-scheme: light dark;
-  --bg: #ffffff;
-  --fg: #1d1d22;
-  --muted: #6b6b76;
-  --line: #d9d9e0;
-  --card: #f5f5f8;
-  --accent: #5b3fd6;
-  --accent-fg: #ffffff;
-  --warn: #b25b00;
-  --good: #2e7d32;
-  --bad: #c62828;
-  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pc-bg: #f8f9fc;
+  --pc-surface: #ffffff;
+  --pc-hover: #eef0f6;
+  --pc-border: #cbd0dc;
+  --pc-text: #20232c;
+  --pc-muted: #596273;
+  --pc-accent: #5b3fd6;
+  --pc-on-accent: #ffffff;
+  --pc-keep: #217747;
+  --pc-trash: #b52c36;
+  --pc-trash-fill: #fcebed;
+  --pc-amber: #815700;
+  --pc-protected: #677183;
+  --pc-focus: #20232c;
+  --pc-mat: #eef0f4;
+
+  --font-ui: Arial, Helvetica, sans-serif;
+  --font-data: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-card: 10px;
+  --radius-control: 6px;
+  /* Measured by the review tab (the tabs and the pinned bar wrap at narrow widths and zoom). */
+  --tabs-h: 52px;
+  --bar-h: 120px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #17171c;
-    --fg: #e8e8ee;
-    --muted: #9a9aa8;
-    --line: #34343e;
-    --card: #222229;
-    --accent: #8b74ff;
-    --accent-fg: #0d0b1a;
-    --warn: #ffb35c;
-    --good: #66bb6a;
-    --bad: #ef5350;
+    --pc-bg: #15171c;
+    --pc-surface: #1e2128;
+    --pc-hover: #2a2e38;
+    --pc-border: #393e49;
+    --pc-text: #eef0f6;
+    --pc-muted: #adb4c3;
+    --pc-accent: #a18bff;
+    --pc-on-accent: #171126;
+    --pc-keep: #65ce94;
+    --pc-trash: #ff8b8b;
+    --pc-trash-fill: #5b252b;
+    --pc-amber: #f1c56b;
+    --pc-protected: #a5adbb;
+    --pc-focus: #ffffff;
+    --pc-mat: #101217;
   }
 }
 
+/* What each photo's frame and label say: keep, trash, caution, protected. */
+.tone-positive { --tone: var(--pc-keep); }
+.tone-negative { --tone: var(--pc-trash); }
+.tone-caution { --tone: var(--pc-amber); }
+.tone-neutral { --tone: var(--pc-protected); }
+.tone-text-positive { color: var(--pc-keep); }
+.tone-text-negative { color: var(--pc-trash); }
+.tone-text-caution { color: var(--pc-amber); }
+.tone-text-neutral { color: var(--pc-protected); }
+
+/* --- Base --- */
+
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); }
-main { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+html { background: var(--pc-bg); }
+body { margin: 0; background: var(--pc-bg); color: var(--pc-text); font: 16px/1.5 var(--font-ui); }
+main { padding: var(--space-5) var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
 body.popup main { width: 420px; }
-body.review main { max-width: 1100px; margin: 0 auto; padding: 24px; }
-/* Every surface uses Google Photos' own text size (the popup too: 14 px read as tiny). */
-body.review, body.panel, body.popup { font-size: 16px; }
+body.review main { max-width: 1100px; margin: 0 auto; padding: 28px var(--space-6) 40px; gap: 0; }
 
-h1 { font-size: 1.15em; margin: 0; letter-spacing: 0.02em; }
-h2 { font-size: 1em; margin: 8px 0 0; }
+h1 { font-size: 20px; line-height: 28px; font-weight: 650; letter-spacing: -0.3px; margin: 0; }
+body.review h1 { font-size: 24px; line-height: 32px; letter-spacing: -0.5px; }
+h2 { font-size: 18px; line-height: 26px; font-weight: 650; margin: 0; }
 p { margin: 0; }
+a { color: var(--pc-accent); text-underline-offset: 3px; }
 
-.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.9em; }
-.muted { color: var(--muted); }
-.small { font-size: 0.875em; }
-.warn { color: var(--warn); font-weight: 600; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); flex-wrap: wrap; }
+.mono, kbd, td.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.mono { font-size: 15px; }
+kbd { font-size: 14px; font-weight: 600; color: inherit; }
+.muted { color: var(--pc-muted); }
+.small { font-size: 14px; line-height: 20px; }
+.warn { color: var(--pc-amber); font-weight: 600; }
 
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
-.bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
-.bar > div { height: 100%; background: var(--accent); transition: width 0.15s linear; }
+/* --- Controls --- */
+
+button {
+  font: inherit; color: var(--pc-text); background: var(--pc-surface); border: 1px solid var(--pc-border);
+  border-radius: var(--radius-control); min-height: 40px; padding: 8px 12px; cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+button:hover:not(:disabled) { background: var(--pc-hover); border-color: var(--pc-muted); }
+button.primary { background: var(--pc-accent); border-color: var(--pc-accent); color: var(--pc-on-accent); font-weight: 600; }
+button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--pc-accent) 88%, var(--pc-text)); border-color: var(--pc-accent); }
+/* Trashing: soft red, never purple. */
+button.danger { background: var(--pc-trash-fill); border-color: var(--pc-trash); color: var(--pc-trash); font-weight: 600; }
+button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--pc-trash-fill) 80%, var(--pc-trash)); border-color: var(--pc-trash); }
+button.ghost { border-color: transparent; background: transparent; min-height: 32px; width: 32px; padding: 0; font-size: 20px; line-height: 1; }
+button.small { min-height: 32px; padding: 4px 10px; font-size: 14px; }
+button:disabled { opacity: 0.5; cursor: default; }
+button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--pc-accent); outline-offset: 3px; }
+
+input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--pc-accent); vertical-align: -3px; margin: 0 6px 0 0; }
+label { cursor: pointer; }
+
+/* --- Cards and banners --- */
+
+.card {
+  background: var(--pc-surface); border: 1px solid var(--pc-border); border-radius: var(--radius-card); padding: var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+body.review .card { padding: var(--space-5); }
+/* Quiet: Photo Cleaner's own data, not the library. */
+.card.utility { background: transparent; }
+body.review .card.utility { padding: var(--space-4) var(--space-5); }
+.tone-good, .tone-warn, .tone-bad { border-left-width: 4px; }
+.tone-good { border-left-color: var(--pc-keep); }
+.tone-warn { border-left-color: var(--pc-amber); }
+.tone-bad { border-left-color: var(--pc-trash); }
+
+/* Something that changes what can be done: tinted, with a coloured start edge. */
+.banner {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap;
+  padding: 10px 14px; border-radius: var(--radius-control); border: 1px solid var(--tone); border-left-width: 3px;
+  background: color-mix(in srgb, var(--tone) 9%, var(--pc-surface));
+}
+
+/* --- Surface headers (popup, panel, review) --- */
+
+.surface-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+/* The Google account whose library this is: just its email, quietly. */
+.account { color: var(--pc-muted); overflow-wrap: anywhere; margin-top: var(--space-1); }
+body.review .account { margin-top: var(--space-2); }
+.launch { display: flex; flex-direction: column; gap: var(--space-3); }
+.launch button { width: 100%; }
+.explanation { color: var(--pc-muted); line-height: 25px; display: flex; flex-direction: column; gap: var(--space-3); }
+.explanation strong { color: var(--pc-text); }
+
+/* --- Scan card --- */
+
+.scan-title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.scan-title h2 { display: flex; align-items: center; gap: var(--space-2); font-size: 18px; }
+/* Popup and panel: the action is a full-width row under the title. */
+body.popup .scan-title, body.panel .scan-title { flex-direction: column; align-items: stretch; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); flex: none; }
+.scan-card .lines { display: flex; flex-direction: column; gap: 6px; }
+.scan-card .setting { border-top: 1px solid var(--pc-border); padding-top: var(--space-3); margin-top: var(--space-1); }
+
+.bar { height: 6px; background: var(--pc-hover); border-radius: 3px; overflow: hidden; margin: var(--space-1) 0; }
+.bar > div { height: 100%; background: var(--pc-accent); transition: width 0.15s linear; }
 /* Reading the photo list: its length isn't known up front, so the bar moves without a measure. */
 .bar.indeterminate > div { width: 30%; animation: indeterminate 1.4s ease-in-out infinite; }
 @keyframes indeterminate { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 
-button {
-  font: inherit; color: var(--fg); background: transparent; border: 1px solid var(--line);
-  border-radius: 6px; padding: 5px 12px; cursor: pointer;
-}
-button:hover { border-color: var(--accent); }
-button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
-button.ghost { border: none; padding: 2px 8px; font-size: 16px; }
+/* Protection details, folded away at the bottom of the Scan card. */
+details.protection { border-top: 1px solid var(--pc-border); padding-top: var(--space-3); margin-top: var(--space-1); display: flex; flex-direction: column; gap: var(--space-2); }
+details.protection > summary { color: var(--pc-muted); cursor: pointer; user-select: none; width: fit-content; }
+details.protection > summary:hover { color: var(--pc-text); }
+details.protection[open] > summary { margin-bottom: var(--space-2); }
+.report-lines { display: flex; flex-direction: column; gap: var(--space-1); }
 
 table { border-collapse: collapse; width: 100%; }
-th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
-th { color: var(--muted); font-weight: 600; font-size: 0.875em; }
-.placeholder { border-top: 1px dashed var(--line); padding-top: 8px; }
+th, td { text-align: left; border-bottom: 1px solid var(--pc-border); padding: 8px 0; vertical-align: top; }
+th { color: var(--pc-muted); font-weight: 400; }
+.tables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; margin-top: var(--space-2); }
+body.popup .tables, body.panel .tables { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
+table.counts caption { text-align: left; font-size: 18px; line-height: 24px; font-weight: 650; margin-bottom: var(--space-2); }
+table.counts th { padding-right: var(--space-4); overflow-wrap: anywhere; }
+table.counts td.num { text-align: right; white-space: nowrap; padding-left: var(--space-2); }
+table.counts tr.count-total th { color: var(--pc-text); font-weight: 600; }
+table.counts tr.count-total td { font-weight: 600; }
+table.counts tr.count-detail th { padding-left: var(--space-4); }
+table.counts tr.count-detail td { color: var(--pc-muted); }
 
-/* Report: the border says whether the protection data can be trusted. */
-.tone-good { border-left: 4px solid var(--good); }
-.tone-warn { border-left: 4px solid var(--warn); }
-.tone-bad { border-left: 4px solid var(--bad); }
-.tables { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 6px; }
-table.counts { width: auto; min-width: 300px; }
-/* The table's title (Photos, Videos): a heading, larger than its rows. */
-table.counts th { font-size: 1.1em; font-weight: 700; color: var(--fg); padding-top: 10px; }
-table.counts td.indent { padding-left: 24px; color: var(--muted); }
-table.counts td.num { text-align: right; }
-a { color: var(--accent); }
+/* The protection choices on the Scan tab. */
+.protection-boxes { justify-content: flex-start; gap: var(--space-2) var(--space-6); }
 
-input[type='checkbox'] { vertical-align: middle; }
-tr.recommended td { color: var(--accent); font-weight: 600; }
+/* Erasing Photo Cleaner's data: a red confirm button only after the first click. */
+.erase-card > div > button { white-space: normal; text-align: left; }
+.erase-buttons { justify-content: flex-start; }
+.erase-card .confirm-text { border-top: 1px solid var(--pc-border); padding-top: var(--space-3); }
 
-/* --- Review tab: collapsing header, pinned tabs and action bar (as the desktop) --- */
-:root {
-  --tabs-h: 42px;
-  --ring: #1d1d22;
-  --positive: #2e9e5b;
-  --caution: #d08a00;
-  --negative: #d64545;
-  --neutral: #8a8a8a;
-  /* Frames of photos that are always kept: clearly apart from the focus outline (--ring). */
-  --neutral-frame: #8a8a8a;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --ring: #ffffff; --neutral-frame: #55555c; }
-}
-.tone-positive { --tone: var(--positive); }
-.tone-caution { --tone: var(--caution); }
-.tone-negative { --tone: var(--negative); }
-.tone-neutral { --tone: var(--neutral-frame); }
-.tone-text-positive { color: var(--positive); }
-.tone-text-caution { color: var(--caution); }
-.tone-text-negative { color: var(--negative); }
-.tone-text-neutral { color: var(--neutral); }
+/* --- Review tab: header and status rise away, tabs and action bar stay pinned --- */
 
 /* Scrolling down, these rise away while fading out; they come back only when scrolled back up. */
 .collapsing { animation: collapse-fade linear both; animation-timeline: view(); animation-range: exit 0% exit 100%; }
 @keyframes collapse-fade { to { opacity: 0; } }
-.page-header { display: flex; flex-direction: column; gap: 8px; }
+.page-header { display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-6); }
+.page-header h1 .muted { font-weight: 650; }
 
 .tabs {
-  position: sticky; top: 0; z-index: 5; height: var(--tabs-h); background: var(--bg);
-  display: flex; align-items: flex-end; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 -24px; padding: 0 24px;
+  position: sticky; top: 0; z-index: 20; min-height: 52px; background: var(--pc-bg);
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); border-bottom: 1px solid var(--pc-border);
 }
-button.tab { border: none; border-bottom: 3px solid transparent; border-radius: 0; padding: 8px 14px; font-weight: 600; color: var(--muted); }
-button.tab.selected { color: var(--fg); border-bottom-color: var(--accent); }
-.scan-tab { display: flex; flex-direction: column; gap: 12px; }
+button.tab {
+  background: transparent; border: none; border-bottom: 3px solid transparent; border-radius: 0;
+  padding: 12px 14px; color: var(--pc-muted); min-height: 48px;
+}
+button.tab:hover:not(:disabled) { background: transparent; color: var(--pc-text); border-bottom-color: var(--pc-border); }
+button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-bottom-color: var(--pc-accent); }
+.scan-tab { display: flex; flex-direction: column; gap: var(--space-5); padding-top: var(--space-5); }
 
 /* Below the status lines at least a screen tall, so a shorter next group never pulls them (or the
    page header) back into view: only scrolling up does. */
-.duplicates { display: flex; flex-direction: column; gap: 10px; }
-.duplicates-body { min-height: 100vh; display: flex; flex-direction: column; gap: 10px; }
-.status-lines { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }
+.duplicates, .search { display: flex; flex-direction: column; }
+.duplicates-body, .search-body { min-height: 100vh; display: flex; flex-direction: column; gap: var(--space-6); }
+.status-lines { display: flex; flex-direction: column; gap: var(--space-1); padding: 18px 0 20px; }
+.status-lines .mono { font-size: 14px; }
 .pinned-bar {
-  position: sticky; top: var(--tabs-h); z-index: 4; background: var(--bg);
-  display: flex; flex-direction: column; gap: 8px; padding: 10px 0 8px; margin: 0 -24px; padding-left: 24px; padding-right: 24px;
+  position: sticky; top: var(--tabs-h); z-index: 19; background: var(--pc-bg);
+  display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) 0; border-bottom: 1px solid var(--pc-border);
 }
-.banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--tone); background: color-mix(in srgb, var(--tone) 14%, var(--card)); }
-.action-bar { display: flex; flex-wrap: wrap-reverse; align-items: center; justify-content: space-between; row-gap: 8px; column-gap: 24px; }
-.action-bar .buttons { display: flex; flex-wrap: wrap; gap: 6px; }
-.action-bar .selection { display: flex; flex-direction: column; align-items: flex-end; }
-.working { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
-.spinner-inline { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
-
-/* One group: 300 px tiles with a coloured frame saying what will happen to each photo. */
-.group-card { padding: 16px; }
-.tiles { display: flex; flex-wrap: wrap; gap: 12px; }
-/* Scrolling a photo into view keeps it clear of the pinned tabs and action bar. */
-.tile { width: 300px; margin: 0; display: flex; flex-direction: column; gap: 3px; scroll-margin-top: 150px; scroll-margin-bottom: 16px; }
-.tile-image {
-  position: relative; width: 300px; height: 300px; box-sizing: border-box; border: 3px solid var(--tone); border-radius: 6px;
-  display: flex; align-items: center; justify-content: center; background: var(--card); cursor: pointer;
-  outline: 3px solid transparent; outline-offset: 3px; user-select: none;
-}
-.tile.focused .tile-image { outline-color: var(--ring); }
-.tile-image img { max-width: 288px; max-height: 288px; object-fit: contain; }
-.tile figcaption { display: flex; flex-direction: column; gap: 2px; }
-.tile .expand {
-  position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; padding: 0; border: none; border-radius: 6px;
-  background: rgba(0, 0, 0, 0.8); color: #fff; font-size: 16px; display: none;
-}
-.tile-image:hover .expand { display: block; }
-.new-badge {
-  position: absolute; top: 6px; left: 6px; width: 60px; height: 60px; background: #c9be5c; color: #fff;
-  display: flex; align-items: center; justify-content: center; font: 800 13px system-ui, sans-serif;
-  clip-path: polygon(50.0% 0.0%, 58.5% 13.0%, 71.7% 5.0%, 73.7% 20.3%, 89.1% 18.8%, 84.2% 33.5%, 98.7% 38.9%, 88.0% 50.0%, 98.7% 61.1%, 84.2% 66.5%, 89.1% 81.2%, 73.7% 79.7%, 71.7% 95.0%, 58.5% 87.0%, 50.0% 100.0%, 41.5% 87.0%, 28.3% 95.0%, 26.3% 79.7%, 10.9% 81.2%, 15.8% 66.5%, 1.3% 61.1%, 12.0% 50.0%, 1.3% 38.9%, 15.8% 33.5%, 10.9% 18.8%, 26.3% 20.3%, 28.3% 5.0%, 41.5% 13.0%);
-  transform: rotate(-24deg);
-}
-
-/* The viewer: one photo large, framed in what will happen to it. */
-.viewer { position: fixed; inset: 0; z-index: 20; background: rgba(16, 16, 16, 0.94); padding: 16px; display: flex; flex-direction: column; gap: 10px; color: #fff; }
-.viewer-photo { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; }
-.viewer-photo img { max-width: 100%; max-height: 100%; object-fit: contain; border: 2px solid var(--tone); }
-.viewer-info { display: flex; flex-wrap: wrap; gap: 16px; align-items: baseline; }
-.viewer-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-.viewer button { color: #fff; border-color: rgba(255, 255, 255, 0.35); }
-.viewer button.primary { color: var(--accent-fg); }
-.spinner { position: absolute; width: 48px; height: 48px; border: 4px solid rgba(255, 255, 255, 0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.9s linear infinite; }
+.action-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-6); min-height: 24px; }
+.action-bar .selection { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); font-weight: 600; }
+.buttons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.buttons button { padding: 8px 10px; }
+.working { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--pc-muted); }
+.spinner-inline { width: 16px; height: 16px; border: 2px solid var(--pc-border); border-top-color: var(--pc-accent); border-radius: 50%; animation: spin 0.9s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Toasts: bottom right, tinted by tone, glowing briefly when they appear. */
-.toast {
-  position: fixed; right: 16px; bottom: 16px; z-index: 30; max-width: 480px; padding: 12px 16px; border-radius: 10px;
-  border: 1.5px solid var(--tone); background: color-mix(in srgb, var(--tone) 18%, var(--card)); font-weight: 600;
-  animation: toast-in 0.2s ease-out, toast-glow 0.9s ease-out;
+/* --- Duplicates: 300 px photo stages, framed in what will happen to each photo --- */
+
+.group { padding-bottom: var(--space-6); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, 300px); gap: 28px var(--space-6); align-items: start; }
+/* Scrolling a photo into view keeps it clear of the pinned tabs and action bar. */
+.tile { width: 300px; max-width: 100%; margin: 0; scroll-margin-top: calc(var(--tabs-h) + var(--bar-h) + 16px); scroll-margin-bottom: 16px; }
+.tile-image {
+  position: relative; width: 300px; max-width: 100%; height: 300px; padding: 3px;
+  border: 3px solid var(--tone); border-radius: 8px; background: var(--pc-mat); cursor: pointer; user-select: none;
+  display: flex; align-items: center; justify-content: center;
+  outline: 2px solid transparent; outline-offset: 3px;
 }
-@keyframes toast-in { from { opacity: 0; transform: translateY(50%); } }
-@keyframes toast-glow { from { background: color-mix(in srgb, var(--tone) 48%, var(--card)); } }
+.tile.focused .tile-image { outline-color: var(--pc-focus); }
+.tile-image img { width: 100%; height: 100%; object-fit: contain; border-radius: 3px; display: block; }
+.tile figcaption { display: flex; flex-direction: column; gap: 6px; margin-top: var(--space-3); }
+.tile figcaption > strong { color: var(--tone); line-height: 24px; }
+.tile .reasons > span + span::before { content: ' · '; color: var(--pc-muted); }
+.tile figcaption a { width: fit-content; }
+/* Shown on hover: the photo large. Bottom right, clear of the NEW badge. */
+.expand {
+  position: absolute; right: 8px; bottom: 8px; width: 32px; min-height: 32px; height: 32px; padding: 0;
+  border: 1px solid #ffffff55; border-radius: var(--radius-control); background: #000000cc; color: #fff; font-size: 16px; display: none;
+}
+.expand:hover:not(:disabled) { background: #000; border-color: #fff; }
+.tile-image:hover .expand, .search-tile-image:hover .expand { display: block; }
+/* New since the last visit: a starburst in the mat's top right, clear of the photo. */
+.new-badge {
+  position: absolute; top: 8px; right: 8px; width: 48px; height: 48px; background: var(--pc-accent); color: var(--pc-on-accent);
+  display: flex; align-items: center; justify-content: center; font: 700 11px var(--font-ui); letter-spacing: 0.5px;
+  clip-path: polygon(50% 0, 61% 14%, 78% 6%, 81% 25%, 100% 28%, 89% 45%, 100% 60%, 81% 66%, 82% 87%, 61% 84%, 50% 100%, 39% 84%, 18% 87%, 19% 66%, 0 60%, 11% 45%, 0 28%, 19% 25%, 22% 6%, 39% 14%);
+}
+
+/* --- Search & sweep --- */
+
+.search-head { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5) 0 var(--space-5); }
+.search-head > label { font-weight: 600; }
+.search-form { justify-content: flex-start; flex-wrap: nowrap; }
+.search-form input {
+  flex: 1; min-width: 0; min-height: 44px; font: inherit; color: var(--pc-text); background: var(--pc-surface);
+  border: 1px solid var(--pc-border); border-radius: var(--radius-control); padding: 10px 12px;
+}
+.search-form button { min-height: 44px; }
+.examples { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.example { position: relative; width: 48px; height: 48px; border-radius: 5px; background: var(--pc-mat); display: flex; align-items: center; justify-content: center; }
+.example img { width: 100%; height: 100%; object-fit: cover; border-radius: 5px; }
+.example .remove {
+  position: absolute; top: -6px; right: -6px; width: 22px; min-height: 22px; height: 22px; padding: 0; border-radius: 50%;
+  font-size: 14px; line-height: 20px;
+}
+.segmented { display: inline-flex; }
+.segmented button { border-radius: 0; margin-left: -1px; }
+.segmented button:first-child { border-radius: var(--radius-control) 0 0 var(--radius-control); margin-left: 0; }
+.segmented button:last-child { border-radius: 0 var(--radius-control) var(--radius-control) 0; }
+.segmented button.selected, .segmented button.selected:hover { background: var(--pc-accent); border-color: var(--pc-accent); color: var(--pc-on-accent); position: relative; }
+/* The question before a sweep: inside the pinned bar, soft red with a red start edge. */
+.confirm { display: flex; flex-direction: column; gap: var(--space-3); padding: 14px; background: var(--pc-trash-fill); border-left: 3px solid var(--pc-trash); border-radius: 5px; }
+.confirm strong { color: var(--pc-trash); }
+.search-grid { display: grid; grid-template-columns: repeat(auto-fill, 160px); gap: var(--space-5) var(--space-4); }
+.search-tile { margin: 0; width: 160px; scroll-margin-top: calc(var(--tabs-h) + var(--bar-h) + 16px); scroll-margin-bottom: 16px; }
+.search-tile-image {
+  position: relative; width: 160px; height: 160px; padding: 2px; border: 4px solid transparent; border-radius: 7px;
+  background: var(--pc-mat); display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none;
+  outline: 2px solid transparent; outline-offset: 3px;
+}
+.search-tile-image img { width: 100%; height: 100%; object-fit: cover; border-radius: 3px; display: block; }
+.search-tile.selected .search-tile-image { border-color: var(--pc-trash); }
+.search-tile.selected .search-tile-image::after {
+  content: 'TRASH'; position: absolute; left: 6px; bottom: 6px; padding: 1px 5px; border: 1px solid var(--pc-trash); border-radius: 3px;
+  background: var(--pc-trash-fill); color: var(--pc-trash); font: 700 11px/18px var(--font-data);
+}
+.search-tile.focused .search-tile-image { outline-color: var(--pc-focus); }
+.search-tile figcaption { margin-top: 6px; }
+.search-tile figcaption a { color: var(--pc-muted); text-decoration: none; }
+.search-tile figcaption a:hover { color: var(--pc-text); text-decoration: underline; }
+.show-more { display: flex; justify-content: center; padding: var(--space-2) 0 var(--space-6); }
+
+/* --- The viewer: one photo large, dark in both themes, framed in what will happen to it --- */
+
+.viewer {
+  --pc-surface: #1e2128; --pc-hover: #2a2e38; --pc-border: #393e49; --pc-text: #eef0f6; --pc-muted: #adb4c3;
+  --pc-accent: #a18bff; --pc-on-accent: #171126; --pc-keep: #65ce94; --pc-trash: #ff8b8b; --pc-trash-fill: #5b252b;
+  --pc-amber: #f1c56b; --pc-protected: #a5adbb;
+  position: fixed; inset: 0; z-index: 100; background: #090b10f5; color: var(--pc-text);
+  padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4);
+}
+.viewer-photo { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; }
+.viewer-photo img { max-width: 100%; max-height: 100%; object-fit: contain; border: 3px solid var(--tone); border-radius: var(--radius-control); }
+.viewer-info { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: baseline; }
+.viewer-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.spinner { position: absolute; width: 48px; height: 48px; border: 4px solid #ffffff4d; border-top-color: #fff; border-radius: 50%; animation: spin 0.9s linear infinite; }
+
+/* --- Toasts: bottom right, a semantic edge on a lightly tinted surface --- */
+
+.toast {
+  position: fixed; right: var(--space-6); bottom: var(--space-6); z-index: 110; max-width: min(360px, calc(100vw - 48px));
+  padding: 14px 18px; border-radius: 8px; border: 1px solid var(--tone); border-left-width: 4px;
+  background: color-mix(in srgb, var(--tone) 9%, var(--pc-surface)); color: var(--pc-text);
+  box-shadow: 0 8px 24px #00000033; animation: toast-in 0.2s ease-out;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } }
 
 /* Hidden tabs stay alive but out of sight (the attribute must beat display: flex). */
 [hidden] { display: none !important; }
 
-/* Protection details, folded away at the bottom of the Scan card. */
-details.protection { border-top: 1px solid var(--line); padding-top: 6px; display: flex; flex-direction: column; gap: 6px; }
-details.protection > summary { cursor: pointer; user-select: none; }
-details.protection[open] > summary { margin-bottom: 6px; }
-button.small { padding: 2px 8px; font-size: 0.875em; }
+/* --- Narrow review tab --- */
 
-/* --- Search & sweep --- */
-.search { display: flex; flex-direction: column; gap: 10px; }
-.search-head { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
-.search-form { justify-content: flex-start; }
-.search-form input {
-  font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 6px;
-  padding: 6px 10px; width: min(520px, 100%);
+@media (max-width: 600px) {
+  body.review main { padding: var(--space-5) var(--space-4); }
+  .surface-header { flex-wrap: wrap; }
+  .tabs { gap: 0; }
+  button.tab { padding: 12px 10px; }
+  .tables { grid-template-columns: minmax(0, 1fr); }
+  .tiles { grid-template-columns: minmax(0, 300px); justify-content: center; }
+  .tile, .tile-image { width: 100%; }
+  .tile-image { height: auto; aspect-ratio: 1; }
+  .search-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
+  .search-tile, .search-tile-image { width: 100%; }
+  .search-tile-image { height: auto; aspect-ratio: 1; }
 }
-.search-form input:focus { outline: 2px solid var(--accent); outline-offset: 0; }
-button:disabled { opacity: 0.5; cursor: default; }
-.examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.example { position: relative; width: 48px; height: 48px; border-radius: 4px; overflow: hidden; background: var(--card); display: flex; align-items: center; justify-content: center; }
-.example img { width: 100%; height: 100%; object-fit: cover; }
-.example .remove {
-  position: absolute; top: 1px; right: 1px; width: 18px; height: 18px; padding: 0; border: none; border-radius: 50%;
-  background: rgba(0, 0, 0, 0.75); color: #fff; font-size: 13px; line-height: 18px;
-}
-/* Below the head at least a screen tall, so new results never pull the head back into view. */
-.search-body { min-height: 100vh; display: flex; flex-direction: column; gap: 10px; }
-.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.segmented button { border: none; border-radius: 0; padding: 4px 10px; }
-.segmented button + button { border-left: 1px solid var(--line); }
-.segmented button.selected { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
-.search-grid { display: grid; grid-template-columns: repeat(auto-fill, 160px); gap: 6px; }
-.search-tile { margin: 0; width: 160px; display: flex; flex-direction: column; gap: 2px; scroll-margin-top: 170px; scroll-margin-bottom: 16px; }
-.search-tile-image {
-  position: relative; width: 160px; height: 160px; box-sizing: border-box; border-radius: 4px; overflow: hidden;
-  background: var(--card); display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none;
-  outline: 3px solid transparent; outline-offset: 2px;
-}
-.search-tile-image img { width: 100%; height: 100%; object-fit: cover; }
-.search-tile.selected .search-tile-image { border: 4px solid var(--negative); }
-.search-tile.focused .search-tile-image { outline-color: var(--ring); }
-.search-tile-image:hover .expand { display: block; }
-.search-tile-image .expand {
-  position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; padding: 0; border: none; border-radius: 6px;
-  background: rgba(0, 0, 0, 0.8); color: #fff; font-size: 15px; display: none;
-}
-.search-tile figcaption a { color: var(--muted); text-decoration: none; }
-.search-tile figcaption a:hover { text-decoration: underline; }
-.show-more { display: flex; justify-content: center; padding: 12px 0 24px; }
 
-/* The protection choices on the Scan tab. */
-.protection-boxes { justify-content: flex-start; gap: 18px; }
-.protection-boxes label { cursor: pointer; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
 
-/* Erasing Photo Cleaner's data: a red confirm button only after the first click. */
-.erase-card p { margin: 0; }
-.erase-buttons { justify-content: flex-start; }
-button.danger { background: var(--negative); border-color: var(--negative); color: #fff; font-weight: 600; }
+/* The review tab's own pieces below the tabs. */
+.other-accounts { margin-top: var(--space-5); }
+.empty-note { padding-top: var(--space-5); }

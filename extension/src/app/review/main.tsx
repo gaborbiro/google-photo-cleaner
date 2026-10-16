@@ -13,6 +13,7 @@ import { SearchModel } from '../search/searchModel';
 import { searchDeps } from '../search/session';
 import { Duplicates, useTrashQueue } from './Duplicates';
 import { Search } from './Search';
+import { usePinnedHeight } from '../ui/Workbench';
 
 type Tab = 'scan' | 'duplicates' | 'search';
 const TABS: Tab[] = ['scan', 'duplicates', 'search'];
@@ -88,6 +89,9 @@ function Review() {
   useEffect(() => {
     if (refreshKey !== null) search?.libraryChanged();
   }, [search, refreshKey]);
+  // The pinned action bars sit right under the tabs, however tall they wrap.
+  const tabs = useRef<HTMLElement>(null);
+  usePinnedHeight(tabs, '--tabs-h');
   const searchLike = (mediaKeys: string[]) => {
     open('search');
     search?.searchLike(mediaKeys);
@@ -95,9 +99,12 @@ function Review() {
   return (
     <main className="review">
       <header className="collapsing page-header">
-        <div className="row">
-          <h1>Photo Cleaner</h1>
-          <button onClick={() => void send({ kind: 'app-open-photos' })}>Open Google Photos</button>
+        <div className="surface-header">
+          <div>
+            <h1>Photo Cleaner <span className="muted">/ review</span></h1>
+            {page.accountName && <p className="account mono" title="The Google account whose library this is">{page.accountName}</p>}
+          </div>
+          <button onClick={() => void send({ kind: 'app-open-photos' })}>Open Google Photos <span aria-hidden="true">↗</span></button>
         </div>
         <StorageProblem />
         {ERASED && (
@@ -106,15 +113,14 @@ function Review() {
             <span>Your photos in Google Photos were not touched. Scan your library again to start over.</span>
           </section>
         )}
-        {page.accountText && <h2>{page.accountText}</h2>}
       </header>
-      <nav className="tabs">
+      <nav className="tabs" ref={tabs}>
         {TABS.map((t) => (
-          <button key={t} tabIndex={-1} className={t === tab ? 'tab selected' : 'tab'} onClick={() => open(t)}>{page.tabLabels[t]}</button>
+          <button key={t} tabIndex={-1} className={t === tab ? 'tab selected' : 'tab'} aria-current={t === tab ? 'page' : undefined} onClick={() => open(t)}>{page.tabLabels[t]}</button>
         ))}
       </nav>
       {selected === null ? (
-        <p className="muted">No account yet: open Google Photos and start a scan from the panel.</p>
+        <p className="muted empty-note">No account yet: open Google Photos and start a scan from the panel.</p>
       ) : (
         <>
           {opened.has('duplicates') && duplicates && (
@@ -132,7 +138,7 @@ function Review() {
         </>
       )}
       {tab === 'scan' && page.otherAccounts.length > 0 && (
-        <>
+        <section className="card other-accounts">
           <h2>Other accounts on this computer</h2>
           <table>
             <thead><tr><th>Account</th><th>Scan</th></tr></thead>
@@ -145,7 +151,7 @@ function Review() {
               ))}
             </tbody>
           </table>
-        </>
+        </section>
       )}
     </main>
   );

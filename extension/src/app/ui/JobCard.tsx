@@ -15,26 +15,30 @@ export function ScanCard({ account, scan, analysis, report }: { account: string;
   const view = scanView(scan, analysis, Date.now());
   const act = () => void scanButton(view, store, send, account, Date.now()).catch(logFailure(view.actionLabel));
   return (
-    <section className="card">
-      <div className="row">
-        <strong>{view.title}</strong>
+    <section className="card scan-card" aria-live="polite">
+      <div className="scan-title">
+        <h2>{view.tone && <span className={`dot tone-${view.tone}`} aria-hidden="true" />}{view.title}</h2>
         <button className={view.action === 'pause' ? '' : 'primary'} onClick={act}>{view.actionLabel}</button>
       </div>
+      {view.stage && <p>{view.stage}</p>}
       {view.indeterminate && <div className="bar indeterminate"><div /></div>}
       {view.percent !== null && <div className="bar"><div style={{ width: `${view.percent}%` }} /></div>}
-      {view.stage && <div>{view.stage}</div>}
-      {view.lines.map((line) => <div key={line} className="mono">{line}</div>)}
-      {view.waiting && <div className="muted">{view.waiting}</div>}
-      {view.notice && <div className="warn">{view.notice}</div>}
-      {view.timesText && <div className="muted mono">{view.timesText}</div>}
+      {view.lines.length > 0 && (
+        <div className="lines">
+          {view.lines.map((line) => <div key={line} className="mono">{line}</div>)}
+        </div>
+      )}
+      {view.waiting && <p className="muted">{view.waiting}</p>}
+      {view.notice && <p className="warn">{view.notice}</p>}
+      {view.timesText && <p className="muted mono">{view.timesText}</p>}
       {view.fullSpeed !== null && (
-        <label className="muted small">
-          <input type="checkbox" checked={view.fullSpeed} onChange={(e) => void setAnalysisFullSpeed(store, account, e.target.checked, Date.now()).catch(logFailure('changing full speed'))} />{' '}
-          Full speed (don't slow down while I use the computer or on battery)
+        <label className="setting">
+          <input type="checkbox" checked={view.fullSpeed} onChange={(e) => void setAnalysisFullSpeed(store, account, e.target.checked, Date.now()).catch(logFailure('changing full speed'))} />
+          Full speed <span className="muted">(don't slow down while I use the computer or on battery)</span>
         </label>
       )}
       {/* Incomplete protection data changes what can be done: said outside the folded part (an old scan says so above). */}
-      {view.protectionKnown && report?.warningText && <div className="warn">{report.warningText}</div>}
+      {view.protectionKnown && report?.warningText && <p className="warn">{report.warningText}</p>}
       {view.protectionKnown && report && <ProtectionDetails report={report} />}
     </section>
   );
@@ -46,17 +50,19 @@ function ProtectionDetails({ report }: { report: ReportView }) {
   const copy = () => void navigator.clipboard.writeText(report.copyText).then(() => setCopied(true), logFailure('copying the report'));
   return (
     <details className="protection">
-      <summary className="muted">Protection details</summary>
-      <div className="mono">{report.timesLine}</div>
-      {report.issueLines.map((line) => <div key={line} className="warn">{line}</div>)}
-      {report.noteLines.map((line) => <div key={line} className="muted">{line}</div>)}
+      <summary>Protection details</summary>
+      <div className="report-lines">
+        <p className="mono">{report.timesLine}</p>
+        {report.issueLines.map((line) => <p key={line} className="warn">{line}</p>)}
+        {report.noteLines.map((line) => <p key={line} className="muted">{line}</p>)}
+      </div>
       <div className="tables">
         {report.tables.map((t) => (
           <table key={t.title} className="counts">
-            <thead><tr><th colSpan={2}>{t.title}</th></tr></thead>
+            <caption>{t.title}</caption>
             <tbody>
               {t.rows.map((r) => (
-                <tr key={r.label}><td className={r.indent ? 'indent' : ''}>{r.label}</td><td className="mono num">{r.value}</td></tr>
+                <tr key={r.label} className={r.indent ? 'count-detail' : 'count-total'}><th scope="row">{r.label}</th><td className="num">{r.value}</td></tr>
               ))}
             </tbody>
           </table>
@@ -74,18 +80,18 @@ function ProtectionDetails({ report }: { report: ReportView }) {
 export function ProtectionCard({ account, choices }: { account: string; choices: ProtectionChoices }) {
   const box = (key: keyof ProtectionChoices, label: string) => (
     <label>
-      <input type="checkbox" checked={choices[key]} onChange={(e) => void setProtectionChoices(account, { ...choices, [key]: e.target.checked }).catch(logFailure('saving the protection choices'))} /> {label}
+      <input type="checkbox" checked={choices[key]} onChange={(e) => void setProtectionChoices(account, { ...choices, [key]: e.target.checked }).catch(logFailure('saving the protection choices'))} />{label}
     </label>
   );
   return (
     <section className="card protection-card">
-      <strong>Never trash photos that are</strong>
+      <h2>Never trash photos that are</h2>
       <div className="row protection-boxes">
         {box('favourites', 'favourites')}
         {box('albums', 'in an album')}
         {box('archived', 'archived')}
       </div>
-      <p className="muted small">
+      <p className="muted">
         Photos of unknown status, such as ones saved from someone else's share, are always kept. Trashing a photo also removes it from every album it's in.
       </p>
     </section>
@@ -97,10 +103,10 @@ export function TrashModeCard({ account, trashForReal }: { account: string; tras
   return (
     <section className="card trash-mode-card">
       <label>
-        <input type="checkbox" checked={trashForReal} onChange={(e) => void setTrashForReal(account, e.target.checked).catch(logFailure('saving "Trash for real"'))} />{' '}
+        <input type="checkbox" checked={trashForReal} onChange={(e) => void setTrashForReal(account, e.target.checked).catch(logFailure('saving "Trash for real"'))} />
         <strong>Trash for real</strong>
       </label>
-      <p className="muted small">
+      <p className="muted">
         Off: trashing is simulated, nothing is sent to Google. On: approved photos go to Google Photos' trash, where they stay for 60 days; Z undoes it.
       </p>
     </section>
@@ -125,12 +131,12 @@ export function EraseCard() {
     }
   };
   return (
-    <section className="card erase-card">
+    <section className="card utility erase-card">
       {step === 'button' ? (
         <div><button onClick={() => setStep('confirm')}>Erase Photo Cleaner's data from this computer</button></div>
       ) : (
         <>
-          <p>
+          <p className="confirm-text">
             Removes the library scan, the AI fingerprints and your review progress (which groups you've already gone through), as uninstalling would.{' '}
             <strong>Your photos in Google Photos are not touched</strong>: photos you already trashed stay in Google Photos' trash (kept there for 60 days), and Photo Cleaner can no longer undo them.
           </p>
@@ -148,5 +154,5 @@ export function EraseCard() {
 /** Shown above everything when the saved data can't be opened; disappears once it can. */
 export function StorageProblem() {
   const problem = useStorageProblem();
-  return problem ? <section className="card tone-warn"><strong>{problem}</strong></section> : null;
+  return problem ? <section className="banner tone-caution" role="alert"><strong>{problem}</strong></section> : null;
 }

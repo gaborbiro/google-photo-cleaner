@@ -169,7 +169,7 @@ describe('the pages draw', () => {
   it('review tab: Scan, then Duplicates with the burst, then Search with its photos as examples', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('review', '?account=account-a');
-    await shows(root, 'Photo Cleaner', 'Account:', 'someone@example.com', 'Never trash photos that are', 'Erase Photo Cleaner');
+    await shows(root, 'Photo Cleaner', 'someone@example.com', 'Never trash photos that are', 'Erase Photo Cleaner');
 
     await click(root, '2 · Duplicates');
     await vi.waitFor(() => expect(root.querySelectorAll('.duplicates:not([hidden]) .tiles > *')).toHaveLength(3), { timeout: 3_000 });

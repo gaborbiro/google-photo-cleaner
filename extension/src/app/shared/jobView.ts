@@ -21,6 +21,8 @@ export function accountLabel(fingerprint: string, email: string | null): string 
 export interface ScanView {
   /** "Not scanned yet", "Scanning", "Scan paused", "Scan stopped", "Scan complete" or "Scan out of date". */
   title: string;
+  /** The status dot beside the title: complete, needs attention (paused, out of date) or stopped; null without one. */
+  tone: 'positive' | 'caution' | 'negative' | null;
   /** "Stage 1 of 2 · Reading your photo list: albums"; null when nothing is under way. */
   stage: string | null;
   /** 0–100 for the bar while analysing; null when there is no measure (the photo list's length is unknown up front). */
@@ -68,7 +70,7 @@ function duration(seconds: number): string {
   return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 }
 
-const NONE = { stage: null, percent: null, indeterminate: false, lines: [], waiting: null, notice: null, timesText: null, fullSpeed: null, protectionKnown: false };
+const NONE = { tone: null, stage: null, percent: null, indeterminate: false, lines: [], waiting: null, notice: null, timesText: null, fullSpeed: null, protectionKnown: false };
 
 /** The Scan step's tab title with its status, as on the desktop: "1 · Scan (done)". */
 export function scanTabTitle(view: ScanView): string {
@@ -110,9 +112,9 @@ function readingView(scan: ScanJob): ScanView {
     case 'running':
       return { ...base, title: 'Scanning', indeterminate: true, action: 'pause', actionLabel: 'Pause', tabStatus: 'scanning' };
     case 'paused':
-      return { ...base, title: 'Scan paused', action: 'resume', actionLabel: 'Resume', tabStatus: 'needed' };
+      return { ...base, title: 'Scan paused', tone: 'caution', action: 'resume', actionLabel: 'Resume', tabStatus: 'needed' };
     default:
-      return { ...base, title: 'Scan stopped', action: 'restart', actionLabel: 'Start a new scan', tabStatus: 'needed' };
+      return { ...base, title: 'Scan stopped', tone: 'negative', action: 'restart', actionLabel: 'Start a new scan', tabStatus: 'needed' };
   }
 }
 
@@ -127,6 +129,7 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanView
       ...NONE,
       protectionKnown: true,
       title: stale ? 'Scan out of date' : 'Scan complete',
+      tone: stale ? 'caution' : 'positive',
       lines: [
         count(p.photos, 'photo', 'photos') +
           (p.failed > 0 ? ` · ${n(p.failed)} could not be read (tried again next time)` : stale ? '' : ' · ready to review'),
@@ -172,9 +175,9 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanView
     case 'running':
       return { ...base, title: 'Scanning', waiting: p.waiting, action: 'pause', actionLabel: 'Pause', tabStatus: 'scanning' };
     case 'paused':
-      return { ...base, title: 'Scan paused', action: 'resume', actionLabel: 'Resume', tabStatus: 'needed' };
+      return { ...base, title: 'Scan paused', tone: 'caution', action: 'resume', actionLabel: 'Resume', tabStatus: 'needed' };
     default:
-      return { ...base, title: 'Scan stopped', action: 'restart', actionLabel: 'Try again', tabStatus: 'needed' };
+      return { ...base, title: 'Scan stopped', tone: 'negative', action: 'restart', actionLabel: 'Try again', tabStatus: 'needed' };
   }
 }
 
@@ -193,8 +196,8 @@ export interface OtherAccountRow {
 }
 
 export interface ReviewPageView {
-  /** "Account: someone@example.com"; null with no account yet. */
-  accountText: string | null;
+  /** The account whose library this is, as shown: "someone@example.com"; null with no account yet. */
+  accountName: string | null;
   /**
    * The tabs' labels, numbered as on the desktop (which has Calibration as its step 2); Search is not a
    * step. The Scan tab's carries its status: "1 · Scan (done)".
@@ -224,7 +227,7 @@ export function reviewPageView(input: {
   const analysisOf = (account: string) => jobs.find((j): j is AnalysisJob => j.kind === 'analysis' && j.account === account) ?? null;
   const shown = selected !== null && scan !== undefined && analysis !== undefined ? scanView(scan, analysis, nowMs) : null;
   return {
-    accountText: selected === null ? null : `Account: ${accountLabel(selected, emailOf(selected))}`,
+    accountName: selected === null ? null : accountLabel(selected, emailOf(selected)),
     tabLabels: { scan: shown ? scanTabTitle(shown) : '1 · Scan', duplicates: '2 · Duplicates', search: 'Search' },
     otherAccounts: jobs
       .filter((j): j is ScanJob => j.kind === 'library-scan' && j.account !== selected)
@@ -250,16 +253,16 @@ export interface SurfaceView {
   state: 'looking' | 'no-photos' | 'problem' | 'account';
   problemText: string | null;
   account: string | null;
-  /** "Account: someone@example.com". */
-  accountText: string | null;
+  /** The account signed in to Google Photos, as shown: "someone@example.com". */
+  accountName: string | null;
 }
 
 export function surfaceView(answer: AccountAnswer | undefined): SurfaceView {
-  const none = { problemText: null, account: null, accountText: null };
+  const none = { problemText: null, account: null, accountName: null };
   if (answer === undefined) return { ...none, state: 'looking' };
   if (answer.account) {
     const { fingerprint, email } = answer.account;
-    return { state: 'account', problemText: null, account: fingerprint, accountText: `Account: ${accountLabel(fingerprint, email)}` };
+    return { state: 'account', problemText: null, account: fingerprint, accountName: accountLabel(fingerprint, email) };
   }
   return { ...none, state: answer.photosTabOpen ? 'problem' : 'no-photos', problemText: answer.problem };
 }

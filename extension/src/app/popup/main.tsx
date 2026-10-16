@@ -9,7 +9,10 @@ function Popup() {
   const { view, scan, analysis, report, reviewText } = useSignedInScan();
   return (
     <main className="popup">
-      <h1>Photo Cleaner</h1>
+      <header>
+        <h1>Photo Cleaner</h1>
+        {view.accountName && <p className="account mono" title="The Google account signed in to Google Photos">{view.accountName}</p>}
+      </header>
       <StorageProblem />
       {view.state === 'looking' && <p className="muted">Looking for Google Photos…</p>}
       {view.state === 'no-photos' && (
@@ -21,12 +24,11 @@ function Popup() {
       {view.state === 'problem' && <p className="warn">{view.problemText}</p>}
       {view.account && (
         <>
-          <p className="mono">{view.accountText}</p>
           {scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} />}
-          {reviewText && <button className="primary" onClick={() => void send({ kind: 'app-open-review', account: view.account })}>{reviewText}</button>}
-          <div className="row">
+          <div className="launch">
+            {reviewText && <button className="primary" onClick={() => void send({ kind: 'app-open-review', account: view.account })}>{reviewText}</button>}
             <button onClick={() => void send({ kind: 'app-show-panel' })}>Show panel in Google Photos</button>
-            <button onClick={() => void send({ kind: 'app-open-review', account: view.account })}>Open in tab <span aria-hidden="true">⤢</span></button>
+            <button onClick={() => void send({ kind: 'app-open-review', account: view.account })}>Open in tab <span aria-hidden="true">↗</span></button>
           </div>
         </>
       )}

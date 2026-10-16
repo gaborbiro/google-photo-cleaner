@@ -7,11 +7,11 @@ import { DuplicatesReview, type DuplicatesView, type TileView } from '../duplica
 import { recoverInterrupted } from '../duplicates/trash';
 import { trashQueueDeps, trashQueuePass } from '../duplicates/session';
 import type { SearchModel } from '../search/searchModel';
-import { Toast, useFocusFeedback, useWorkbenchKeys, Viewer } from '../ui/Workbench';
+import { Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
 
 const TRASH_QUEUE_EVERY_MS = 2_000;
 /** The space between the pinned bar and the group (the gap in .duplicates-body). */
-const GAP_PX = 10;
+const GAP_PX = 24;
 
 /**
  * When another group comes on while the last one was scrolled down, scrolls up just enough to
@@ -65,14 +65,14 @@ function Tile({ tile, focusPulse, review }: { tile: TileView; focusPulse: number
       <div className="tile-image" ref={image} onClick={() => review.tileClicked(tile.mediaKey)}>
         {tile.imageUrl ? <img src={tile.imageUrl} alt="" draggable={false} /> : <span className="muted small">{tile.error ?? 'Loading…'}</span>}
         {tile.newBadge && <span className="new-badge">NEW</span>}
-        <button className="expand" title="View large (Enter)" tabIndex={-1} onClick={(e) => { e.stopPropagation(); review.openViewer(tile.mediaKey); }}>⤢</button>
+        <button className="expand" title="View large (Enter)" aria-label="View large" tabIndex={-1} onClick={(e) => { e.stopPropagation(); review.openViewer(tile.mediaKey); }}>⤢</button>
       </div>
       <figcaption>
-        <strong className={`tone-text-${tile.tone}`}>{tile.label}</strong>
-        {tile.similarityText && <div className="small">{tile.similarityText}</div>}
-        {tile.reasons.map((r) => <div key={r} className="small">· {r}</div>)}
-        <div className="small muted">{tile.caption}</div>
-        <a className="small" href={tile.link} target="_blank" rel="noreferrer" tabIndex={-1}>Open in Google Photos</a>
+        <strong>{tile.label}</strong>
+        {tile.similarityText && <span className="mono">{tile.similarityText}</span>}
+        {tile.reasons.length > 0 && <span className="reasons">{tile.reasons.map((r) => <span key={r}>{r}</span>)}</span>}
+        <span className="muted mono">{tile.caption}</span>
+        <a href={tile.link} target="_blank" rel="noreferrer" tabIndex={-1}>Open in Google Photos <span aria-hidden="true">↗</span></a>
       </figcaption>
     </figure>
   );
@@ -81,23 +81,23 @@ function Tile({ tile, focusPulse, review }: { tile: TileView; focusPulse: number
 function Status({ view }: { view: DuplicatesView }) {
   return (
     <section className="collapsing status-lines">
-      {view.ruleText && <p className="small">{view.ruleText}</p>}
+      {view.ruleText && <p>{view.ruleText}</p>}
       {view.groupsText && <strong>{view.groupsText}</strong>}
       {view.progressText && <strong>{view.progressText}</strong>}
       {view.missingText && <strong className="tone-text-caution">{view.missingText}</strong>}
-      {view.queueText && <span className="small">{view.queueText}</span>}
-      {view.queueWaitingText && <span className="small warn">{view.queueWaitingText}</span>}
+      {view.queueText && <span className="muted">{view.queueText}</span>}
+      {view.queueWaitingText && <span className="warn">{view.queueWaitingText}</span>}
     </section>
   );
 }
 
-const BUTTONS: { label: string; act: (r: DuplicatesReview) => void; primary?: boolean }[] = [
-  { label: 'D · Trash selected', act: (r) => r.approve(), primary: true },
-  { label: 'F · Keep all', act: (r) => r.keep() },
-  { label: 'S · Skip', act: (r) => r.defer() },
-  { label: 'A · Focus all', act: (r) => r.focusAll() },
-  { label: 'Space · Toggle trash', act: (r) => r.toggleFocused() },
-  { label: 'Z · Undo', act: (r) => r.undo() },
+const BUTTONS: { key: string; label: string; act: (r: DuplicatesReview) => void; trash?: boolean }[] = [
+  { key: 'D', label: 'Trash selected', act: (r) => r.approve(), trash: true },
+  { key: 'F', label: 'Keep all', act: (r) => r.keep() },
+  { key: 'S', label: 'Skip', act: (r) => r.defer() },
+  { key: 'A', label: 'Focus all', act: (r) => r.focusAll() },
+  { key: 'Space', label: 'Toggle trash', act: (r) => r.toggleFocused() },
+  { key: 'Z', label: 'Undo', act: (r) => r.undo() },
 ];
 
 /**
@@ -135,6 +135,7 @@ export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
   const bar = useRef<HTMLElement>(null);
   const card = useRef<HTMLElement>(null);
   useTopRowInView(view.group?.id ?? null, bar, card);
+  usePinnedHeight(bar, '--bar-h');
   useEffect(() => {
     const el = grid.current;
     if (!el) return;
@@ -155,25 +156,29 @@ export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
               <button onClick={openScan}>Open Scan</button>
             </div>
           )}
-          {view.problemText && <div className="banner tone-negative"><strong>{view.problemText}</strong></div>}
-          <div className="action-bar">
-            <div className="buttons">
-              {BUTTONS.map((b) => <button key={b.label} tabIndex={-1} className={b.primary ? 'primary' : ''} onClick={() => b.act(review)}>{b.label}</button>)}
-              <button tabIndex={-1} onClick={() => { const keys = review.groupKeysOrSay(); if (keys) onSearchLike(keys); }}>Search more like these</button>
+          {view.problemText && <div className="banner tone-negative" role="alert"><strong>{view.problemText}</strong></div>}
+          {(view.group || view.workingText) && (
+            <div className="action-bar">
+              {view.group && (
+                <div className="selection">
+                  <span>{view.group.selectionText}</span>
+                  {view.group.warningText && <span className="tone-text-negative">{view.group.warningText}</span>}
+                </div>
+              )}
+              {view.workingText && <span className="working" role="status"><span className="spinner-inline" />{view.workingText}</span>}
             </div>
-            {view.workingText && <span className="working"><span className="spinner-inline" />{view.workingText}</span>}
-            {view.group && (
-              <div className="selection">
-                {view.group.warningText && <strong className="tone-text-negative">{view.group.warningText}</strong>}
-                <strong>{view.group.selectionText}</strong>
-              </div>
-            )}
+          )}
+          <div className="buttons">
+            {BUTTONS.map((b) => (
+              <button key={b.key} tabIndex={-1} className={b.trash ? 'danger' : ''} onClick={() => b.act(review)}><kbd>{b.key}</kbd> · {b.label}</button>
+            ))}
+            <button tabIndex={-1} onClick={() => { const keys = review.groupKeysOrSay(); if (keys) onSearchLike(keys); }}>Search more like these</button>
           </div>
         </section>
-        {view.loadingText && <p className="working"><span className="spinner-inline" />{view.loadingText}</p>}
+        {view.loadingText && <p className="working" role="status"><span className="spinner-inline" />{view.loadingText}</p>}
         {view.emptyText && <p className="muted">{view.emptyText}</p>}
         {view.group && (
-          <section className="card group-card" ref={card}>
+          <section className="group" ref={card}>
             <div className="tiles" ref={grid}>
               {view.group.tiles.map((t) => <Tile key={t.mediaKey} tile={t} focusPulse={view.group!.focusPulse} review={review} />)}
             </div>

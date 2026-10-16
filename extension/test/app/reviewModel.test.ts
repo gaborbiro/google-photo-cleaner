@@ -352,6 +352,8 @@ describe('the Duplicates review', () => {
     fakes.blocked = 'SCAN_STALE';
     const { review, view } = await opened(fakes);
     expect(view()).toMatchObject({ blockedText: 'The library scan is more than a day old. Check for new photos on the Scan tab: it re-reads the list of your photos (about 2–3 minutes) and only looks at new ones.', group: null, emptyText: null, missingText: null });
+    // The reason takes the place of the counts, which mean nothing without a usable scan.
+    expect(view()).toMatchObject({ groupsText: null, progressText: null });
     review.approve();
     expect(view().notice!.text).toBe(view().blockedText);
   });

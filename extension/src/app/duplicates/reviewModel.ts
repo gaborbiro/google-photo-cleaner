@@ -567,8 +567,9 @@ export class DuplicatesReview {
       // From the moment the tab opens (also while the saved jobs are still being read) until the first groups are ready.
       loadingText: !loaded && this.problem === null ? 'Finding duplicate groups…' : null,
       workingText: this.working,
-      groupsText: loaded ? count(this.totalGroups, 'group', 'groups') : null,
-      progressText: loaded
+      // Only once there are groups to count: while blocked (no scan yet, an old one) the reason takes their place.
+      groupsText: loaded && this.blocked === null ? count(this.totalGroups, 'group', 'groups') : null,
+      progressText: loaded && this.blocked === null
         ? `${n(this.decidedGroups)} decided · ${n(this.pending.length)} to go` + (this.deferredIds.size > 0 ? ` (${n(this.deferredIds.size)} skipped)` : '')
         : null,
       // Answers "do I need to analyse again?" after a new library scan.

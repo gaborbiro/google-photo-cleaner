@@ -78,10 +78,17 @@ function Tile({ tile, focusPulse, review }: { tile: TileView; focusPulse: number
   );
 }
 
-function Status({ view }: { view: DuplicatesView }) {
+function Status({ view, openScan }: { view: DuplicatesView; openScan: () => void }) {
   return (
     <section className="collapsing status-lines">
       {view.ruleText && <p>{view.ruleText}</p>}
+      {/* Why nothing can be reviewed yet: in the place of the counts, which come once it can. */}
+      {view.blockedText && (
+        <div className="banner tone-caution">
+          <strong>⚠ {view.blockedText}</strong>
+          <button onClick={openScan}>Open Scan</button>
+        </div>
+      )}
       {view.groupsText && <strong>{view.groupsText}</strong>}
       {view.progressText && <strong>{view.progressText}</strong>}
       {view.missingText && <strong className="tone-text-caution">{view.missingText}</strong>}
@@ -147,15 +154,9 @@ export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
 
   return (
     <div className="duplicates" hidden={!active}>
-      <Status view={view} />
+      <Status view={view} openScan={openScan} />
       <div className="duplicates-body">
         <section className="pinned-bar" ref={bar}>
-          {view.blockedText && (
-            <div className="banner tone-caution">
-              <strong>⚠ {view.blockedText}</strong>
-              <button onClick={openScan}>Open Scan</button>
-            </div>
-          )}
           {view.problemText && <div className="banner tone-negative" role="alert"><strong>{view.problemText}</strong></div>}
           {(view.group || view.workingText) && (
             <div className="action-bar">

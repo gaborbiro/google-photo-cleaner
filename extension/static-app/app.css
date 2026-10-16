@@ -185,7 +185,13 @@ table.counts tr.count-detail td { color: var(--pc-muted); }
 .protection-boxes { justify-content: flex-start; gap: var(--space-2) var(--space-6); }
 
 /* Erasing Photo Cleaner's data: a red confirm button only after the first click. */
-.erase-card > div > button { white-space: normal; text-align: left; }
+/* The first step: tinted red, quieter than the confirm button behind it. */
+.erase-card > div > button {
+  white-space: normal; text-align: left; color: var(--pc-trash);
+  border-color: color-mix(in srgb, var(--pc-trash) 45%, var(--pc-border));
+  background: color-mix(in srgb, var(--pc-trash) 6%, var(--pc-surface));
+}
+.erase-card > div > button:hover:not(:disabled) { border-color: var(--pc-trash); background: color-mix(in srgb, var(--pc-trash) 12%, var(--pc-surface)); }
 .erase-buttons { justify-content: flex-start; }
 .erase-card .confirm-text { border-top: 1px solid var(--pc-border); padding-top: var(--space-3); }
 

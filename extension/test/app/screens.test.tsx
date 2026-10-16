@@ -146,7 +146,9 @@ describe('the pages draw', () => {
   it('popup: the account, its Scan and the buttons', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('popup');
-    await shows(root, 'Photo Cleaner', 'someone@example.com', 'Open in tab', 'Erase Photo Cleaner');
+    await shows(root, 'Photo Cleaner', 'someone@example.com', 'Open in tab');
+    // Erasing lives in the review tab; the popup stays short.
+    expect(root.textContent).not.toContain('Erase Photo Cleaner');
   });
 
   it('popup without a Google Photos tab says so', async () => {
@@ -192,9 +194,10 @@ describe('the pages draw', () => {
     await shows(root, 'Open Scan');
   });
 
-  it('after the data was erased the review tab says so', async () => {
+  it('after the data was erased the review tab says so, and offers erasing even with no account signed in', async () => {
+    account = NO_TAB;
     const root = await open('review', '?erased=1');
-    await shows(root, 'erased');
+    await shows(root, 'erased', 'No account yet', 'Erase Photo Cleaner');
   });
 });
 
@@ -378,7 +381,7 @@ describe('clicks and keys reach what they should', () => {
     const root = await open('popup');
     await shows(root, 'Open in tab');
     await click(root, 'Open in tab');
-    await click(root, 'Show panel in Google Photos');
+    await click(root, 'Open panel in Google Photos');
     expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a' }]);
     expect(requests('app-show-panel')).toHaveLength(1);
   });
@@ -407,8 +410,8 @@ describe('clicks and keys reach what they should', () => {
     expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a' }]);
   });
 
-  it('erase takes two clicks; Cancel goes back; a failure is shown and can be tried again', async () => {
-    const root = await open('popup');
+  it('erase (in the review tab) takes two clicks; Cancel goes back; a failure is shown and can be tried again', async () => {
+    const root = await open('review', '?account=account-a');
     await click(root, "Erase Photo Cleaner's data");
     await shows(root, 'Your photos in Google Photos are not touched', 'Confirm to erase');
     expect(requests('app-erase-all')).toEqual([]);

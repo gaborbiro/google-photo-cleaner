@@ -353,4 +353,3 @@ button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-b
 
 /* The review tab's own pieces below the tabs. */
 .other-accounts { margin-top: var(--space-5); }
-.empty-note { padding-top: var(--space-5); }

@@ -120,7 +120,11 @@ function Review() {
         ))}
       </nav>
       {selected === null ? (
-        <p className="muted empty-note">No account yet: open Google Photos and start a scan from the panel.</p>
+        <div className="scan-tab">
+          <p className="muted">No account yet: open Google Photos and start a scan from the panel.</p>
+          {/* Erasing covers every account, so it is here even when none is signed in. */}
+          <EraseCard />
+        </div>
       ) : (
         <>
           {opened.has('duplicates') && duplicates && (

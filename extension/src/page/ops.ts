@@ -149,7 +149,9 @@ async function dispatch(env: PageEnvironment, op: ReadOp, params: Record<string,
       // api.ts:292-308 getAlbumPage
       const albumKey = requiredString(params, 'albumKey');
       const payload = await rpc('snAcKc', [albumKey, optionalString(params, 'pageToken'), null, optionalString(params, 'authKey')]);
-      return { ...withShape(params, payload, normalizeAlbumItemsPage(payload)), accountFingerprint: account };
+      const page = normalizeAlbumItemsPage(payload);
+      if (page.albumKey !== albumKey) throw new OpFailure({ kind: 'PROTOCOL', message: 'Album page is for a different album' });
+      return { ...withShape(params, payload, page), accountFingerprint: account };
     }
 
     case 'listTrashPage': {

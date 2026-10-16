@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { previewUrl, runOp, type PageEnvironment } from '../src/page/ops';
 import { runWriteOp } from '../src/page/trashOps';
 import { isAllowedOp, isReadOp, READ_OPS, WRITE_OPS } from '../src/shared/protocol';
-import { envelope, rawLibraryItem, timelinePayload } from './fixtures';
+import { albumItemsPayload, albumKey, dedupKey, envelope, marker, mediaKey, rawAlbumMember, rawLibraryItem, rawTrashItem, timelinePayload } from './fixtures';
 
 const wiz = { SNlM0e: 'AT', FdrFJe: '1', cfb2h: 'bl', eptZe: '/_/PhotosUi/', oPEP7c: 'someone@example.com' };
 
@@ -26,11 +26,11 @@ function env(body: (url: string, init: RequestInit) => string, overrides: Partia
 
 describe('runOp', () => {
   it('lists a library page with an account fingerprint', async () => {
-    const result = await runOp(env(() => envelope('lcxiM', timelinePayload([rawLibraryItem({ favourite: true })], 'n'))), 'listLibraryPage', {});
+    const result = await runOp(env(() => envelope('lcxiM', timelinePayload([rawLibraryItem({ favourite: true })], marker()))), 'listLibraryPage', {});
     expect(result.ok).toBe(true);
     const data = (result as { data: { items: unknown[]; nextPageToken: string; accountFingerprint: string } }).data;
     expect(data.items).toHaveLength(1);
-    expect(data.nextPageToken).toBe('n');
+    expect(data.nextPageToken).toBe(marker());
     expect(data.accountFingerprint).toBe('abcdef0123456789');
   });
 
@@ -53,6 +53,13 @@ describe('runOp', () => {
     const result = await runOp(e, 'listArchivePage', {});
     expect(result.ok).toBe(true);
     expect(body).toContain('[null,null,500,null,1,2]');
+  });
+
+  it('an album page must be about the album that was asked for', async () => {
+    const asked = albumKey('asked');
+    const page = (key: string) => envelope('snAcKc', albumItemsPayload([rawAlbumMember(mediaKey('a'), dedupKey('a'))], null, 1, key));
+    expect(await runOp(env(() => page(asked)), 'listAlbumItemsPage', { albumKey: asked })).toMatchObject({ ok: true, data: { albumKey: asked } });
+    expect(await runOp(env(() => page(albumKey('other'))), 'listAlbumItemsPage', { albumKey: asked })).toMatchObject({ ok: false, error: { kind: 'PROTOCOL' } });
   });
 
   it('rejects malformed parameters', async () => {
@@ -118,10 +125,10 @@ describe('the trash requests', () => {
   });
 
   it('the trash is read page by page as dedup keys', async () => {
-    const page = [[['mk1', ['https://photos.fife.usercontent.google.com/pw/M', 1, 1], 1, 'dk1', 0, 0], ['mk2', null, 2, 'dk2', 0, 0]], 'next'];
+    const page = [[rawTrashItem(dedupKey('dk1'), mediaKey('1')), rawTrashItem(dedupKey('dk2'), mediaKey('2'))], marker()];
     const result = await runOp(env(() => envelope('zy0IHe', page)), 'listTrashPage', {});
-    expect(result).toEqual({ ok: true, data: { dedupKeys: ['dk1', 'dk2'], nextPageToken: 'next', accountFingerprint: ACCOUNT } });
-    const malformed = await runOp(env(() => envelope('zy0IHe', [[['mk1', null, 1, null]]])), 'listTrashPage', {});
+    expect(result).toEqual({ ok: true, data: { dedupKeys: [dedupKey('dk1'), dedupKey('dk2')], nextPageToken: marker(), accountFingerprint: ACCOUNT } });
+    const malformed = await runOp(env(() => envelope('zy0IHe', [[rawTrashItem(null as never)]])), 'listTrashPage', {});
     expect(malformed).toMatchObject({ ok: false, error: { kind: 'PROTOCOL' } });
   });
 });

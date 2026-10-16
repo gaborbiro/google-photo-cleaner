@@ -117,13 +117,96 @@ describe('library scan', () => {
     expect(eligibleIndexes(await classifyLatest(store))).toEqual([]);
   });
 
-  it("an album whose entry count differs from Google's count blocks eligibility", async () => {
-    const store = newStore();
-    const source = new FakePhotos(Array.from({ length: 10 }, (_, i) => fakeItem(i)), [fakeAlbum('A', [2, 3], { reportedCount: 5 })]);
-    await scan(source, store);
-    const result = await classifyLatest(store);
-    expect(result.report.coverage.albumIssues.map((i) => i.kind)).toEqual(['COUNT_MISMATCH']);
-    expect(eligibleIndexes(result)).toEqual([]);
+  describe("an album whose entries don't add up to Google's count", () => {
+    const shortAlbum = () => new FakePhotos(Array.from({ length: 10 }, (_, i) => fakeItem(i)), [fakeAlbum('A', [2, 3], { reportedCount: 5 })]);
+    const albumReads = (source: FakePhotos) => source.calls.filter((c) => c === 'album:A').length;
+
+    it('is read a second time; the same entries both times is a note, not a block', async () => {
+      const store = newStore();
+      const source = shortAlbum();
+      expect((await scan(source, store)).outcome.kind).toBe('completed');
+      expect(albumReads(source)).toBe(2);
+      const result = await classifyLatest(store);
+      expect(result.report.coverage.isComplete).toBe(true);
+      expect(result.report.coverage.albumIssues).toEqual([]);
+      expect(result.report.coverage.albumWarnings.map((i) => i.kind)).toEqual(['COUNT_MISMATCH_READ_TWICE']);
+      expect(eligibleIndexes(result)).toEqual([0, 1, 4, 5, 6, 7, 8, 9]);
+      expect(eligibilityOf(result, 2).eligibility).toBe('PROTECTED'); // what the album lists stays protected
+      const view = reportView(result);
+      expect(view.warningText).toBeNull();
+      expect(view.issueLines).toEqual([]);
+      expect(view.noteLines).toEqual(['Album “Album A” count mismatch, not blocking: Google reports 5 entries; 2 read, the same ones on a second read']);
+    });
+
+    it('blocks every unprotected photo when the second read finds different entries', async () => {
+      const store = newStore();
+      const source = shortAlbum();
+      let reads = 0;
+      source.failure = (op) => {
+        if (op === 'album:A' && ++reads === 2) source.albums[0]!.members.push({ mediaKey: 'A-entry-4', dedupKey: 'dedup-4' });
+        return null;
+      };
+      expect((await scan(source, store)).outcome.kind).toBe('completed');
+      const result = await classifyLatest(store);
+      expect(result.report.coverage.isComplete).toBe(false);
+      expect(result.report.coverage.albumIssues.map((i) => [i.kind, i.detail])).toEqual([
+        ['COUNT_MISMATCH', 'Google reports 5 entries; 2 read, and a second read found different ones'],
+      ]);
+      expect(eligibleIndexes(result)).toEqual([]);
+      expect(eligibilityOf(result, 4).unknownReasons).toContain('INVENTORY_INCOMPLETE');
+    });
+
+    it('blocks every unprotected photo when the same keys come back for different photos', async () => {
+      const store = newStore();
+      const source = shortAlbum();
+      let reads = 0;
+      source.failure = (op) => {
+        if (op === 'album:A' && ++reads === 2) source.albums[0]!.members[1] = { mediaKey: 'A-entry-3', dedupKey: 'dedup-9' };
+        return null;
+      };
+      await scan(source, store);
+      expect(eligibleIndexes(await classifyLatest(store))).toEqual([]);
+    });
+
+    it('blocks every unprotected photo when Google refuses the second read', async () => {
+      const store = newStore();
+      const source = shortAlbum();
+      let reads = 0;
+      source.failure = (op) => (op === 'album:A' && ++reads > 1 ? new SourceError('RPC_ERROR', 'refused', null, 5) : null);
+      expect((await scan(source, store)).outcome.kind).toBe('completed');
+      const result = await classifyLatest(store);
+      expect(result.report.coverage.albumIssues.map((i) => [i.kind, i.detail])).toEqual([['COUNT_MISMATCH', 'Google reports 5 entries; 2 read']]);
+      expect(eligibleIndexes(result)).toEqual([]);
+    });
+
+    it('a scan paused during the second read reads the album again on resume', async () => {
+      const store = newStore();
+      const source = shortAlbum();
+      let reads = 0;
+      source.failure = (op) => (op === 'album:A' && ++reads === 2 ? new SourceError('NO_PHOTOS_TAB', 'no tab') : null);
+      expect((await scan(source, store)).outcome.kind).toBe('paused');
+      expect(eligibleIndexes(await classifyLatest(store))).toEqual([]);
+
+      source.failure = () => null;
+      source.calls.length = 0;
+      expect((await scan(source, store)).outcome.kind).toBe('completed');
+      expect(albumReads(source)).toBe(1); // only the second read; the first one was saved
+      expect(eligibleIndexes(await classifyLatest(store))).toEqual([0, 1, 4, 5, 6, 7, 8, 9]);
+    });
+
+    it('an album that matches its count is read once', async () => {
+      const source = new FakePhotos(Array.from({ length: 10 }, (_, i) => fakeItem(i)), [fakeAlbum('A', [2, 3])]);
+      await scan(source, newStore());
+      expect(albumReads(source)).toBe(1);
+    });
+
+    it('an album read again from the start forgets its earlier second read', async () => {
+      const store = newStore();
+      await scan(shortAlbum(), store);
+      const run = (await store.latestRun('account-a'))!;
+      await store.resetPhase(run.id, 'ALBUM_MEMBERS', 'A');
+      expect((await store.albums(run.id))[0]!.reread).toBeNull();
+    });
   });
 
   it('transient failures are retried and the result is unchanged', async () => {

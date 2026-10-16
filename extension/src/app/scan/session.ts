@@ -128,6 +128,7 @@ class ScanSession {
       await this.archivePhase();
       await this.albumListPhase();
       await this.albumMembersPhase();
+      await this.albumRereads();
       this.phase = null;
       this.notice = null;
       await store.updateRunStatus(this.run.id, 'COMPLETED', null, this.now());
@@ -228,6 +229,44 @@ class ScanSession {
       }
       throw e;
     }
+  }
+
+  /**
+   * Reads every fully read album whose entries don't add up to Google's count a second time, and
+   * records whether the same entries came back. Google's count can include entries this account
+   * can't see; a lost page or a list cut short would hardly repeat identically. The shared rules
+   * decide what the outcome means. Albums still to check are found again on resume.
+   */
+  private async albumRereads(): Promise<void> {
+    for (const status of await this.deps.store.albums(this.run.id)) {
+      const reported = status.album.reportedItemCount;
+      const mismatched = status.membersComplete && status.failureReason === null && reported !== null && reported !== status.membersSeen;
+      if (mismatched && status.reread === null) await this.rereadAlbum(status);
+    }
+  }
+
+  private async rereadAlbum(status: AlbumStatus): Promise<void> {
+    const album = status.album;
+    // mediaKey -> dedupKey, the first of each, as the first read saved them.
+    const entries = new Map<string, string>();
+    let token: string | null = null;
+    try {
+      do {
+        const page = await this.request('album contents', () => this.deps.source.albumItemsPage(album.albumKey, album.authKey, token));
+        this.verifyAccount(page.accountFingerprint);
+        for (const entry of page.entries) if (!entries.has(entry.mediaKey)) entries.set(entry.mediaKey, entry.dedupKey);
+        token = page.nextPageToken;
+      } while (token !== null);
+    } catch (e) {
+      // Refused the second time: nothing is recorded, so the mismatch keeps blocking.
+      if (e instanceof RpcFailed) return;
+      if (e instanceof ScanStop && e.cause instanceof SourceError && e.cause.kind === 'SESSION' && (await this.sessionStillValid())) return;
+      throw e;
+    }
+    const saved = await this.deps.store.albumEntries(this.run.id, album.albumKey);
+    const same = saved.length === entries.size && saved.every((s) => entries.get(s.mediaKey) === s.dedupKey);
+    await this.deps.store.recordReread(this.run.id, album.albumKey, same ? 'SAME_ENTRIES' : 'DIFFERENT_ENTRIES');
+    await this.emitProgress();
   }
 
   /**

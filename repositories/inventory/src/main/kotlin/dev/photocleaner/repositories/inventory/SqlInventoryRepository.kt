@@ -208,6 +208,8 @@ class SqlInventoryRepository(
                 membersSeen = row.members_seen.toInt(),
                 membersComplete = cursors[row.album_key]?.completed == true,
                 failureReason = row.failure_reason,
+                // The desktop scan doesn't read albums a second time, so a count mismatch keeps blocking there.
+                reread = null,
             )
         }
     }

@@ -1,5 +1,6 @@
 package dev.photocleaner.features.shared.protection
 
+import dev.photocleaner.features.shared.protection.model.AlbumIssue
 import dev.photocleaner.features.shared.protection.model.InventoryClassification
 import dev.photocleaner.features.shared.protection.model.SourceAgreement
 
@@ -44,7 +45,8 @@ private fun toJs(result: InventoryClassification): dynamic {
                 }.toTypedArray(),
                 "albumsListed" to c.albumsListed,
                 "albumsFullyRead" to c.albumsFullyRead,
-                "albumIssues" to c.albumIssues.map { obj("albumTitle" to it.albumTitle, "kind" to it.kind.name, "detail" to it.detail) }.toTypedArray(),
+                "albumIssues" to c.albumIssues.map(::albumIssue).toTypedArray(),
+                "albumWarnings" to c.albumWarnings.map(::albumIssue).toTypedArray(),
                 "favourites" to agreement(c.favourites),
                 "archive" to agreement(c.archive),
             ),
@@ -75,6 +77,8 @@ private fun toJs(result: InventoryClassification): dynamic {
         }.toTypedArray(),
     )
 }
+
+private fun albumIssue(i: AlbumIssue): dynamic = obj("albumTitle" to i.albumTitle, "kind" to i.kind.name, "detail" to i.detail)
 
 private fun agreement(a: SourceAgreement): dynamic =
     JsJson.obj("listed" to a.listed, "flagged" to a.flagged, "flaggedButNotListed" to a.flaggedButNotListed, "listedButNotFlagged" to a.listedButNotFlagged)

@@ -70,12 +70,17 @@ data class AlbumRecord(
 
 data class AlbumMemberEntry(val mediaKey: String, val dedupKey: String)
 
+/** How a second read of an album's entries compared with the first. */
+enum class AlbumReread { SAME_ENTRIES, DIFFERENT_ENTRIES }
+
 /** An album with the outcome of enumerating its members in a run. */
 data class AlbumStatus(
     val album: AlbumRecord,
     val membersSeen: Int,
     val membersComplete: Boolean,
     val failureReason: String?,
+    /** The outcome of reading the album again after its entries didn't add up to Google's count; null if it wasn't. */
+    val reread: AlbumReread?,
 )
 
 /** Everything recorded in one run, for classification. */

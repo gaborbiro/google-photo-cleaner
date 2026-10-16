@@ -2,6 +2,7 @@ package dev.photocleaner.features.shared.protection
 
 import dev.photocleaner.features.shared.protection.model.ProtectionChoices
 import dev.photocleaner.repositories.inventory.domain.AlbumRecord
+import dev.photocleaner.repositories.inventory.domain.AlbumReread
 import dev.photocleaner.repositories.inventory.domain.AlbumStatus
 import dev.photocleaner.repositories.inventory.domain.InventoryItem
 import dev.photocleaner.repositories.inventory.domain.InventorySnapshot
@@ -130,6 +131,7 @@ object JsJson {
                     membersSeen = int(s, "membersSeen"),
                     membersComplete = bool(s, "membersComplete"),
                     failureReason = stringOrNull(s, "failureReason"),
+                    reread = stringOrNull(s, "reread")?.let { AlbumReread.valueOf(it) },
                 )
             },
             albumMembership = js("Object").keys(membership).unsafeCast<Array<String>>().associateWith { key ->

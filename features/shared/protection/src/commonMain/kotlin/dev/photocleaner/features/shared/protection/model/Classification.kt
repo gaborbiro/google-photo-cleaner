@@ -29,7 +29,22 @@ data class ClassifiedItem(
     val unknownReasons: Set<UnknownReason>,
 )
 
-enum class AlbumIssueKind { FAILED, NOT_FINISHED, COUNT_MISMATCH, COUNT_MISSING }
+enum class AlbumIssueKind(
+    /** Whether the album's entries can't be trusted, so no photo may be trashed. */
+    val blocksTrashing: Boolean,
+) {
+    FAILED(true),
+    NOT_FINISHED(true),
+    COUNT_MISMATCH(true),
+    COUNT_MISSING(true),
+
+    /**
+     * The entries don't add up to Google's count, but the album was read to the end twice with the
+     * same entries both times. Google's count can include entries this account can't see (in a
+     * shared album, for example); a page lost or a list cut short would hardly repeat identically.
+     */
+    COUNT_MISMATCH_READ_TWICE(false),
+}
 
 data class AlbumIssue(
     val albumTitle: String?,
@@ -67,7 +82,10 @@ data class CoverageEvidence(
     val phases: List<PhaseEvidence>,
     val albumsListed: Int,
     val albumsFullyRead: Int,
+    /** Albums whose entries can't be trusted: any one makes the coverage incomplete. */
     val albumIssues: List<AlbumIssue>,
+    /** Albums worth knowing about that don't block trashing. */
+    val albumWarnings: List<AlbumIssue>,
     val isStale: Boolean,
     val isComplete: Boolean,
 )

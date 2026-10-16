@@ -5,6 +5,7 @@
 import { committed, openDatabase, prefixRange, request, STORES } from '../shared/db';
 import type {
   AlbumRecord,
+  AlbumReread,
   AlbumStatus,
   EntryRef,
   InventoryItem,
@@ -23,7 +24,8 @@ export type PageEntries =
   | { phase: 'ALBUM_MEMBERS'; albumKey: string; entries: EntryRef[] };
 
 type CursorRow = PhaseCursor & { runId: number };
-type AlbumRow = AlbumRecord & { runId: number; failureReason: string | null };
+// Rows saved before albums were ever read a second time have no `reread`.
+type AlbumRow = AlbumRecord & { runId: number; failureReason: string | null; reread?: AlbumReread | null };
 
 export class IndexedDbInventoryStore {
   private db: Promise<IDBDatabase> | null = null;
@@ -94,7 +96,7 @@ export class IndexedDbInventoryStore {
     let duplicates = 0;
     for (const entry of page.entries) {
       const row = page.phase === 'ALBUM_LIST'
-        ? { runId, ...(entry as AlbumRecord), failureReason: null }
+        ? { runId, ...(entry as AlbumRecord), failureReason: null, reread: null }
         : page.phase === 'ALBUM_MEMBERS'
           ? { runId, albumKey: page.albumKey, mediaKey: (entry as EntryRef).mediaKey, dedupKey: (entry as EntryRef).dedupKey }
           : { runId, ...entry };
@@ -142,8 +144,8 @@ export class IndexedDbInventoryStore {
         clear(STORES.albumMembers, scope);
         const albums = tx.objectStore(STORES.albums);
         const album = await request(albums.get([runId, scope]) as IDBRequest<AlbumRow | undefined>);
-        // Its contents are cleared either way; an album no longer listed has no failure to forget.
-        if (album) albums.put({ ...album, failureReason: null });
+        // Its contents are cleared either way; an album no longer listed has no failure or second read to forget.
+        if (album) albums.put({ ...album, failureReason: null, reread: null });
         break;
       }
     }
@@ -159,6 +161,23 @@ export class IndexedDbInventoryStore {
     if (!album) throw new Error(`Album ${albumKey} is not in scan run ${runId}`);
     albums.put({ ...album, failureReason: reason });
     await committed(tx);
+  }
+
+  /** Records how a second read of a fully read album compared with its saved entries. */
+  async recordReread(runId: number, albumKey: string, outcome: AlbumReread): Promise<void> {
+    const tx = await this.tx([STORES.albums], 'readwrite');
+    const albums = tx.objectStore(STORES.albums);
+    const album = await request(albums.get([runId, albumKey]) as IDBRequest<AlbumRow | undefined>);
+    if (!album) throw new Error(`Album ${albumKey} is not in scan run ${runId}`);
+    albums.put({ ...album, reread: outcome });
+    await committed(tx);
+  }
+
+  /** The entries saved for one album of a run. */
+  async albumEntries(runId: number, albumKey: string): Promise<EntryRef[]> {
+    const tx = await this.tx([STORES.albumMembers], 'readonly');
+    const rows = await request(tx.objectStore(STORES.albumMembers).getAll(prefixRange(runId, albumKey)) as IDBRequest<(EntryRef & { runId: number; albumKey: string })[]>);
+    return rows.map(({ mediaKey, dedupKey }) => ({ mediaKey, dedupKey }));
   }
 
   // --- reading ---
@@ -179,11 +198,13 @@ export class IndexedDbInventoryStore {
     }
     const cursors = await request(tx.objectStore(STORES.cursors).getAll(prefixRange(runId, 'ALBUM_MEMBERS')) as IDBRequest<CursorRow[]>);
     const complete = new Set(cursors.filter((c) => c.completed).map((c) => c.scope));
-    return rows.map(({ runId: _, failureReason, ...album }) => ({
+    return rows.map(({ runId: _, failureReason, reread, ...album }) => ({
       album,
       membersSeen: seen.get(album.albumKey) ?? 0,
       membersComplete: complete.has(album.albumKey),
       failureReason,
+      // A row saved before second reads existed was never read twice.
+      reread: reread ?? null,
     }));
   }
 

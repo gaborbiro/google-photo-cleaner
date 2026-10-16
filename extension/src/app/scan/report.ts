@@ -14,6 +14,9 @@ export type UnknownReason = 'INVENTORY_INCOMPLETE' | 'INVENTORY_STALE' | 'FAVOUR
 
 interface Agreement { listed: number; flagged: number; flaggedButNotListed: number; listedButNotFlagged: number }
 
+type AlbumIssueKind = 'FAILED' | 'NOT_FINISHED' | 'COUNT_MISMATCH' | 'COUNT_MISSING' | 'COUNT_MISMATCH_READ_TWICE';
+interface AlbumIssue { albumTitle: string | null; kind: AlbumIssueKind; detail: string }
+
 export interface TypeCounts {
   mediaType: 'PHOTO' | 'VIDEO' | null;
   total: number;
@@ -40,7 +43,10 @@ export interface Classification {
       phases: { name: string; completed: boolean; pages: number; entries: number; duplicates: number }[];
       albumsListed: number;
       albumsFullyRead: number;
-      albumIssues: { albumTitle: string | null; kind: 'FAILED' | 'NOT_FINISHED' | 'COUNT_MISMATCH' | 'COUNT_MISSING'; detail: string }[];
+      /** Albums whose entries can't be trusted: any one makes the coverage incomplete. */
+      albumIssues: AlbumIssue[];
+      /** Albums worth knowing about that don't block trashing. */
+      albumWarnings: AlbumIssue[];
       favourites: Agreement;
       archive: Agreement;
     };
@@ -71,7 +77,10 @@ export interface ReportView {
   /** "Scan started 14 Oct 2026, 18:52, finished 14 Oct 2026, 18:56". */
   timesLine: string;
   coverageLines: string[];
+  /** Albums that keep every photo from being trashed. */
   issueLines: string[];
+  /** Albums worth knowing about that don't block anything. */
+  noteLines: string[];
   tables: { title: string; rows: { label: string; value: string; indent: boolean }[] }[];
   /** Counts only, no album titles: for comparing with the desktop app. */
   copyText: string;
@@ -134,8 +143,16 @@ export function reportView(classification: Classification): ReportView {
     agreementLine('Favourites', coverage.favourites),
     agreementLine('Archive', coverage.archive),
   ];
-  const issueKinds = { FAILED: 'could not be read', NOT_FINISHED: 'not finished', COUNT_MISMATCH: 'count mismatch', COUNT_MISSING: 'no count from Google' };
-  const issueLines = coverage.albumIssues.map((i) => `Album “${i.albumTitle ?? 'untitled'}” ${issueKinds[i.kind]}: ${i.detail}`);
+  const issueKinds: Record<AlbumIssueKind, string> = {
+    FAILED: 'could not be read',
+    NOT_FINISHED: 'not finished',
+    COUNT_MISMATCH: 'count mismatch',
+    COUNT_MISSING: 'no count from Google',
+    COUNT_MISMATCH_READ_TWICE: 'count mismatch, not blocking',
+  };
+  const albumLine = (i: AlbumIssue) => `Album “${i.albumTitle ?? 'untitled'}” ${issueKinds[i.kind]}: ${i.detail}`;
+  const issueLines = coverage.albumIssues.map(albumLine);
+  const noteLines = coverage.albumWarnings.map(albumLine);
   const tables = counts.filter((c) => c.total > 0).map(table);
   const photos = counts.find((c) => c.mediaType === 'PHOTO');
   const summary = photos
@@ -145,9 +162,10 @@ export function reportView(classification: Classification): ReportView {
     title,
     ...coverageLines,
     ...(issueLines.length > 0 ? [`${issueLines.length} album issue(s)`] : []),
+    ...(noteLines.length > 0 ? [`${noteLines.length} album(s) not matching Google's count, the same on a second read`] : []),
     ...tables.flatMap((t) => [t.title, ...t.rows.map((r) => `${r.indent ? '    ' : '  '}${r.label}: ${r.value}`)]),
   ].join('\n');
-  return { title, tone, warningText: tone === 'bad' ? title : null, summary, timesLine: coverageLines[0]!, coverageLines, issueLines, tables, copyText };
+  return { title, tone, warningText: tone === 'bad' ? title : null, summary, timesLine: coverageLines[0]!, coverageLines, issueLines, noteLines, tables, copyText };
 }
 
 /**

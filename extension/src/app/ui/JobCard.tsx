@@ -49,6 +49,7 @@ function ProtectionDetails({ report }: { report: ReportView }) {
       <summary className="muted">Protection details</summary>
       <div className="mono">{report.timesLine}</div>
       {report.issueLines.map((line) => <div key={line} className="warn">{line}</div>)}
+      {report.noteLines.map((line) => <div key={line} className="muted">{line}</div>)}
       <div className="tables">
         {report.tables.map((t) => (
           <table key={t.title} className="counts">

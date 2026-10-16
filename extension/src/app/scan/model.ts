@@ -54,11 +54,16 @@ export interface AlbumRecord {
   authKey: string | null;
 }
 
+/** How a second read of an album's entries compared with the first. */
+export type AlbumReread = 'SAME_ENTRIES' | 'DIFFERENT_ENTRIES';
+
 export interface AlbumStatus {
   album: AlbumRecord;
   membersSeen: number;
   membersComplete: boolean;
   failureReason: string | null;
+  /** The outcome of reading the album again after its entries didn't add up to Google's count; null if it wasn't. */
+  reread: AlbumReread | null;
 }
 
 /** Everything recorded in one run: the input of the protection rules. */

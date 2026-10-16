@@ -62,6 +62,7 @@ private suspend fun printInventory(classify: ClassifyInventoryUseCase) {
     println("  Favourites agreement: ${coverage.favourites}")
     println("  Archive agreement: ${coverage.archive}")
     coverage.albumIssues.groupingBy { it.kind }.eachCount().forEach { (kind, count) -> println("  Album issue $kind: $count") }
+    coverage.albumWarnings.groupingBy { it.kind }.eachCount().forEach { (kind, count) -> println("  Album warning $kind: $count") }
     report.counts.forEach { c ->
         println("${c.mediaType ?: "UNKNOWN_TYPE"}: total=${c.total} protected=${c.protectedTotal} (favourite=${c.protectedByFavourite}, album=${c.protectedByAlbum}, archived=${c.protectedByArchive}, favourite+album=${c.protectedByFavouriteAndAlbum}) eligible=${c.eligible} unknown=${c.unknown} ${c.unknownByReason}")
     }

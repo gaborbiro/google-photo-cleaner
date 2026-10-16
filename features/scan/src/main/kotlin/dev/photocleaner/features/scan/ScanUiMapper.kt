@@ -109,12 +109,13 @@ internal class ScanUiMapper {
             add(agreementLine("Favourites", coverage.favourites))
             add(agreementLine("Archive", coverage.archive))
         }
-        val issueLines = coverage.albumIssues.map { issue ->
+        val issueLines = (coverage.albumIssues + coverage.albumWarnings).map { issue ->
             val what = when (issue.kind) {
                 AlbumIssueKind.FAILED -> "could not be read"
                 AlbumIssueKind.NOT_FINISHED -> "not finished"
                 AlbumIssueKind.COUNT_MISMATCH -> "count mismatch"
                 AlbumIssueKind.COUNT_MISSING -> "no count from Google"
+                AlbumIssueKind.COUNT_MISMATCH_READ_TWICE -> "count mismatch, not blocking"
             }
             "Album “${issue.albumTitle ?: "untitled"}” $what: ${issue.detail}"
         }

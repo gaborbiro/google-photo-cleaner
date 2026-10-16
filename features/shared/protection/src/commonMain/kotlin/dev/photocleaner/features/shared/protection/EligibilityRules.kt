@@ -10,6 +10,7 @@ import dev.photocleaner.features.shared.protection.model.ProtectionChoices
 import dev.photocleaner.features.shared.protection.model.ProtectionReason
 import dev.photocleaner.features.shared.protection.model.SourceAgreement
 import dev.photocleaner.features.shared.protection.model.UnknownReason
+import dev.photocleaner.repositories.inventory.domain.AlbumReread
 import dev.photocleaner.repositories.inventory.domain.AlbumStatus
 import dev.photocleaner.repositories.inventory.domain.InventoryItem
 import dev.photocleaner.repositories.inventory.domain.InventorySnapshot
@@ -41,7 +42,7 @@ internal object EligibilityRules {
                 duplicates = cursor?.duplicateEntries ?: 0,
             )
         }
-        val issues = snapshot.albums.mapNotNull(::albumIssue)
+        val (issues, warnings) = snapshot.albums.mapNotNull(::albumIssue).partition { it.kind.blocksTrashing }
         val finishedAt = run.finishedAtMs
         // A scan that finished "in the future" means the clock moved back: its age is unknown, so it proves nothing.
         val stale = finishedAt == null || finishedAt > nowMs || nowMs - finishedAt > maxAgeMs
@@ -71,6 +72,7 @@ internal object EligibilityRules {
             albumsListed = snapshot.albums.size,
             albumsFullyRead = snapshot.albums.count { albumIssue(it) == null },
             albumIssues = issues,
+            albumWarnings = warnings,
             isStale = stale,
             isComplete = complete,
         )
@@ -112,8 +114,12 @@ internal object EligibilityRules {
             failure != null -> AlbumIssue(title, AlbumIssueKind.FAILED, failure)
             !status.membersComplete -> AlbumIssue(title, AlbumIssueKind.NOT_FINISHED, "${status.membersSeen} entries read so far")
             reported == null -> AlbumIssue(title, AlbumIssueKind.COUNT_MISSING, "Google reported no item count; ${status.membersSeen} entries read")
-            reported != status.membersSeen -> AlbumIssue(title, AlbumIssueKind.COUNT_MISMATCH, "Google reports $reported entries; ${status.membersSeen} read")
-            else -> null
+            reported == status.membersSeen -> null
+            status.reread == AlbumReread.SAME_ENTRIES ->
+                AlbumIssue(title, AlbumIssueKind.COUNT_MISMATCH_READ_TWICE, "Google reports $reported entries; ${status.membersSeen} read, the same ones on a second read")
+            status.reread == AlbumReread.DIFFERENT_ENTRIES ->
+                AlbumIssue(title, AlbumIssueKind.COUNT_MISMATCH, "Google reports $reported entries; ${status.membersSeen} read, and a second read found different ones")
+            else -> AlbumIssue(title, AlbumIssueKind.COUNT_MISMATCH, "Google reports $reported entries; ${status.membersSeen} read")
         }
     }
 }

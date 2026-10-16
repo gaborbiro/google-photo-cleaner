@@ -17,7 +17,8 @@ function Calibration() {
   const account = new URLSearchParams(location.search).get('account') ?? answer?.account?.fingerprint ?? null;
   const [view, setView] = useState<CalibrationView | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const [settings, setSettings] = useState<AnalysisSettings | null>(null);
+  /** undefined while loading; null when the library hasn't been analysed yet. */
+  const [settings, setSettings] = useState<AnalysisSettings | null | undefined>(undefined);
   const [switched, setSwitched] = useState(false);
 
   useEffect(() => {
@@ -57,6 +58,11 @@ function Calibration() {
         Export the labels with <span className="mono">python -I extension/scripts/export-calibration-labels.py labels.json</span>, then choose that file.
       </p>
       <h2>{account ? accountLabel(account, answer?.account?.email ?? null) : 'No account yet'}</h2>
+      {settings === null && (
+        <p className="warn">
+          This library hasn't been analysed yet (or Photo Cleaner's data was erased): run a Scan first. Once its analysis has started, the detail can be switched here.
+        </p>
+      )}
       {settings && (
         <section className="card">
           <strong>This library is analysed at detail <span className="mono">{settings.detail}</span>, and scored with those fingerprints.</strong>

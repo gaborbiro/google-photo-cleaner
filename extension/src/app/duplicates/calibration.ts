@@ -1,8 +1,20 @@
 // Working out the duplicate threshold for the browser's fingerprints from the labels given in the
 // desktop app's Calibration tab (a developer tool: see dev-calibration.html).
 
+import type { AnalysisSettings } from '../ai/analysisStore';
+import { modelKey, type Detail } from '../ai/model';
 import { dot } from '../ai/similar';
 import { calibrationReport, type CalibrationReport, type PairLabel } from './rules';
+
+/**
+ * The library's settings switched to analysing at [detail], to calibrate that detail: the next
+ * analysis fingerprints every photo not yet done at it, and this page then scores with them.
+ * Fingerprints are kept per detail, so switching back needs no new analysis. The speed check's
+ * measurement stays as it was.
+ */
+export function atDetail(settings: AnalysisSettings, detail: Detail, nowMs: number): AnalysisSettings {
+  return { ...settings, detail, modelKey: modelKey(detail), chosenAtMs: nowMs };
+}
 
 export interface LabelledPair {
   a: string;

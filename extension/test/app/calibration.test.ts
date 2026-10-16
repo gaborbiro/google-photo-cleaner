@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { calibrate, calibrationView, parseLabels } from '../../src/app/duplicates/calibration';
+import { modelKey } from '../../src/app/ai/model';
+import { atDetail, calibrate, calibrationView, parseLabels } from '../../src/app/duplicates/calibration';
 
 const at = (degrees: number) => Float32Array.from([Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)]);
 
@@ -26,5 +27,13 @@ describe('calibrating the duplicate threshold', () => {
     expect(view.lines[3]).toBe("At the desktop's 0.925: finds 100.0% of duplicates, 1 wrongly");
     expect(view.rows.filter((r) => r.recommended).map((r) => r.threshold)).toEqual(['0.940']);
     expect(view.rows[0]!.threshold).toBe('0.850');
+  });
+
+  it('switching the detail changes which fingerprints are made and scored, keeping the measured speed', () => {
+    const settings = { account: 'acc', detail: 140 as const, modelKey: modelKey(140), measuredPhotosPerSecond: 5.3, chosenAtMs: 1 };
+    const at70 = atDetail(settings, 70, 2);
+    expect(at70).toEqual({ account: 'acc', detail: 70, modelKey: modelKey(70), measuredPhotosPerSecond: 5.3, chosenAtMs: 2 });
+    expect(at70.modelKey).not.toBe(settings.modelKey);
+    expect(atDetail(at70, 140, 3)).toEqual({ ...settings, chosenAtMs: 3 });
   });
 });

@@ -2,10 +2,11 @@
 // given in the desktop app's Calibration tab (exported by scripts/export-calibration-labels.py).
 // Everything stays on this computer: the labels file is read here and nothing is saved.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { IndexedDbAnalysisStore } from '../ai/analysisStore';
-import { calibrate, calibrationView, parseLabels, type CalibrationView } from '../duplicates/calibration';
+import { IndexedDbAnalysisStore, type AnalysisSettings } from '../ai/analysisStore';
+import { FALLBACK_DETAIL, PREFERRED_DETAIL, type Detail } from '../ai/model';
+import { atDetail, calibrate, calibrationView, parseLabels, type CalibrationView } from '../duplicates/calibration';
 import { accountLabel } from '../shared/jobView';
 import { useAccount } from '../ui/hooks';
 
@@ -16,6 +17,22 @@ function Calibration() {
   const account = new URLSearchParams(location.search).get('account') ?? answer?.account?.fingerprint ?? null;
   const [view, setView] = useState<CalibrationView | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [settings, setSettings] = useState<AnalysisSettings | null>(null);
+  const [switched, setSwitched] = useState(false);
+
+  useEffect(() => {
+    if (account !== null) void analysis.settings(account).then(setSettings, (error: unknown) => setProblem(String(error)));
+  }, [account]);
+
+  /** Analyses (and scores) at [detail] from now on; the other detail's fingerprints are kept. */
+  const switchTo = async (detail: Detail) => {
+    if (!settings) return;
+    setView(null);
+    const next = atDetail(settings, detail, Date.now());
+    await analysis.saveSettings(next);
+    setSettings(next);
+    setSwitched(true);
+  };
 
   const load = async (file: File) => {
     setView(null);
@@ -40,6 +57,21 @@ function Calibration() {
         Export the labels with <span className="mono">python -I extension/scripts/export-calibration-labels.py labels.json</span>, then choose that file.
       </p>
       <h2>{account ? accountLabel(account, answer?.account?.email ?? null) : 'No account yet'}</h2>
+      {settings && (
+        <section className="card">
+          <strong>This library is analysed at detail <span className="mono">{settings.detail}</span>, and scored with those fingerprints.</strong>
+          <div className="buttons">
+            {[PREFERRED_DETAIL, FALLBACK_DETAIL].map((d) => (
+              <button key={d} disabled={d === settings.detail} onClick={() => void switchTo(d).catch((error: unknown) => setProblem(String(error)))}>Use detail {d}</button>
+            ))}
+          </div>
+          <p className="muted">
+            To calibrate another detail: switch to it, press Check for new photos (it fingerprints every photo not yet done at that detail; the other detail's
+            fingerprints are kept), then choose the labels file. Switch back when done. Not while a scan is running.
+          </p>
+          {switched && <p className="warn">Switched to detail {settings.detail}. Press Check for new photos before scoring.</p>}
+        </section>
+      )}
       <input type="file" accept=".json,application/json" onChange={(e) => e.target.files?.[0] && void load(e.target.files[0])} />
       {problem && <div className="warn">{problem}</div>}
       {view && (

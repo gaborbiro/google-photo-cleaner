@@ -59,7 +59,7 @@ Finds duplicate and unwanted photos in Google Photos with on-device AI. Your pho
 > • Practice first: until you switch on "Trash for real", trashing is only simulated.
 >
 > What you need
-> • Chrome on a desktop or laptop computer with a graphics card from about 2017 or later.
+> • Chrome on a Windows or Mac desktop or laptop, with a graphics card from about 2017 or later.
 > • Around 1.5 GB of free disk space for the AI model, downloaded once from Hugging Face.
 > • The first analysis takes a while for a big library (about an hour for 17,000 photos on a good
 >   graphics card). It runs in the background, and you can start reviewing straight away.

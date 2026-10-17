@@ -186,7 +186,7 @@ grows into the product; a new shared Kotlin module holds the tested rules, compi
         analysis, your decisions) lives only in this browser, and uninstalling deletes it; a fresh
         start means scanning (minutes) and analysing (about an hour) again. Disabling keeps it.
         Consider exporting decisions (a backup) so they survive a reinstall or a new computer
-- [ ] Then: Chrome, Edge, Brave on Windows and a Mac (need access to a Mac); phase 3
+- [~] Then: Chrome, Edge, Brave on Windows and a Mac; phase 3. Chrome on Windows and on a MacBook work (2026-10-17); Edge and Brave still to test
 
 ### Capability check and minimum specs (provisional until M3 testing)
 
@@ -236,7 +236,7 @@ Data controls (details in the Data privacy chapter)
 
 Testing
 
-- [ ] Test on Chrome, Edge and Brave; on Windows and a Mac
+- [~] Test on Chrome, Edge and Brave; on Windows and a Mac: Chrome on Windows and on a MacBook work (2026-10-17); Edge and Brave still to test
 
 ## 3. Get ready to publish
 

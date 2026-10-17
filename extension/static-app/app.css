@@ -211,6 +211,10 @@ table.counts tr.recommended td { color: var(--pc-accent); font-weight: 600; }
 
 /* --- Review tab: header and status rise away, tabs and action bar stay pinned --- */
 
+/* The pinned tabs and action bar reach a little past the column on both sides, so the focus outline
+   of a photo scrolled under them (5 px outside the photo) never shows beside them. */
+:root { --pinned-overhang: -8px 0 var(--pc-bg), 8px 0 var(--pc-bg); }
+
 /* Scrolling down, these rise away while fading out; they come back only when scrolled back up. */
 .collapsing { animation: collapse-fade linear both; animation-timeline: view(); animation-range: exit 0% exit 100%; }
 @keyframes collapse-fade { to { opacity: 0; } }
@@ -218,7 +222,7 @@ table.counts tr.recommended td { color: var(--pc-accent); font-weight: 600; }
 .page-header h1 .muted { font-weight: 650; }
 
 .tabs {
-  position: sticky; top: 0; z-index: 20; min-height: 52px; background: var(--pc-bg);
+  position: sticky; top: 0; z-index: 20; min-height: 52px; background: var(--pc-bg); box-shadow: var(--pinned-overhang);
   display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); border-bottom: 1px solid var(--pc-border);
 }
 button.tab {
@@ -236,7 +240,7 @@ button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-b
 .status-lines { display: flex; flex-direction: column; gap: var(--space-1); padding: 18px 0 20px; }
 .status-lines .mono { font-size: 14px; }
 .pinned-bar {
-  position: sticky; top: var(--tabs-h); z-index: 19; background: var(--pc-bg);
+  position: sticky; top: var(--tabs-h); z-index: 19; background: var(--pc-bg); box-shadow: var(--pinned-overhang);
   display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) 0; border-bottom: 1px solid var(--pc-border);
 }
 .action-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-6); min-height: 24px; }

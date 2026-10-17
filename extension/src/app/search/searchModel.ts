@@ -33,13 +33,19 @@ export interface SearchLibrary {
   protection: ProtectionChoices;
 }
 
+/** What a sweep did: the photos it queued, and those it left out (no longer eligible, or already queued). */
+export interface SweepResult {
+  queued: string[];
+  leftOut: string[];
+}
+
 export interface SearchDeps {
   /** The latest scan's analysed photos with their protection and trash-queue state. */
   loadLibrary(): Promise<SearchLibrary>;
   /** A description's fingerprint; the first call gets the AI model ready ([onProgress] 0–1 while downloading). */
   embedQuery(text: string, onProgress: (fraction: number) => void): Promise<Float32Array>;
-  /** Checks the photos again against a fresh scan and queues them for the trash; throws with the reason if it can't. */
-  sweep(mediaKeys: string[]): Promise<void>;
+  /** Checks each photo again against a fresh scan and queues those still trashable; throws with the reason if it can't queue any. */
+  sweep(mediaKeys: string[]): Promise<SweepResult>;
   /** Undoes the newest decision (a sweep or one made in Duplicates); null when there is none. */
   undo(): Promise<StoredDecision | null>;
   /** A preview as an image address, fetched through Google Photos; throws when it can't be had. */
@@ -135,8 +141,18 @@ export function searchIntroText(protection: ProtectionChoices | null): string {
   const never = [...kinds, 'photos of unknown status'];
   const listed = never.length === 1 ? never[0] : `${never.slice(0, -1).join(', ')} and ${never.at(-1)}`;
   return 'Describe what to search for (for example “meal prep boxes in plastic containers”, “printed documents”, “screenshots”). ' +
-    `The strongest matches are shown; ${listed} never appear. Click to select, Shift-click to select a range; ` +
+    `The strongest matches are shown; ${listed} never appear. Click to select for the trash, Shift-click to select a range; ` +
     'M finds more like the selected photos, L fewer.';
+}
+
+/** What a sweep did, in words: how many went to the trash queue, and how many were left out and why. */
+function sweepText(queued: number, leftOut: number): string {
+  const why = leftOut === 1
+    ? 'it is protected now, gone from the library or already in the trash queue'
+    : 'they are protected now, gone from the library or already in the trash queue';
+  if (queued === 0) return `Nothing was moved to the trash: ${leftOut === 1 ? 'the selected photo changed since the search' : `the ${n(leftOut)} selected photos changed since the search`}; ${why}.`;
+  const moved = `Moved ${count(queued, 'photo', 'photos')} to the trash queue. Z undoes it.`;
+  return leftOut === 0 ? moved : `${moved} ${count(leftOut, 'photo was', 'photos were')} left out: ${why}.`;
 }
 
 function photoDay(ms: number): string {
@@ -154,6 +170,7 @@ interface Query {
 
 export class SearchModel {
   private readonly listeners = new Set<() => void>();
+  private readonly decisionListeners = new Set<() => void>();
   private current: SearchView;
 
   private library: SearchLibrary | null = null;
@@ -168,7 +185,6 @@ export class SearchModel {
   private shown: SearchHit[] = [];
   private hidden = { protectedOrUnknown: 0, alreadyApproved: 0, lessLike: 0 };
   private readonly selected = new Set<string>();
-  private anchor: number | null = null;
   private searching = false;
   private modelReady = false;
   /** The first text search is getting the AI model ready (it takes a while). */
@@ -182,6 +198,8 @@ export class SearchModel {
   private resultsVersion = 0;
 
   private focusedIndex = 0;
+  /** After a Shift-click: where the outlined range starts; it ends at [focusedIndex]. */
+  private rangeStart: number | null = null;
   private columns = 1;
   private allFocused = false;
   private focusPulse = 0;
@@ -204,6 +222,16 @@ export class SearchModel {
   };
 
   getView = (): SearchView => this.current;
+
+  /** [listener] hears when Search changed the saved decisions (a sweep, an undo), so Duplicates can rebuild its groups. */
+  onDecisionsChanged(listener: () => void): () => void {
+    this.decisionListeners.add(listener);
+    return () => this.decisionListeners.delete(listener);
+  }
+
+  private decisionsChanged(): void {
+    for (const l of this.decisionListeners) l();
+  }
 
   private publish(): void {
     this.current = this.view();
@@ -271,14 +299,13 @@ export class SearchModel {
     this.shown = [];
     this.hidden = { protectedOrUnknown: 0, alreadyApproved: 0, lessLike: 0 };
     this.selected.clear();
-    this.anchor = null;
     this.confirming = false;
     this.resetFocus();
     this.resultsVersion++;
     this.publish();
   }
 
-  /** The library changed (a scan finished): the next search reads it again. */
+  /** The library or the decisions changed (a scan finished, a decision in Duplicates): the next search reads them again. */
   libraryChanged(): void {
     this.libraryStale = true;
   }
@@ -318,7 +345,6 @@ export class SearchModel {
       this.limit = PAGE;
       this.rank();
       this.selected.clear();
-      this.anchor = null;
       this.confirming = false;
       this.resetFocus();
       this.resultsVersion++;
@@ -375,6 +401,7 @@ export class SearchModel {
     }
     const index = this.shown.findIndex((h) => h.mediaKey === focusedKey);
     this.focusedIndex = Math.max(0, index);
+    this.rangeStart = null;
     this.publish();
   }
 
@@ -382,6 +409,7 @@ export class SearchModel {
 
   private resetFocus(): void {
     this.focusedIndex = 0;
+    this.rangeStart = null;
     this.allFocused = false;
   }
 
@@ -417,6 +445,7 @@ export class SearchModel {
   /** Arrows: within the row and the column; a tap at the edge bounces, a slide into it just stops. */
   focusMove(dx: number, dy: number, held = false): void {
     if (!this.resultsOrSay()) return;
+    this.rangeStart = null;
     if (this.allFocused) {
       this.allFocused = false;
     } else {
@@ -433,19 +462,35 @@ export class SearchModel {
     this.publish();
   }
 
-  /** A click: focuses the photo and switches it; with Shift, selects everything from the last one clicked. */
+  /**
+   * A click: focuses the photo and switches it. With Shift, selects everything from the outlined photo
+   * (or the start of the outlined range) to this one, and outlines them all, so Space switches them together.
+   */
   tileClicked(index: number, shift: boolean): void {
     if (index < 0 || index >= this.shown.length) return;
-    if (index !== this.focusedIndex || this.allFocused) this.focusPulse++;
-    this.focusedIndex = index;
-    this.allFocused = false;
-    if (shift && this.anchor !== null) {
-      for (let i = Math.min(this.anchor, index); i <= Math.max(this.anchor, index); i++) this.selected.add(this.shown[i]!.mediaKey);
+    if (index !== this.focusedIndex || this.allFocused || this.rangeStart !== null || shift) this.focusPulse++;
+    if (shift && !this.allFocused) {
+      const start = this.rangeStart ?? this.focusedIndex;
+      for (const i of this.rangeIndices(start, index)) this.selected.add(this.shown[i]!.mediaKey);
+      this.rangeStart = start;
     } else {
       this.toggle(this.shown[index]!.mediaKey);
+      this.rangeStart = null;
     }
-    this.anchor = index;
+    this.focusedIndex = index;
+    this.allFocused = false;
     this.publish();
+  }
+
+  private rangeIndices(from: number, to: number): number[] {
+    const low = Math.min(from, to);
+    return Array.from({ length: Math.abs(to - from) + 1 }, (_, i) => low + i);
+  }
+
+  /** The outlined photos' places in the results: every result after A, the range after a Shift-click, or the one photo. */
+  private focusedIndices(): number[] {
+    if (this.allFocused) return this.shown.map((_, i) => i);
+    return this.rangeIndices(this.rangeStart ?? this.focusedIndex, this.focusedIndex);
   }
 
   private toggle(mediaKey: string): void {
@@ -453,19 +498,14 @@ export class SearchModel {
     else this.selected.add(mediaKey);
   }
 
-  /** Space: the outlined photo; after A, every result (or none, when they all are). */
+  /** Space: the outlined photos, every one of them (or none, when they all are). */
   toggleFocused(): void {
     if (!this.resultsOrSay()) return;
-    if (this.allFocused) {
-      const all = this.shown.every((h) => this.selected.has(h.mediaKey));
-      for (const h of this.shown) {
-        if (all) this.selected.delete(h.mediaKey);
-        else this.selected.add(h.mediaKey);
-      }
-      this.anchor = null;
-    } else {
-      this.toggle(this.shown[this.focusedIndex]!.mediaKey);
-      this.anchor = this.focusedIndex;
+    const outlined = this.focusedIndices().map((i) => this.shown[i]!.mediaKey);
+    const all = outlined.every((key) => this.selected.has(key));
+    for (const key of outlined) {
+      if (all) this.selected.delete(key);
+      else this.selected.add(key);
     }
     this.publish();
   }
@@ -474,6 +514,7 @@ export class SearchModel {
   focusAll(): void {
     if (!this.resultsOrSay()) return;
     this.allFocused = !this.allFocused;
+    this.rangeStart = null;
     this.focusPulse++;
     this.publish();
   }
@@ -505,24 +546,34 @@ export class SearchModel {
   private async confirm(): Promise<void> {
     const keys = [...this.selected];
     this.confirming = false;
+    let result: SweepResult;
     try {
-      await this.deps.sweep(keys);
+      result = await this.deps.sweep(keys);
     } catch (error) {
       return this.sayAndPublish(error instanceof Error ? error.message : 'Moving to the trash failed.', 'negative');
     }
-    // They are in the trash queue now: gone from the results, and from future searches.
-    const gone = new Set(keys);
-    for (const key of keys) {
+    const { queued, leftOut } = result;
+    if (queued.length > 0) this.decisionsChanged();
+    // The queued ones are in the trash queue now: gone from the results, and from future searches.
+    for (const key of queued) {
       const photo = this.library?.photos.get(key);
       if (photo) photo.approved = true;
     }
+    // The ones left out changed since the search (protected now, or queued elsewhere): they go too, and
+    // the next search reads the saved data again to show them as they are.
+    for (const key of leftOut) {
+      const photo = this.library?.photos.get(key);
+      if (photo) photo.eligible = false;
+    }
+    if (leftOut.length > 0) this.libraryStale = true;
+    const gone = new Set(keys);
     this.ranked = this.ranked.filter((h) => !gone.has(h.mediaKey));
     this.shown = this.shown.filter((h) => !gone.has(h.mediaKey));
-    this.hidden.alreadyApproved += keys.length;
+    this.hidden.alreadyApproved += queued.length;
     this.selected.clear();
-    this.anchor = null;
     this.focusedIndex = Math.min(this.focusedIndex, Math.max(0, this.shown.length - 1));
-    this.say(`Moved ${count(keys.length, 'photo', 'photos')} to the trash queue. Z undoes it.`, 'positive');
+    this.rangeStart = null;
+    this.say(sweepText(queued.length, leftOut.length), leftOut.length > 0 ? 'caution' : 'positive');
     this.publish();
   }
 
@@ -531,6 +582,7 @@ export class SearchModel {
     void (async () => {
       const undone = await this.deps.undo();
       if (undone === null) return this.sayAndPublish('Nothing to undo.', 'caution');
+      this.decisionsChanged();
       this.libraryStale = true;
       if (this.query) await this.run(this.query);
       this.say(undone.kind === 'APPROVED' ? 'Undid the trashing: photos not yet sent are cancelled and any already trashed are restored' : 'Undid the last decision in Duplicates', 'positive');
@@ -590,6 +642,7 @@ export class SearchModel {
   viewerClose(): void {
     if (this.viewerIndex === null) return;
     this.focusedIndex = this.viewerIndex;
+    this.rangeStart = null;
     this.allFocused = false;
     this.viewerIndex = null;
     this.publish();
@@ -628,6 +681,7 @@ export class SearchModel {
       ...(this.hidden.lessLike > 0 ? [`${n(this.hidden.lessLike)} more like the unwanted examples hidden`] : []),
     ];
     const example = (mediaKey: string): ExampleView => ({ mediaKey, imageUrl: this.thumbs.get(mediaKey) ?? null });
+    const outlined = new Set(this.focusedIndices());
     return {
       introText: searchIntroText(this.library?.protection ?? null),
       query: this.queryText,
@@ -637,7 +691,7 @@ export class SearchModel {
         : this.modelPercent !== null ? `Searching… downloading the AI model (once): ${this.modelPercent}%`
           : this.loadingModel ? 'Searching… the first search also gets the AI model ready on the graphics card (about 10–20 s).'
             : 'Searching…',
-      resultText: this.query && !this.library?.blocked ? `${n(this.shown.length)} best matches · ${n(this.selected.size)} selected for the trash` : null,
+      resultText: this.query && !this.library?.blocked ? `${count(this.shown.length, 'best match', 'best matches')} · ${n(this.selected.size)} selected for the trash` : null,
       hiddenText: this.query && hiddenParts.length > 0 ? hiddenParts.join(' · ') : null,
       blockedText: this.library?.blocked ? BLOCKED_TEXT[this.library.blocked] : null,
       sort: this.sort,
@@ -647,7 +701,7 @@ export class SearchModel {
         mediaKey: h.mediaKey,
         imageUrl: this.thumbs.get(h.mediaKey) ?? null,
         selected: this.selected.has(h.mediaKey),
-        focused: this.allFocused || index === this.focusedIndex,
+        focused: outlined.has(index),
         current: !this.allFocused && index === this.focusedIndex,
         caption: caption(h),
         link: `https://photos.google.com/photo/${h.mediaKey}`,

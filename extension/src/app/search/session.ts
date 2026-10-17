@@ -5,10 +5,9 @@ import { IndexedDbAnalysisStore } from '../ai/analysisStore';
 import { IndexedDbReviewStore } from '../duplicates/reviewStore';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { classify } from '../scan/report';
-import { count } from '../shared/format';
 import { IndexedDbPreferences } from '../shared/preferences';
 import { previewDataUrl } from '../shared/previews';
-import type { LibraryPhoto, SearchDeps, SearchLibrary } from './searchModel';
+import type { LibraryPhoto, SearchDeps, SearchLibrary, SweepResult } from './searchModel';
 
 /** The saved data Search reads and writes; tests pass their own. */
 export interface SearchStores {
@@ -65,20 +64,23 @@ async function loadLibrary({ inventory, analysis, review, preferences }: SearchS
 }
 
 /**
- * Moves the photos to the trash queue, after checking them again against a fresh classification:
- * all or nothing, so a photo favourited since the search is never trashed by it.
+ * Moves the photos to the trash queue, after checking each again against a fresh classification: one
+ * favourited, put in an album or queued elsewhere since the search is left out, never trashed by it;
+ * the rest go. Nothing goes while the scan can't be trusted.
  */
-async function sweep(stores: SearchStores, account: string, mediaKeys: string[], nowMs: number): Promise<void> {
+async function sweep(stores: SearchStores, account: string, mediaKeys: string[], nowMs: number): Promise<SweepResult> {
   if (mediaKeys.length === 0) throw new Error('Nothing is selected for the trash.');
   const library = await loadLibrary(stores, account, nowMs);
   if (library.blocked) throw new Error('The library scan is no longer usable; check for new photos on the Scan tab, then search again.');
-  const stale = mediaKeys.filter((k) => { const p = library.photos.get(k); return !p || !p.eligible || p.approved; });
-  if (stale.length > 0) {
-    throw new Error(`${count(stale.length, 'selected photo is', 'selected photos are')} no longer eligible or already in the trash queue; search again.`);
+  const stillTrashable = (k: string) => { const p = library.photos.get(k); return p !== undefined && p.eligible && !p.approved; };
+  const queued = mediaKeys.filter(stillTrashable);
+  const leftOut = mediaKeys.filter((k) => !stillTrashable(k));
+  if (queued.length > 0) {
+    const items = [...queued].sort().map((k) => ({ mediaKey: k, dedupKey: library.photos.get(k)!.dedupKey }));
+    // A sweep's id never matches a duplicate group's (24 hex characters).
+    await stores.review.recordDecision(account, `sweep:${nowMs}`, 'APPROVED', items, queued, nowMs);
   }
-  const items = [...mediaKeys].sort().map((k) => ({ mediaKey: k, dedupKey: library.photos.get(k)!.dedupKey }));
-  // A sweep's id never matches a duplicate group's (24 hex characters).
-  await stores.review.recordDecision(account, `sweep:${nowMs}`, 'APPROVED', items, mediaKeys, nowMs);
+  return { queued, leftOut };
 }
 
 export function searchDeps(account: string, stores: SearchStores = (shared ??= searchStores()), now: () => number = Date.now): SearchDeps {

@@ -81,7 +81,6 @@ describe('the Duplicates review', () => {
     const { view } = await opened();
     expect(view()).toMatchObject({
       groupsText: '2 groups', progressText: '0 decided · 2 to go', emptyText: null, blockedText: null,
-      missingText: null,
       ruleText: 'Photos count as duplicates when they are at least 91.5% similar and taken within 2 minutes of each other. Nothing is trashed without your approval.',
     });
     const g = view().group!;
@@ -106,14 +105,6 @@ describe('the Duplicates review', () => {
     expect(review.getView().loadingText).toBeNull();
   });
 
-  it('says when photos are missing from the groups, and only then', async () => {
-    const fakes = new Fakes();
-    const load = fakes.loadQueue.bind(fakes);
-    fakes.loadQueue = async () => ({ ...(await load()), photosNotAnalysed: 1_240 });
-    const { view } = await opened(fakes);
-    expect(view().missingText).toBe("1,240 photos aren’t in the groups yet: the Scan hasn't finished with them, or their preview could not be read. Check for new photos on the Scan tab to include them.");
-  });
-
   it('D with nothing selected says what to do; F keeps the group and the next one appears without a message', async () => {
     const { review, fakes, view } = await opened();
     review.tileClicked('b'); // unselect the only proposal
@@ -124,6 +115,38 @@ describe('the Duplicates review', () => {
     expect(fakes.decisions[0]).toMatchObject({ groupId: 'g1', kind: 'KEPT', items: [] });
     expect(view()).toMatchObject({ notice: null, progressText: '1 decided · 1 to go' });
     expect(view().group!.tiles[0]!.mediaKey).toBe('d');
+  });
+
+  it('decisions made in Search rebuild the groups, once the tab has opened', async () => {
+    const fakes = new Fakes();
+    const review = new DuplicatesReview(fakes);
+    review.decisionsChangedElsewhere(); // never opened: nothing to rebuild
+    await settle();
+    expect(fakes.loads).toBe(0);
+    review.show();
+    await settle();
+    expect(review.getView().group!.tiles[0]!.mediaKey).toBe('a');
+    fakes.pending = [g2()]; // a sweep took g1's photos
+    review.decisionsChangedElsewhere();
+    await settle();
+    expect(fakes.loads).toBe(2);
+    expect(review.getView().group!.tiles[0]!.mediaKey).toBe('d');
+  });
+
+  it('tells Search when it decides or undoes, not when there was nothing to undo', async () => {
+    const { review, fakes } = await opened();
+    const heard = vi.fn();
+    review.onDecisionsChanged(heard);
+    review.keep();
+    await settle();
+    expect(heard).toHaveBeenCalledTimes(1);
+    review.undo();
+    await settle();
+    expect(heard).toHaveBeenCalledTimes(2);
+    fakes.decisions = [];
+    review.undo();
+    await settle();
+    expect(heard).toHaveBeenCalledTimes(2);
   });
 
   it('D trashes exactly the selection', async () => {
@@ -351,7 +374,7 @@ describe('the Duplicates review', () => {
     const fakes = new Fakes();
     fakes.blocked = 'SCAN_STALE';
     const { review, view } = await opened(fakes);
-    expect(view()).toMatchObject({ blockedText: 'The library scan is more than a day old. Check for new photos on the Scan tab: it re-reads the list of your photos (about 2–3 minutes) and only looks at new ones.', group: null, emptyText: null, missingText: null });
+    expect(view()).toMatchObject({ blockedText: 'The library scan is more than a day old. Check for new photos on the Scan tab: it re-reads the list of your photos (about 2–3 minutes) and only looks at new ones.', group: null, emptyText: null });
     // The reason takes the place of the counts, which mean nothing without a usable scan.
     expect(view()).toMatchObject({ groupsText: null, progressText: null });
     review.approve();

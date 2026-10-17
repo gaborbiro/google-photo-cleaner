@@ -66,30 +66,28 @@ async function library() {
 describe('Search sweeps: checked again just before anything is queued', () => {
   it('queues exactly the selection as one decision', async () => {
     const { search, stores } = await library();
-    await search.sweep(['lib-4', 'lib-3']);
+    expect(await search.sweep(['lib-4', 'lib-3'])).toEqual({ queued: ['lib-4', 'lib-3'], leftOut: [] });
     expect(await stores.review.activeDecisions('account-a')).toMatchObject([
       { groupId: `sweep:${NOW}`, kind: 'APPROVED', items: [{ mediaKey: 'lib-3', dedupKey: 'dedup-3' }, { mediaKey: 'lib-4', dedupKey: 'dedup-4' }] },
     ]);
   });
 
-  it('a photo favourited since the search stops the whole sweep: nothing is queued', async () => {
+  it('a photo favourited since the search is left out, never queued; the rest of the sweep goes', async () => {
     const { search, stores, source, rescan } = await library();
     expect((await search.loadLibrary()).photos.get('lib-3')!.eligible).toBe(true);
     source.library[3] = fakeItem(3, { isFavourite: true });
     source.favourites = [source.library[0]!, source.library[3]!];
     await rescan();
-    await expect(search.sweep(['lib-3', 'lib-4'])).rejects.toThrow('1 selected photo is no longer eligible or already in the trash queue; search again.');
-    expect(await stores.review.activeDecisions('account-a')).toEqual([]);
+    expect(await search.sweep(['lib-3', 'lib-4'])).toEqual({ queued: ['lib-4'], leftOut: ['lib-3'] });
+    expect(await stores.review.activeDecisions('account-a')).toMatchObject([{ kind: 'APPROVED', items: [{ mediaKey: 'lib-4' }], members: ['lib-4'] }]);
   });
 
-  it('a photo already queued, protected or gone is refused', async () => {
+  it('a photo already queued, protected or gone is left out; with nothing left, nothing is recorded', async () => {
     const { search, stores } = await library();
     await search.sweep(['lib-3']);
-    await expect(search.sweep(['lib-3', 'lib-4'])).rejects.toThrow(/no longer eligible or already in the trash queue/);
-    await expect(search.sweep(['lib-0'])).rejects.toThrow(/no longer eligible/);
-    await expect(search.sweep(['lib-99'])).rejects.toThrow(/no longer eligible/);
+    expect(await search.sweep(['lib-3', 'lib-0', 'lib-99'])).toEqual({ queued: [], leftOut: ['lib-3', 'lib-0', 'lib-99'] });
     await expect(search.sweep([])).rejects.toThrow('Nothing is selected for the trash.');
-    expect(await stores.review.activeDecisions('account-a')).toHaveLength(1);
+    expect(await stores.review.activeDecisions('account-a')).toMatchObject([{ items: [{ mediaKey: 'lib-3' }] }]);
   });
 
   it('refuses when the scan is out of date', async () => {
@@ -112,10 +110,11 @@ describe('protection choices reach every check', () => {
   it('Search: a favourite can be swept only while favourites are unticked', async () => {
     const { search, stores } = await library();
     expect((await search.loadLibrary()).photos.get('lib-0')!.eligible).toBe(false);
-    await expect(search.sweep(['lib-0'])).rejects.toThrow(/no longer eligible/);
+    expect(await search.sweep(['lib-0'])).toEqual({ queued: [], leftOut: ['lib-0'] });
+    expect(await stores.review.activeDecisions('account-a')).toEqual([]);
     await stores.preferences.setProtection('account-a', NO_FAVOURITES);
     expect((await search.loadLibrary()).photos.get('lib-0')!.eligible).toBe(true);
-    await search.sweep(['lib-0']);
+    expect(await search.sweep(['lib-0'])).toEqual({ queued: ['lib-0'], leftOut: [] });
   });
 
   it('the trash queue: ticking favourites again blocks a queued favourite; it is never sent', async () => {

@@ -23,6 +23,8 @@ class Fakes implements SearchDeps {
   swept: string[][] = [];
   undone: StoredDecision[] = [];
   sweepError: Error | null = null;
+  /** Photos the sweep's re-check finds changed since the search (protected now, or queued elsewhere). */
+  changedSince = new Set<string>();
   loads = 0;
 
   async loadLibrary() {
@@ -36,7 +38,9 @@ class Fakes implements SearchDeps {
   }
   async sweep(keys: string[]) {
     if (this.sweepError) throw this.sweepError;
-    this.swept.push(keys);
+    const queued = keys.filter((k) => !this.changedSince.has(k));
+    if (queued.length > 0) this.swept.push(queued);
+    return { queued, leftOut: keys.filter((k) => this.changedSince.has(k)) };
   }
   undoError: Error | null = null;
   async undo() {
@@ -150,6 +154,64 @@ describe('Search & sweep', () => {
     expect(view().hiddenText).toContain('3 already in the trash queue hidden');
   });
 
+  it('tells Duplicates after a sweep and an undo, not after a refused sweep or nothing to undo', async () => {
+    const { model, fakes } = await searched();
+    const heard = vi.fn();
+    model.onDecisionsChanged(heard);
+    model.tileClicked(0, false);
+    fakes.sweepError = new Error('refused');
+    model.approve();
+    model.enter();
+    await settle();
+    expect(heard).not.toHaveBeenCalled();
+    fakes.sweepError = null;
+    model.approve();
+    model.enter();
+    await settle();
+    expect(heard).toHaveBeenCalledTimes(1);
+    fakes.undone = [{ id: 1, account: 'a', groupId: 'sweep:1', kind: 'APPROVED', items: [], members: [], createdAtMs: 0, undoneAtMs: null }];
+    model.undo();
+    await settle();
+    await settle();
+    expect(heard).toHaveBeenCalledTimes(2);
+    model.undo();
+    await settle();
+    expect(heard).toHaveBeenCalledTimes(2);
+  });
+
+  it('a photo changed since the search is left out; the rest go, and it leaves the results', async () => {
+    const fakes = new Fakes();
+    fakes.changedSince.add('box2');
+    const { model, view } = await searched('boxes', fakes);
+    model.tileClicked(0, false);
+    model.tileClicked(2, true); // box1, box2, tub
+    model.approve();
+    model.enter();
+    await settle();
+    expect(fakes.swept).toEqual([['box1', 'tub']]);
+    expect(keys(model)).toEqual(['cat']);
+    expect(view().notice).toMatchObject({ tone: 'caution', text: 'Moved 2 photos to the trash queue. Z undoes it. 1 photo was left out: it is protected now, gone from the library or already in the trash queue.' });
+    expect(view().resultText).toBe('1 best match · 0 selected for the trash');
+    expect(view().hiddenText).toContain('2 already in the trash queue hidden');
+  });
+
+  it('when every selected photo changed since the search, nothing is moved and Duplicates is not told', async () => {
+    const fakes = new Fakes();
+    fakes.changedSince = new Set(['box1', 'box2']);
+    const { model, view } = await searched('boxes', fakes);
+    const heard = vi.fn();
+    model.onDecisionsChanged(heard);
+    model.tileClicked(0, false);
+    model.tileClicked(1, true);
+    model.approve();
+    model.enter();
+    await settle();
+    expect(fakes.swept).toEqual([]);
+    expect(heard).not.toHaveBeenCalled();
+    expect(keys(model)).toEqual(['tub', 'cat']);
+    expect(view().notice).toMatchObject({ tone: 'caution', text: 'Nothing was moved to the trash: the 2 selected photos changed since the search; they are protected now, gone from the library or already in the trash queue.' });
+  });
+
   it('a refused sweep says why and keeps the selection', async () => {
     const fakes = new Fakes();
     fakes.sweepError = new Error('1 selected photo is no longer eligible or already in the trash queue; search again');
@@ -199,6 +261,32 @@ describe('Search & sweep', () => {
     expect(fakes.loads).toBe(loads + 1); // the saved data is read again
     expect(keys(model)).toContain('box1');
     expect(view().notice!.text).toBe('Undid the trashing: photos not yet sent are cancelled and any already trashed are restored');
+  });
+
+  it('Shift-click selects from the outlined photo and outlines the range; Space switches it all', async () => {
+    const { model, view } = await searched();
+    const outlined = () => view().tiles.flatMap((t, i) => (t.focused ? [i] : []));
+    const selected = () => view().tiles.flatMap((t, i) => (t.selected ? [i] : []));
+    model.tileClicked(2, true); // the first photo is outlined from the start
+    expect(selected()).toEqual([0, 1, 2]);
+    expect(outlined()).toEqual([0, 1, 2]);
+    expect(view().tiles.findIndex((t) => t.current)).toBe(2);
+    model.toggleFocused();
+    expect(selected()).toEqual([]);
+    model.toggleFocused();
+    expect(selected()).toEqual([0, 1, 2]);
+    model.tileClicked(1, false); // a plain click: one photo again
+    expect(outlined()).toEqual([1]);
+    expect(selected()).toEqual([0, 2]);
+    model.focusMove(1, 0);
+    model.tileClicked(3, true); // from the photo the arrows moved to
+    expect(outlined()).toEqual([2, 3]);
+    expect(selected()).toEqual([0, 2, 3]);
+    model.tileClicked(0, true); // the range keeps its start
+    expect(outlined()).toEqual([0, 1, 2]);
+    expect(selected()).toEqual([0, 1, 2, 3]);
+    model.focusMove(1, 0); // arrows go back to one photo
+    expect(outlined()).toEqual([1]);
   });
 
   it('A outlines every result; Space then marks them all, and again none', async () => {

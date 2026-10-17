@@ -87,8 +87,6 @@ export interface DuplicatesView {
   workingText: string | null;
   groupsText: string | null;
   progressText: string | null;
-  /** Photos the groups can't include yet; null when there are none. */
-  missingText: string | null;
   ruleText: string | null;
   blockedText: string | null;
   emptyText: string | null;
@@ -131,6 +129,7 @@ function whyKept(m: GroupMember): string {
 
 export class DuplicatesReview {
   private readonly listeners = new Set<() => void>();
+  private readonly decisionListeners = new Set<() => void>();
   private current: DuplicatesView;
 
   private pending: DuplicateGroup[] = [];
@@ -145,7 +144,6 @@ export class DuplicatesReview {
   /** This session's decisions, newest last, with their groups: undone without rebuilding everything. */
   private decided: { group: DuplicateGroup; kind: DecisionKind; wasDeferred: boolean }[] = [];
   private refreshAgain = false;
-  private photosNotAnalysed = 0;
   private settings: ReviewQueue['settings'] | null = null;
   private notice: Notice | null = null;
   private sequence = 0;
@@ -176,6 +174,16 @@ export class DuplicatesReview {
   /** The screen's state; the same object until something changes. */
   getView = (): DuplicatesView => this.current;
 
+  /** [listener] hears when Duplicates changed the saved decisions (a decision, an undo), so Search can read them again. */
+  onDecisionsChanged(listener: () => void): () => void {
+    this.decisionListeners.add(listener);
+    return () => this.decisionListeners.delete(listener);
+  }
+
+  private decisionsChanged(): void {
+    for (const l of this.decisionListeners) l();
+  }
+
   private publish(): void {
     this.current = this.view();
     for (const l of this.listeners) l();
@@ -197,6 +205,14 @@ export class DuplicatesReview {
     if (this.loaded) this.working = 'Updating the groups…';
     this.publish();
     void this.run(() => this.reload());
+  }
+
+  /**
+   * Decisions were made elsewhere (a sweep or an undo in Search): the groups are built again, without
+   * the photos now in the trash queue. Before the tab first opens there is nothing to rebuild.
+   */
+  decisionsChangedElsewhere(): void {
+    if (this.loaded || this.busy) this.show();
   }
 
   private async run(work: () => Promise<void>): Promise<void> {
@@ -237,7 +253,6 @@ export class DuplicatesReview {
     this.totalGroups = queue.totalGroups;
     this.decidedGroups = queue.decidedGroups;
     this.blocked = queue.blocked;
-    this.photosNotAnalysed = queue.photosNotAnalysed;
     this.settings = queue.settings;
     this.loaded = true;
     if (!queue.blocked) this.reportGroupsLeft();
@@ -436,6 +451,7 @@ export class DuplicatesReview {
         this.say(error instanceof Error ? error.message : 'The decision was refused.', 'negative');
         return;
       }
+      this.decisionsChanged();
       this.pending.shift();
       this.resetFocus();
       this.decided.push({ group, kind, wasDeferred: this.deferredIds.has(group.id) });
@@ -468,6 +484,7 @@ export class DuplicatesReview {
         this.say('Nothing to undo.', 'caution');
         return;
       }
+      this.decisionsChanged();
       const local = this.decided.at(-1);
       if (local && local.group.id === undone.groupId && local.kind === undone.kind) {
         this.decided.pop();
@@ -572,11 +589,6 @@ export class DuplicatesReview {
       progressText: loaded && this.blocked === null
         ? `${n(this.decidedGroups)} decided · ${n(this.pending.length)} to go` + (this.deferredIds.size > 0 ? ` (${n(this.deferredIds.size)} skipped)` : '')
         : null,
-      // Answers "do I need to analyse again?" after a new library scan.
-      // Said only when something is missing; the Scan card covers the rest.
-      missingText: !loaded || this.blocked !== null || this.photosNotAnalysed === 0
-        ? null
-        : `${count(this.photosNotAnalysed, 'photo isn’t', 'photos aren’t')} in the groups yet: the Scan hasn't finished with them, or their preview could not be read. Check for new photos on the Scan tab to include them.`,
       // What counts as a duplicate, in the same terms as each photo's "% similar".
       ruleText: this.settings
         ? `Photos count as duplicates when they are at least ${percent(this.settings.threshold)} similar and taken within ${this.settings.windowMs / 60_000} minutes of each other. ` +

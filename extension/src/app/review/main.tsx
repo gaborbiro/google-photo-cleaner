@@ -89,6 +89,16 @@ function Review() {
   useEffect(() => {
     if (refreshKey !== null) search?.libraryChanged();
   }, [search, refreshKey]);
+  // Both record decisions in the same trash queue: what one decides, the other shows.
+  useEffect(() => {
+    if (duplicates === null || search === null) return;
+    const fromSearch = search.onDecisionsChanged(() => duplicates.decisionsChangedElsewhere());
+    const fromDuplicates = duplicates.onDecisionsChanged(() => search.libraryChanged());
+    return () => {
+      fromSearch();
+      fromDuplicates();
+    };
+  }, [duplicates, search]);
   // The pinned action bars sit right under the tabs, however tall they wrap.
   const tabs = useRef<HTMLElement>(null);
   usePinnedHeight(tabs, '--tabs-h');

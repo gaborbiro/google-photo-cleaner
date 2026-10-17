@@ -287,6 +287,11 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
     searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
     await vi.waitFor(() => expect(selectedCount(root)).toBe(3));
+    expect(root.querySelectorAll('.search-tile.focused').length).toBe(3); // the range is outlined
+    press(' '); // Space switches the whole range
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(0));
+    press(' ');
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(3));
 
     press('d', root.querySelector('input[type="search"]')!);
     // A later change drawn on screen means the key press above was handled by then.
@@ -308,6 +313,10 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(async () => expect(await decisions()).toMatchObject([{ kind: 'APPROVED', groupId: expect.stringMatching(/^sweep:/) }]));
     expect((await decisions())[0]!.items).toHaveLength(3);
     await shows(root, 'already in the trash queue hidden');
+
+    // Back on Duplicates, the burst's photos are in the trash queue: its group is gone.
+    await click(root, '2 · Duplicates');
+    await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(0), { timeout: 3_000 });
   });
 
   it('Search: L adds a less-like example, its × removes it, Start over clears everything', async () => {

@@ -18,9 +18,7 @@
     "idle"
   ],
   "host_permissions": [
-    "https://photos.google.com/*",
-    "https://huggingface.co/*",
-    "https://*.hf.co/*"
+    "https://photos.google.com/*"
   ],
   "background": {
     "service_worker": "background.js",

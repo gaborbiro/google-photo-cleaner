@@ -97,7 +97,9 @@ Find duplicate and unwanted photos in the user's Google Photos library and move 
 | `scripting` | After installing or updating, adds Photo Cleaner's panel to photos.google.com tabs that were already open, so the user does not have to reload them. |
 | `idle` | Slows the analysis down while the user is using the computer and runs at full speed when they are away, so the AI does not make the computer sluggish. |
 | Host: `https://photos.google.com/*` | Photo Cleaner works inside the user's signed-in Google Photos tab: it reads the photo list, favourites, archive and albums there, shows its panel, and trashes or restores the photos the user approves. |
-| Host: `https://huggingface.co/*`, `https://*.hf.co/*` | Downloads the AI model's files (EmbeddingGemma 2, Apache 2.0) from Hugging Face, which serves them from hf.co addresses. Only model files are downloaded; nothing is sent. |
+
+The AI model is downloaded from Hugging Face without a host permission: Hugging Face lets any page
+fetch model files (CORS), so the extension needs no access to its sites.
 
 **Remote code:** No, I am not using remote code. (The AI runtime, ONNX Runtime Web, is packed into the
 extension under `ort/`; the model download is weights, which are data.)

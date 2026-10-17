@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
-import { cpSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { assertKotlinFresh } from './scripts/kotlinFresh.mjs';
+import { installedPackages, kotlinVersion, noticesText, shippedLibraries } from './scripts/notices.mjs';
 
 try {
   assertKotlinFresh();
@@ -37,21 +38,27 @@ function fresh(outdir) {
 {
   const outdir = 'dist-app';
   fresh(outdir);
+  // Everything the bundles read, for the third-party notices.
+  const inputs = new Set();
+  const bundle = async (options) => {
+    const { metafile } = await build({ ...common, ...options, metafile: true });
+    for (const input of Object.keys(metafile.inputs)) inputs.add(input);
+  };
   const react = { jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, minify: true };
-  await build({ ...common, entryPoints: { page: 'src/app/page/main.ts' }, outdir, format: 'iife', banner: { js: gptkNotice } });
-  await build({ ...common, entryPoints: { content: 'src/app/content/main.ts' }, outdir, format: 'iife' });
-  await build({ ...common, entryPoints: { background: 'src/app/background/main.ts' }, outdir, format: 'esm' });
+  await bundle({ entryPoints: { page: 'src/app/page/main.ts' }, outdir, format: 'iife', banner: { js: gptkNotice } });
+  await bundle({ entryPoints: { content: 'src/app/content/main.ts' }, outdir, format: 'iife' });
+  await bundle({ entryPoints: { background: 'src/app/background/main.ts' }, outdir, format: 'esm' });
   // The background page holds the AI model; its runtime is packed in, because extensions may not
   // load code from the internet. The WebGPU backend uses the "asyncify" build of ONNX Runtime.
-  await build({ ...common, entryPoints: { engine: 'src/app/engine/main.ts' }, outdir, format: 'esm' });
+  await bundle({ entryPoints: { engine: 'src/app/engine/main.ts' }, outdir, format: 'esm' });
   // Search's AI model for descriptions, loaded by the review tab on its first text search.
-  await build({ ...common, entryPoints: { 'search-ai': 'src/app/search/textModel.ts' }, outdir, format: 'esm' });
+  await bundle({ entryPoints: { 'search-ai': 'src/app/search/textModel.ts' }, outdir, format: 'esm' });
   mkdirSync(`${outdir}/ort`);
   for (const file of ['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm']) {
     cpSync(`node_modules/onnxruntime-web/dist/${file}`, `${outdir}/ort/${file}`);
+    inputs.add(`node_modules/onnxruntime-web/dist/${file}`);
   }
-  await build({
-    ...common,
+  await bundle({
     ...react,
     entryPoints: {
       popup: 'src/app/popup/main.tsx', panel: 'src/app/panel/main.tsx', review: 'src/app/review/main.tsx',
@@ -63,4 +70,7 @@ function fresh(outdir) {
   });
   cpSync('static-app', outdir, { recursive: true });
   cpSync('vendor/gptk/LICENSE', `${outdir}/THIRD_PARTY_GPTK_LICENSE`);
+  const libraries = shippedLibraries(inputs, installedPackages('.'), kotlinVersion(readFileSync('../gradle/libs.versions.toml', 'utf8')));
+  writeFileSync(`${outdir}/THIRD_PARTY_NOTICES.txt`, noticesText(libraries, (file) => readFileSync(file, 'utf8')));
+  console.log(`\n  ${outdir}/THIRD_PARTY_NOTICES.txt: ${libraries.map((library) => library.name).join(', ')}\n`);
 }

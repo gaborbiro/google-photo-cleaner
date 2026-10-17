@@ -1,0 +1,37 @@
+# Publishes site/ (the privacy policy the Chrome Web Store links to) on GitHub Pages:
+# https://gaborbiro.github.io/google-photo-cleaner/privacy.html
+# One-time: repository Settings → Pages → Source: "GitHub Actions".
+name: Website
+
+on:
+  push:
+    branches: [master]
+    paths: ['site/**', 'design/branding-v1/icon-32.png', 'design/branding-v1/icon-128.png', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Site with the brand icons
+        run: |
+          cp design/branding-v1/icon-32.png design/branding-v1/icon-128.png site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

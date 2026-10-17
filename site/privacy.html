@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo Cleaner: privacy policy</title>
+  <link rel="icon" type="image/png" href="icon-32.png">
+  <style>
+    :root { color-scheme: light dark; --text: #1f1d2b; --muted: #5d5a6e; --accent: #5b3fd6; --bg: #fff; }
+    @media (prefers-color-scheme: dark) { :root { --text: #ecebf3; --muted: #aaa7bb; --accent: #a996ff; --bg: #17151f; } }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 42rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
+    h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .25rem; }
+    h2 { font-size: 1.2rem; margin: 2rem 0 .5rem; }
+    .updated { color: var(--muted); margin: 0 0 2rem; }
+    a { color: var(--accent); }
+    header { display: flex; align-items: center; gap: .75rem; margin-bottom: 1.5rem; }
+    header img { width: 48px; height: 48px; }
+  </style>
+</head>
+<body>
+<main>
+  <header><img src="icon-128.png" alt=""><strong>Photo Cleaner</strong></header>
+  <h1>Privacy policy</h1>
+  <p class="updated">Last updated 17 October 2026</p>
+
+  <p>Photo Cleaner is a browser extension that finds duplicate and unwanted photos in your Google Photos
+  library and moves the ones you choose to Google Photos' trash. It works entirely on your computer.
+  We, the makers of Photo Cleaner, have no server and receive nothing about you or your photos.</p>
+
+  <h2>What Photo Cleaner reads</h2>
+  <p>While you use it in a signed-in photos.google.com tab, Photo Cleaner reads your library through that
+  tab, the way Google Photos' own page does: the list of your photos, which ones are favourites,
+  archived or in albums, your album names, and small previews of your photos so its AI can look at them.</p>
+
+  <h2>What it keeps, and where</h2>
+  <p>Everything is kept in your browser's private storage for the extension, on your computer only:</p>
+  <ul>
+    <li>for each photo: Google's identifier for it, when it was taken, whether it is protected (favourite,
+      in an album, archived), and numbers the AI works out from it (a "fingerprint" of what the photo
+      shows, and quality measurements);</li>
+    <li>your album names, and which photos are in which album;</li>
+    <li>your choices: what you kept, what you trashed, and the list for undo;</li>
+    <li>your Google account as a scrambled code, not your email address;</li>
+    <li>the AI model's files.</li>
+  </ul>
+  <p>No photos or previews are saved. Other websites and extensions cannot read this storage.</p>
+
+  <h2>What leaves your computer</h2>
+  <ul>
+    <li><strong>Requests to Google Photos</strong>, made in your own signed-in tab, to read your library and,
+      when you approve it, to move photos to Google Photos' trash or bring them back. These go only to
+      Google, as when you use Google Photos yourself.</li>
+    <li><strong>The AI model download</strong>, from Hugging Face (huggingface.co), the first time it is needed
+      and again if its files were removed. Like any download, Hugging Face sees your IP address. Nothing
+      about your photos is sent.</li>
+  </ul>
+  <p>Nothing else. Photo Cleaner has no analytics, no crash reports, no ads and no accounts, and it does
+  not sell or share any data with anyone.</p>
+
+  <h2>Erasing your data</h2>
+  <p>"Erase Photo Cleaner's data from this computer" in the review tab removes everything listed above.
+  Uninstalling the extension does the same. Neither touches your photos in Google Photos: photos you
+  already trashed stay in Google Photos' trash, where Google keeps them for 60 days.</p>
+
+  <h2>Chrome Web Store User Data Policy</h2>
+  <p>Photo Cleaner uses the information it reads only to find duplicate and unwanted photos and to
+  trash the ones you approve. Its use of this information complies with the Chrome Web Store User Data
+  Policy, including the Limited Use requirements.</p>
+
+  <h2>Changes and questions</h2>
+  <p>If this policy changes, this page will say so, with a new date. Questions:
+  <a href="https://github.com/gaborbiro/google-photo-cleaner/issues">open an issue on GitHub</a>.</p>
+
+  <p>Photo Cleaner is not made by Google or affiliated with Google. Google Photos is a trademark of Google LLC.</p>
+</main>
+</body>
+</html>

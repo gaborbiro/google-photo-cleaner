@@ -240,10 +240,13 @@ Testing
 
 ## 3. Get ready to publish
 
-- [ ] Name, icon, short description
+- [x] Name, icon, short description (2026-10-17: the branding-v1 icons are in the extension)
 - [ ] Data privacy review (go through the Data privacy chapter below; decide on each open concern)
-- [ ] Privacy policy page (the stores require one)
-- [ ] Chrome Web Store developer account (one-off $5 fee) and listing
+- [~] Privacy policy page (the stores require one): written (`site/privacy.html`), published by
+      GitHub Pages once Pages is switched on (see `docs/chrome-web-store.md`)
+- [ ] Chrome Web Store developer account (one-off $5 fee) and listing: listing texts, form answers
+      and release steps in `docs/chrome-web-store.md`; `npm run package` makes the zip; screenshots
+      still to make
 - [ ] Microsoft Edge Add-ons listing
 - [ ] Website: landing page with "Add to Chrome", demo, privacy promise
 - [ ] Direct download on the website (zip + "Load unpacked" steps for Chrome; signed file for Firefox if we support it)

@@ -21,6 +21,9 @@
   --pc-protected: #677183;
   --pc-focus: #20232c;
   --pc-mat: #eef0f4;
+  /* The NEW badge sits on a photo, so it looks the same in light and dark mode. */
+  --pc-badge: #cdc36a;
+  --pc-on-badge: #20232c;
 
   --font-ui: Arial, Helvetica, sans-serif;
   --font-data: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
@@ -278,7 +281,7 @@ button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-b
 .tile-image:hover .expand, .search-tile-image:hover .expand { display: block; }
 /* New since the last visit: a starburst in the mat's top right, clear of the photo. */
 .new-badge {
-  position: absolute; top: 8px; right: 8px; width: 48px; height: 48px; background: var(--pc-accent); color: var(--pc-on-accent);
+  position: absolute; top: 8px; right: 8px; width: 48px; height: 48px; background: var(--pc-badge); color: var(--pc-on-badge);
   display: flex; align-items: center; justify-content: center; font: 700 11px var(--font-ui); letter-spacing: 0.5px;
   clip-path: polygon(50% 0, 61% 14%, 78% 6%, 81% 25%, 100% 28%, 89% 45%, 100% 60%, 81% 66%, 82% 87%, 61% 84%, 50% 100%, 39% 84%, 18% 87%, 19% 66%, 0 60%, 11% 45%, 0 28%, 19% 25%, 22% 6%, 39% 14%);
 }

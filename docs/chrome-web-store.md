@@ -68,6 +68,9 @@ Find and trash duplicate photos in Google Photos with on-device AI. Free and pri
 > • The first analysis takes a while for a big library (about an hour for 17,000 photos on a good
 >   graphics card). It runs in the background, and you can start reviewing straight away.
 >
+> Problems or ideas? Open an issue at github.com/gaborbiro/google-photo-cleaner/issues, or write to
+> nomadworkz@gmail.com.
+>
 > Photo Cleaner works through your signed-in photos.google.com tab. It is not made by Google or
 > affiliated with Google. Google Photos is a trademark of Google LLC.
 

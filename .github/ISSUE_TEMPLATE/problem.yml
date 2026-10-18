@@ -1,0 +1,49 @@
+name: Something doesn't work
+description: Tell us what went wrong in Photo Cleaner
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. **Everything here is public**, so please don't post photos, screenshots that show
+        your photos, your email address or anything else about your account. Describe what you saw in words instead.
+        You can also write to nomadworkz@gmail.com.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead? Copy any message Photo Cleaner showed.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Photo Cleaner version
+      description: "In Chrome, open the extensions page (chrome://extensions): it's next to Photo Cleaner's name. For example 0.4.11."
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and computer
+      description: For example "Chrome on Windows 11" or "Chrome on a MacBook Air (M2)".
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did it happen?
+      options:
+        - Scan (reading the library or analysing photos)
+        - Duplicates
+        - Search
+        - Trashing or restoring photos
+        - The panel in Google Photos or the toolbar popup
+        - Somewhere else
+    validations:
+      required: true
+  - type: textarea
+    id: size
+    attributes:
+      label: Anything else that might help
+      description: For example roughly how many photos your library has, or whether it happens every time.

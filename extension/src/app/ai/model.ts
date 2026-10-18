@@ -5,8 +5,11 @@ export const MODEL_ID = 'onnx-community/embeddinggemma-2-ONNX';
 /** Pinned so stored fingerprints stay comparable; change deliberately and re-analyse. */
 export const MODEL_REVISION = 'daa72c51243991dfcaf9f9137d2c573d8f7790c0';
 export const MODEL_DTYPE = 'q4';
-/** Download size of the 4-bit text model and vision encoder, for the space check and progress. */
-export const MODEL_DOWNLOAD_BYTES = 283_000_000;
+/**
+ * Download size at MODEL_REVISION, for the space check, the progress and what the screens say: the
+ * 4-bit text model (174.5 MB) and vision encoder (109.1 MB), and the tokenizer (32.2 MB) with the configs.
+ */
+export const MODEL_DOWNLOAD_BYTES = 316_000_000;
 /** Longest side of the previews that are analysed (as the desktop app). */
 export const PREVIEW_SIZE_PX = 512;
 

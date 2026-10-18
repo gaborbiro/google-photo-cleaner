@@ -34,15 +34,9 @@ export class TransformersEmbedder implements Embedder {
     }
     await checkSpace();
     const loaded = new Map<string, number>();
-    const options = { revision: MODEL_REVISION };
-    const config = await AutoConfig.from_pretrained(MODEL_ID, options);
-    (config as unknown as { audio_config: unknown }).audio_config = null; // images only: skips the audio encoder
-    this.processor = await AutoProcessor.from_pretrained(MODEL_ID, options);
-    this.model = await AutoModel.from_pretrained(MODEL_ID, {
-      ...options,
-      config,
-      device: 'webgpu',
-      dtype: MODEL_DTYPE,
+    // Every file counts, the tokenizer (fetched with the processor) included.
+    const options = {
+      revision: MODEL_REVISION,
       progress_callback: (p: { status: string; file?: string; loaded?: number }) => {
         if (p.status !== 'progress' || !p.file || p.loaded === undefined) return;
         loaded.set(p.file, p.loaded);
@@ -50,7 +44,11 @@ export class TransformersEmbedder implements Embedder {
         for (const bytes of loaded.values()) total += bytes;
         onProgress(Math.min(1, total / MODEL_DOWNLOAD_BYTES));
       },
-    });
+    };
+    const config = await AutoConfig.from_pretrained(MODEL_ID, options);
+    (config as unknown as { audio_config: unknown }).audio_config = null; // images only: skips the audio encoder
+    this.processor = await AutoProcessor.from_pretrained(MODEL_ID, options);
+    this.model = await AutoModel.from_pretrained(MODEL_ID, { ...options, config, device: 'webgpu', dtype: MODEL_DTYPE });
     onProgress(1);
   }
 

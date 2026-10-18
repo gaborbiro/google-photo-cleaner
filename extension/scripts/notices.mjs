@@ -27,6 +27,9 @@ export const LICENCE_TEXTS = {
   'onnxruntime-common': ['licences/onnxruntime.txt'],
 };
 
+/** Licence names for libraries whose package.json doesn't give one as text (checked by hand). */
+export const LICENCE_NAMES = {};
+
 const KOTLIN_STDLIB = 'generated/kotlin/kotlin-kotlin-stdlib.mjs';
 const OWN_KOTLIN = /^generated\/kotlin\/PhotoCleaner-[^/]+\.mjs$/;
 const PACKAGE_DIR = /^(.*node_modules\/(?:@[^/]+\/)?[^/]+)\//;
@@ -72,7 +75,10 @@ export function shippedLibraries(inputs, packages, kotlinVersion) {
     }
     const files = info.licenceFiles.length > 0 ? info.licenceFiles : LICENCE_TEXTS[name];
     if (!files) throw new Error(`${name} has no licence file: add its licence text to licences/ and LICENCE_TEXTS in scripts/notices.mjs`);
-    libraries.set(name, { name, version: info.version, license: info.license, files });
+    // Older packages give it as an object or a list, which would read "[object Object]" in the notices.
+    const license = typeof info.license === 'string' && info.license !== '' ? info.license : LICENCE_NAMES[name];
+    if (!license) throw new Error(`${name}'s package.json gives no licence name as text: check its licence and add it to LICENCE_NAMES in scripts/notices.mjs`);
+    libraries.set(name, { name, version: info.version, license, files });
   }
   return [...libraries.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

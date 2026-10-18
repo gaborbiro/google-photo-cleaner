@@ -59,5 +59,4 @@ export class IndexedDbPreferences {
   async setProtection(account: string, protection: ProtectionChoices): Promise<void> {
     await this.change(account, { protection });
   }
-
 }

@@ -3,6 +3,7 @@
 // analysing the new photos (the analysis, which a finished library scan starts by itself). They
 // are saved as two jobs, each resumable; here they become one card with one button.
 
+import { MODEL_DOWNLOAD_BYTES } from '../ai/model';
 import { SCAN_MAX_AGE_MS } from '../scan/report';
 import { count, n } from './format';
 import type { AnalysisJob, Job, JobKind, ScanJob } from './job';
@@ -147,7 +148,7 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanView
   // The bar fills once for the model download, then again for this run's new photos.
   const percent = p.stage === 'model' ? (p.modelPercent ?? 0) : p.newPhotos ? Math.floor((p.newAnalysed * 100) / p.newPhotos) : null;
   const lines: string[] = [];
-  if (p.stage === 'model') lines.push(`Downloading the AI model (once): ${p.modelPercent ?? 0}% of about 290 MB`);
+  if (p.stage === 'model') lines.push(`Downloading the AI model (once): ${p.modelPercent ?? 0}% of about ${Math.round(MODEL_DOWNLOAD_BYTES / 1e7) * 10} MB`);
   if (p.newPhotos) {
     lines.push(`New photos: ${n(p.newAnalysed)} of ${n(p.newPhotos)} analysed` + (p.failed > 0 ? ` · ${n(p.failed)} could not be fetched (tried again next time)` : ''));
   }

@@ -10,6 +10,7 @@ import { classify, type Classification } from '../../src/app/scan/report';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 import { runScan, type ScanOutcome, type ScanPolicy, type ScanProgress } from '../../src/app/scan/session';
 import { SourceError, type Page, type PhotosSource } from '../../src/app/scan/source';
+import type { OpError, OpResult, PageOp } from '../../src/shared/protocol';
 
 /** Synthetic library item; keys are derived from [index] and never resemble real ones. */
 export function fakeItem(index: number, opts: Partial<Pick<InventoryItem, 'isFavourite' | 'isArchived' | 'isOwned' | 'mediaType'>> = {}): InventoryItem {
@@ -201,7 +202,7 @@ export function standardAccount(): FakePhotos {
   );
 }
 
-/** A trash in memory, standing in for Google Photos' (googleTrash.test tests the real one against a pretend Google). */
+/** A trash in memory, standing in for Google Photos' (googleTrash.test tests the real one against FakeGoogle). */
 export class FakeTrash implements TrashService {
   /** What it holds: `account/dedupKey`. */
   readonly held = new Set<string>();
@@ -218,5 +219,37 @@ export class FakeTrash implements TrashService {
 
   async inTrash(account: string, dedupKeys: string[]): Promise<Map<string, boolean>> {
     return new Map(dedupKeys.map((k) => [k, this.held.has(`${account}/${k}`)]));
+  }
+}
+
+/** Google Photos' trash as the real trash (GoogleTrash) reaches it, read two keys a page; it can be told to fail. */
+export class FakeGoogle {
+  readonly trash = new Set<string>();
+  readonly calls: { op: PageOp; params: Record<string, unknown> }[] = [];
+  /** The next trash or restore request fails like this (after doing its work when [workDone]). */
+  fail: { error: OpError; workDone: boolean } | null = null;
+  /** Reading the trash fails. */
+  unreadable = false;
+
+  run = async (account: string, op: PageOp, params: Record<string, unknown>): Promise<OpResult> => {
+    this.calls.push({ op, params });
+    if (op === 'listTrashPage') {
+      if (this.unreadable) return { ok: false, error: { kind: 'TRANSIENT', message: 'network' } };
+      const all = [...this.trash].sort();
+      const start = typeof params['pageToken'] === 'string' ? Number(params['pageToken']) : 0;
+      const next = start + 2 < all.length ? String(start + 2) : null;
+      return { ok: true, data: { dedupKeys: all.slice(start, start + 2), nextPageToken: next, accountFingerprint: account } };
+    }
+    if (op !== 'moveToTrash' && op !== 'restoreFromTrash') throw new Error(`FakeGoogle does not answer ${op}`);
+    const keys = params['dedupKeys'] as string[];
+    const failure = this.fail;
+    this.fail = null;
+    if (!failure || failure.workDone) for (const k of keys) (op === 'moveToTrash' ? this.trash.add(k) : this.trash.delete(k));
+    return failure ? { ok: false, error: failure.error } : { ok: true, data: { sent: keys.length } };
+  };
+
+  /** The trash and restore requests, oldest first: "moveToTrash: dedup-1,dedup-2". */
+  changes(): string[] {
+    return this.calls.filter((c) => c.op !== 'listTrashPage').map((c) => `${c.op}: ${(c.params['dedupKeys'] as string[]).join(',')}`);
   }
 }

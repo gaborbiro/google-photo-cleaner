@@ -16,7 +16,6 @@ describe('protection choices', () => {
     expect(await preferences.protection('acc2')).toEqual({ favourites: true, albums: true, archived: true });
   });
 
-
   it('with albums unticked, photos protected only by an album become eligible; favourites stay protected', async () => {
     // Photos 1 and 2 are favourites; album A holds 2, 3 and 4, album B 4 and 5.
     const store = newStore();

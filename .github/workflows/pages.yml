@@ -6,7 +6,7 @@ name: Website
 on:
   push:
     branches: [master]
-    paths: ['site/**', 'design/branding-v1/icon-32.png', 'design/branding-v1/icon-128.png', '.github/workflows/pages.yml']
+    paths: ['site/**', 'docs/design/branding-v1/icon-32.png', 'docs/design/branding-v1/icon-128.png', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Site with the brand icons
         run: |
-          cp design/branding-v1/icon-32.png design/branding-v1/icon-128.png site/
+          cp docs/design/branding-v1/icon-32.png docs/design/branding-v1/icon-128.png site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

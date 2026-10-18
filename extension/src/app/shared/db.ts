@@ -22,7 +22,6 @@ export const STORES = {
   decisions: 'decisions',
   /** One job per photo approved for the trash, with its state. */
   trashJobs: 'trashJobs',
-
   /** The user's choices per account (which kinds of photo are protected). */
   preferences: 'preferences',
   /** Per account: how many duplicate groups are waiting for review, as last worked out, for the popup. */

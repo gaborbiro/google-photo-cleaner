@@ -19,7 +19,8 @@ import { endJob, jobId, NO_PROGRESS, reportProgress, startAnalysisJob, startScan
 import type { AccountAnswer } from '../../src/app/shared/messages';
 import { ALL_PROTECTED, IndexedDbPreferences } from '../../src/app/shared/preferences';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
-import { fakeItem, FakePhotos, NOW, scan } from './fakes';
+import type { PageOp } from '../../src/shared/protocol';
+import { fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fakes';
 
 /** Every root a page creates, so each test can take its page down again. */
 const roots = vi.hoisted(() => [] as Root[]);
@@ -35,23 +36,21 @@ let account: AccountAnswer;
 /** What the pages asked the background page, in order. */
 let sent: { kind: string; [key: string]: unknown }[];
 let eraseAnswer: { ok?: true; error?: string };
-/** What Google Photos' trash holds (dedup keys). */
-let googleTrash: Set<string>;
+/** Google Photos' trash. */
+let google: FakeGoogle;
 let errors: MockInstance;
 
 /** Chrome's side of the extension: the background page answers who is signed in, previews, and Google Photos' trash. */
 function pretendExtension() {
   vi.stubGlobal('chrome', {
     runtime: {
-      sendMessage: async (request: { kind: string; op?: string; account?: string; params?: { dedupKeys?: string[] } }) => {
+      sendMessage: async (request: { kind: string; op?: PageOp; account?: string; params?: Record<string, unknown> }) => {
         sent.push(request);
         if (request.kind === 'app-account') return account;
         if (request.kind === 'app-erase-all') return eraseAnswer;
         if (request.kind === 'app-run-op' && request.op === 'fetchPreview') return { ok: true, data: { contentType: 'image/jpeg', base64: 'AAAA' } };
-        if (request.kind === 'app-run-op' && request.op === 'listTrashPage') return { ok: true, data: { dedupKeys: [...googleTrash], nextPageToken: null, accountFingerprint: request.account } };
-        if (request.kind === 'app-run-op' && (request.op === 'moveToTrash' || request.op === 'restoreFromTrash')) {
-          for (const k of request.params!.dedupKeys!) (request.op === 'moveToTrash' ? googleTrash.add(k) : googleTrash.delete(k));
-          return { ok: true, data: { sent: request.params!.dedupKeys!.length } };
+        if (request.kind === 'app-run-op' && (request.op === 'listTrashPage' || request.op === 'moveToTrash' || request.op === 'restoreFromTrash')) {
+          return google.run(request.account!, request.op, request.params ?? {});
         }
         return undefined;
       },
@@ -134,7 +133,7 @@ beforeEach(() => {
   account = SIGNED_IN;
   sent = [];
   eraseAnswer = { ok: true };
-  googleTrash = new Set();
+  google = new FakeGoogle();
   pretendExtension();
   pretendLayout();
   localStorage.clear();
@@ -271,12 +270,12 @@ describe('clicks and keys reach what they should', () => {
     press('d');
     await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(0));
     expect(await decisions()).toMatchObject([{ kind: 'APPROVED', items: [{ mediaKey: 'lib-1' }] }]);
-    await vi.waitFor(() => expect([...googleTrash]).toEqual(['dedup-1']), { timeout: 6_000 });
+    await vi.waitFor(() => expect([...google.trash]).toEqual(['dedup-1']), { timeout: 6_000 });
 
     press('z');
     await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(3));
     expect(await decisions()).toEqual([]);
-    await vi.waitFor(() => expect(googleTrash.size).toBe(0), { timeout: 6_000 });
+    await vi.waitFor(() => expect(google.trash.size).toBe(0), { timeout: 6_000 });
   }, 20_000);
 
   it('Duplicates: F keeps all, the S · Skip button skips, the Z · Undo button undoes', async () => {

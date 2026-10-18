@@ -59,7 +59,8 @@ Finds duplicate and unwanted photos in Google Photos with on-device AI. Your pho
 >
 > What you need
 > • Chrome on a Windows or Mac desktop or laptop, with a graphics card from about 2017 or later.
-> • Around 1.5 GB of free disk space for the AI model, downloaded once from Hugging Face.
+> • About 450 MB of free disk space: the AI model (about 320 MB, downloaded once from Hugging Face)
+>   and the analysis of your photos.
 > • The first analysis takes a while for a big library (about an hour for 17,000 photos on a good
 >   graphics card). It runs in the background, and you can start reviewing straight away.
 >
@@ -70,7 +71,7 @@ Finds duplicate and unwanted photos in Google Photos with on-device AI. Your pho
 
 **Language:** English.
 
-**Graphics** (in `design/branding-v1/`):
+**Graphics** (in `docs/design/branding-v1/`):
 
 | Field | File | Notes |
 |---|---|---|
@@ -91,7 +92,7 @@ Find duplicate and unwanted photos in the user's Google Photos library and move 
 
 | Permission | Justification |
 |---|---|
-| `unlimitedStorage` | Keeps the AI model's files (0.3–0.9 GB) and the per-photo analysis of libraries with tens of thousands of photos on the computer, so they are not evicted and downloaded or analysed again. |
+| `unlimitedStorage` | Keeps the AI model's files (about 320 MB) and the per-photo analysis (tens of MB for libraries with tens of thousands of photos) on the computer, so they are not evicted and downloaded or analysed again. |
 | `offscreen` | Runs the library scan and the AI analysis in a hidden extension page, so a scan of a large library (often over an hour) keeps going when the user closes the panel or the review tab. |
 | `scripting` | After installing or updating, adds Photo Cleaner's panel to photos.google.com tabs that were already open, so the user does not have to reload them. |
 | `idle` | Slows the analysis down while the user is using the computer and runs at full speed when they are away, so the AI does not make the computer sluggish. |
@@ -118,7 +119,7 @@ in the roadmap).
 
 > Photo Cleaner needs a Google account with some photos in Google Photos. Open photos.google.com, then
 > click the extension's icon and press "Scan" in the panel on the right. Stage 1 lists the library;
-> stage 2 downloads the AI model (about 300 MB from Hugging Face) and analyses the photos on the
+> stage 2 downloads the AI model (about 320 MB from Hugging Face) and analyses the photos on the
 > graphics card (WebGPU). "Open review" opens the Duplicates and Search tabs.
 >
 > Approved photos go to Google Photos' trash, where they stay for 60 days; Undo (Z) brings them back.

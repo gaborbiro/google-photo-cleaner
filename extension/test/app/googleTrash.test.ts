@@ -8,34 +8,7 @@ import { GoogleTrash, REST_AFTER_RATE_LIMIT_MS } from '../../src/app/duplicates/
 import { IndexedDbReviewStore } from '../../src/app/duplicates/reviewStore';
 import { processTrashQueue, type TrashQueueDeps } from '../../src/app/duplicates/trash';
 import { INCOMPATIBLE_TEXT } from '../../src/app/shared/googleProblems';
-import type { OpError, OpResult, PageOp } from '../../src/shared/protocol';
-import { classifyLatest, fakeItem, FakePhotos, newStore, NOW, scan } from './fakes';
-
-/** Google Photos' trash for one account, read two keys a page. */
-class FakeGoogle {
-  readonly trash = new Set<string>();
-  readonly calls: { op: PageOp; params: Record<string, unknown> }[] = [];
-  /** The next trash or restore request fails like this (after doing its work when [workDone]). */
-  fail: { error: OpError; workDone: boolean } | null = null;
-  /** Reading the trash fails. */
-  unreadable = false;
-
-  run = async (account: string, op: PageOp, params: Record<string, unknown>): Promise<OpResult> => {
-    this.calls.push({ op, params });
-    if (op === 'listTrashPage') {
-      if (this.unreadable) return { ok: false, error: { kind: 'TRANSIENT', message: 'network' } };
-      const all = [...this.trash].sort();
-      const start = typeof params['pageToken'] === 'string' ? Number(params['pageToken']) : 0;
-      const next = start + 2 < all.length ? String(start + 2) : null;
-      return { ok: true, data: { dedupKeys: all.slice(start, start + 2), nextPageToken: next, accountFingerprint: account } };
-    }
-    const keys = params['dedupKeys'] as string[];
-    const failure = this.fail;
-    this.fail = null;
-    if (!failure || failure.workDone) for (const k of keys) (op === 'moveToTrash' ? this.trash.add(k) : this.trash.delete(k));
-    return failure ? { ok: false, error: failure.error } : { ok: true, data: { sent: keys.length } };
-  };
-}
+import { classifyLatest, fakeItem, FakeGoogle, FakePhotos, newStore, NOW, scan } from './fakes';
 
 const target = (i: number) => ({ mediaKey: `lib-${i}`, dedupKey: `dedup-${i}` });
 

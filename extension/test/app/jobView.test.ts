@@ -44,7 +44,7 @@ describe('one Scan in two stages', () => {
   it('stage 2 analyses the new photos: the bar fills for the model download, then for the photos', () => {
     const downloading = scanView(scanned, reportProgress(analysing, { ...NO_ANALYSIS, stage: 'model', modelPercent: 42, photos: 17_202 }, 1), NOW);
     expect(downloading).toMatchObject({ title: 'Scanning', stage: 'Stage 2 of 2 · Getting the AI model ready (once)', percent: 42, target: 'analysis' });
-    expect(downloading.lines[0]).toBe('Downloading the AI model (once): 42% of about 290 MB');
+    expect(downloading.lines[0]).toBe('Downloading the AI model (once): 42% of about 320 MB');
     const view = scanView(scanned, analysing, NOW);
     expect(view).toMatchObject({ title: 'Scanning', stage: 'Stage 2 of 2 · Analysing new photos', percent: 24, action: 'pause', target: 'analysis', fullSpeed: false, indeterminate: false });
     expect(view.lines).toEqual(['New photos: 4,300 of 17,202 analysed', '5.7 photos/s over the last minute · about 38 min left', 'Detail 140']);

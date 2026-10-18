@@ -191,7 +191,6 @@ export class SearchModel {
   private loadingModel = false;
   private modelPercent: number | null = null;
   private confirming = false;
-
   private notice: Notice | null = null;
   private sequence = 0;
   private resultsVersion = 0;
@@ -411,7 +410,6 @@ export class SearchModel {
     this.rangeStart = null;
     this.allFocused = false;
   }
-
 
   gridMeasured(columns: number): void {
     this.columns = Math.max(1, columns);

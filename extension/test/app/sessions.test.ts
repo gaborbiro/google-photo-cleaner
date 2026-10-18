@@ -6,12 +6,11 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
 import { modelKey } from '../../src/app/ai/model';
-import type { RunPageOp } from '../../src/app/duplicates/googleTrash';
 import { duplicatesStores, refreshReviewSummary, reviewDeps, trashQueueDeps, trashQueuePass } from '../../src/app/duplicates/session';
 import { processTrashQueue } from '../../src/app/duplicates/trash';
 import { searchDeps, searchStores } from '../../src/app/search/session';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
-import { fakeItem, FakePhotos, NOW, scan } from './fakes';
+import { fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fakes';
 
 /** A unit vector at [degrees]: photos 3° apart are 99.9% similar. */
 const at = (degrees: number) => Float32Array.from([Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)]);
@@ -22,24 +21,10 @@ const NO_FAVOURITES = { ...ALL_PROTECTED, favourites: false };
  * Six photos, scanned and analysed, in one database that both Search and Duplicates use. Photos
  * 0–2 are a burst (near-identical); photo 0 is a favourite.
  */
-/** Google Photos' trash, as the real trash reaches it: what was sent, and what is in it. */
-function pretendGoogle() {
-  const trash = new Set<string>();
-  const sent: string[] = [];
-  const run: RunPageOp = async (account, op, params) => {
-    if (op === 'listTrashPage') return { ok: true, data: { dedupKeys: [...trash], nextPageToken: null, accountFingerprint: account } };
-    const keys = params['dedupKeys'] as string[];
-    sent.push(`${op}: ${keys.join(',')}`);
-    for (const k of keys) (op === 'moveToTrash' ? trash.add(k) : trash.delete(k));
-    return { ok: true, data: { sent: keys.length } };
-  };
-  return { trash, sent, run };
-}
-
 async function library() {
   const factory = new IDBFactory();
   const search = searchStores(factory);
-  const google = pretendGoogle();
+  const google = new FakeGoogle();
   const duplicates = duplicatesStores(factory, google.run);
   const source = new FakePhotos(Array.from({ length: 6 }, (_, i) => fakeItem(i, { isFavourite: i === 0 })));
   await scan(source, search.inventory);
@@ -145,12 +130,12 @@ describe("Google Photos' trash", () => {
     const { search, review, queuePass, google } = await library();
     await search.sweep(['lib-3', 'lib-4']);
     expect(await queuePass()).toMatchObject({ counts: { COMPLETED: 2 } });
-    expect(google.sent).toEqual(['moveToTrash: dedup-3,dedup-4']);
+    expect(google.changes()).toEqual(['moveToTrash: dedup-3,dedup-4']);
     expect([...google.trash].sort()).toEqual(['dedup-3', 'dedup-4']);
 
     await review.undo();
     expect(await queuePass()).toMatchObject({ counts: { RESTORED: 2 } });
     expect(google.trash.size).toBe(0);
-    expect(google.sent).toEqual(['moveToTrash: dedup-3,dedup-4', 'restoreFromTrash: dedup-3,dedup-4']);
+    expect(google.changes()).toEqual(['moveToTrash: dedup-3,dedup-4', 'restoreFromTrash: dedup-3,dedup-4']);
   });
 });

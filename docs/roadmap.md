@@ -199,7 +199,8 @@ grows into the product; a new shared Kotlin module holds the tested rules, compi
       fallback probably far too slow for big libraries; measure in M3)
 - Provisional minimum: Chrome/Edge/Brave from 2023 or later (WebGPU, Chrome 113+); Windows 10/11, macOS
   or ChromeOS (Linux depends on the graphics card); graphics from ~2017 or later (Intel/AMD built-in,
-  NVIDIA, Apple M1+); 8 GB RAM (16 comfortable); ~1.5 GB free disk
+  NVIDIA, Apple M1+); 8 GB RAM (16 comfortable); ~450 MB free disk (the 4-bit model is 316 MB, measured
+  2026-10-18; the app asks for 1.3× that free before downloading)
 - Mac: the same extension package runs in Chrome/Edge/Brave/Arc on macOS (WebGPU over Apple's Metal);
   Safari would need a separately packaged app: out of scope
 

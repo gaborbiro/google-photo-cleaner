@@ -257,7 +257,10 @@ Testing
 - [ ] Microsoft Edge Add-ons listing
 - [ ] Website: landing page with "Add to Chrome", demo, privacy promise
 - [ ] Direct download on the website (zip + "Load unpacked" steps for Chrome; signed file for Firefox if we support it)
-- [ ] Pricing: free, paid, or free with a paid tier (one competitor: US$9.99 once)
+- [x] Pricing (decided 2026-10-18): the core (scan, duplicates, search, trash) is free for good;
+      optional paid extras may come later, which ones still to decide. Payments through an outside
+      service with a licence check in the extension (the Chrome Web Store no longer handles payments).
+      One competitor: US$9.99 once
 - [ ] Before each release: go through `docs/extension-manual-checks.md` (on the extension branch
       until merged) in Chrome, Edge and Brave
 - [ ] Error reports with Firebase (I know it best). Chrome extensions may not load code from the

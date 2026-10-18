@@ -36,6 +36,10 @@ Find and trash duplicate photos in Google Photos with on-device AI. Free and pri
 > Photo Cleaner finds duplicates and clutter in large Google Photos libraries, and moves the photos you
 > approve to Google Photos' trash.
 >
+> Free to use
+> • Finding and trashing duplicates and searching your library will always be free.
+> • If paid extras come later, they'll be optional additions. Nothing you can do today will be taken away.
+>
 > Private by design
 > • The AI runs on your own computer's graphics card. Your photos are never uploaded anywhere.
 > • No account, no server, no analytics. Everything Photo Cleaner learns about your library stays in

@@ -4,8 +4,9 @@
 // are saved as two jobs, each resumable; here they become two visible steps with one button.
 
 import { MODEL_DOWNLOAD_BYTES } from '../ai/model';
-import { SCAN_MAX_AGE_MS } from '../scan/report';
+import { SCAN_MAX_AGE_MS, type ReportView } from '../scan/report';
 import { count, n } from './format';
+import { googleProblemLine } from './googleProblems';
 import type { AnalysisJob, Job, JobKind, ScanJob } from './job';
 import type { AccountAnswer, ReviewTab } from './messages';
 import type { ReviewSummary } from '../duplicates/reviewStore';
@@ -58,6 +59,11 @@ export interface ScanStepView {
   phase: string | null;
   /** "Detail 140", the AI analysis's level of detail: shown quietly beside the protection details' scan times. */
   detailText: string | null;
+  /**
+   * In the protection details and their copied report: Google's details behind the scan's or the
+   * analysis's stop, for a support request ("For support: analysis: preview · PROTOCOL · …").
+   */
+  supportLines: string[];
   lines: string[];
   percent: number | null;
   indeterminate: boolean;
@@ -226,6 +232,9 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
   const library = scan ? readingView(scan, false) : null;
   const detail = analysis?.progress.detail;
   const detailText = detail !== undefined && detail !== null ? `Detail ${detail}` : null;
+  const supportLines = [scan?.progress.googleProblem, analysis?.progress.googleProblem]
+    .filter((problem) => problem !== undefined && problem !== null)
+    .map(googleProblemLine);
   return [
     {
       ...NONE,
@@ -236,6 +245,7 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       statusText: STEP_STATUS[libraryState],
       phase: null,
       detailText,
+      supportLines,
       // Once read, the report supplies the final counts; don't keep the live counters above it.
       lines: libraryReady ? [] : library?.lines ?? [],
       indeterminate: scan?.status === 'running',
@@ -252,6 +262,7 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       statusText: analysisReady ? STEP_STATUS[analysisState] : scan ? 'Up next' : 'Not started',
       phase: analysisReady && analysis.status !== 'finished' ? ANALYSIS_PHASES[analysis.progress.stage ?? 'analysing'] : null,
       detailText: null,
+      supportLines: [],
       lines: analysisReady ? (analysis.status === 'finished' ? [summary.lines[0]] : summary.lines) : [],
       percent: analysisReady ? summary.percent : null,
       waiting: analysisReady ? summary.waiting : 'Starts automatically after step 1.',
@@ -259,6 +270,11 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       fullSpeed: analysis?.fullSpeed ?? false,
     },
   ];
+}
+
+/** What Copy report copies: the protection report, then Google's details behind a stop, if any. */
+export function copyReportText(report: ReportView, step: ScanStepView): string {
+  return [report.copyText, ...step.supportLines].join('\n');
 }
 
 // --- the review tab's page ---

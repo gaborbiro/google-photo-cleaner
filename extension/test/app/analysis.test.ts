@@ -200,6 +200,8 @@ describe('AI analysis', () => {
       const { outcome, progress } = await analyse(env, new FakeEmbedder(clock, 100), clock);
       expect(outcome).toEqual({ kind: 'paused', reason: INCOMPATIBLE_TEXT, untilPhotosOpen: false });
       expect(progress.at(-1)?.failed ?? 0).toBe(0);
+      // Saved with the job, for a support request.
+      expect(progress.at(-1)?.googleProblem).toEqual({ where: `analysis: ${op}`, kind, message: 'shape changed', rpcCode: null, httpStatus: null });
     }
   });
 

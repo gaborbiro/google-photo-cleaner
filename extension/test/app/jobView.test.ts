@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
 import { endJob, NO_PROGRESS, pauseJob, reportProgress, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
-import { accountLabel, checkedText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView } from '../../src/app/shared/jobView';
+import type { ReportView } from '../../src/app/scan/report';
+import { accountLabel, checkedText, copyReportText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView } from '../../src/app/shared/jobView';
 import { requestedReviewTab, reviewUrl } from '../../src/app/shared/messages';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
@@ -85,6 +86,21 @@ describe('one Scan in two stages', () => {
       expect(scanView(scanned, job, NOW, 'tab').fullSpeed).toBe(true);
       expect(scanView(scanned, pauseJob(job, NOW), NOW, 'tab').fullSpeed).toBe(true);
     }
+  });
+
+  it("Google's details behind a stop go to step 1's protection details and its copied report, for a support request", () => {
+    expect(scanView(scanned, analysing, NOW, 'tab').steps[0].supportLines).toEqual([]);
+    const problem = { where: 'analysis: preview', kind: 'PROTOCOL' as const, message: 'Preview response is not an image', rpcCode: 3, httpStatus: 400 };
+    const stopped = endJob(reportProgress(analysing, { ...analysing.progress, googleProblem: problem }, 1), 'paused', 'Not understood.', NOW);
+    const [library, analysis] = scanView(scanned, stopped, NOW, 'tab').steps;
+    const line = 'For support: analysis: preview · PROTOCOL · Preview response is not an image · code 3 · HTTP 400';
+    expect(library.supportLines).toEqual([line]);
+    expect(analysis.supportLines).toEqual([]);
+    expect(copyReportText({ copyText: 'Protection coverage complete' } as ReportView, library)).toBe(`Protection coverage complete\n${line}`);
+    // Saved before the details existed: nothing to show.
+    const { googleProblem: _, ...older } = stopped.progress;
+    expect(scanView(scanned, { ...stopped, progress: older }, NOW, 'tab').steps[0].supportLines).toEqual([]);
+    expect(copyReportText({ copyText: 'Report' } as ReportView, scanView(scanned, analysing, NOW, 'tab').steps[0])).toBe('Report');
   });
 
   it('a paused or stopped stage 1 is resumed or started again', () => {

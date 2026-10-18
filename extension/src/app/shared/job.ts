@@ -53,6 +53,7 @@ export const NO_PROGRESS: ScanProgress = {
   albumsFailed: 0,
   libraryReachedMs: null,
   notice: null,
+  googleProblem: null,
 };
 
 export function jobId(kind: JobKind, account: string): string {
@@ -88,8 +89,9 @@ export function pauseJob<J extends Job>(job: J, nowMs: number): J {
   return job.status === 'paused' && job.resumeWhenPhotosOpen ? { ...job, resumeWhenPhotosOpen: false, updatedAtMs: nowMs } : job;
 }
 
+/** Resumed: why it stopped, and Google's details behind it, no longer apply. */
 export function resumeJob<J extends Job>(job: J, nowMs: number): J {
-  return job.status === 'paused' ? { ...job, status: 'running', resumeWhenPhotosOpen: false, progress: { ...job.progress, notice: null }, updatedAtMs: nowMs } : job;
+  return job.status === 'paused' ? { ...job, status: 'running', resumeWhenPhotosOpen: false, progress: { ...job.progress, notice: null, googleProblem: null }, updatedAtMs: nowMs } : job;
 }
 
 /** Google Photos is open and signed in to [account] again: a job that paused only for want of it carries on. */

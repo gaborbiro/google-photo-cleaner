@@ -74,6 +74,17 @@ describe('runOp', () => {
     expect(result).toMatchObject({ ok: false, error: { kind: 'SESSION' } });
   });
 
+  it('a preview whose download breaks off is a network problem, not a changed answer', async () => {
+    const preview = (body: () => Promise<ArrayBuffer>) => env(() => '', {
+      fetcher: async (url) => ({ ok: true, status: 200, url, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: body }) as Response,
+    });
+    const params = { thumbUrl: 'https://lh3.googleusercontent.com/ABC', sizePx: 224 };
+    expect(await runOp(preview(async () => Uint8Array.of(1, 2, 3).buffer), 'fetchPreview', params))
+      .toEqual({ ok: true, data: { contentType: 'image/jpeg', byteLength: 3, base64: 'AQID' } });
+    expect(await runOp(preview(async () => { throw new TypeError('network error'); }), 'fetchPreview', params))
+      .toMatchObject({ ok: false, error: { kind: 'TRANSIENT' } });
+  });
+
   it('never sends the account e-mail or session token back', async () => {
     const result = await runOp(env(() => envelope('lcxiM', timelinePayload([rawLibraryItem()], null))), 'listLibraryPage', { includeShape: true });
     const text = JSON.stringify(result);

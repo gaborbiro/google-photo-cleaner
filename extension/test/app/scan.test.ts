@@ -332,18 +332,21 @@ describe('library scan', () => {
     const store = newStore();
     const source = standardAccount();
     source.failure = (op) => (op === 'albums' ? new SourceError('PROTOCOL', 'shape changed') : null);
-    const { outcome } = await scan(source, store);
+    const { outcome, progress } = await scan(source, store);
     expect(outcome).toEqual({ kind: 'failed', reason: INCOMPATIBLE_TEXT });
     expect((await store.latestRun('account-a'))!.status).toBe('FAILED');
     expect(eligibleIndexes(await classifyLatest(store))).toEqual([]);
+    // Saved with the job, for a support request.
+    expect(progress.at(-1)!.googleProblem).toEqual({ where: 'scan: album list', kind: 'PROTOCOL', message: 'shape changed', rpcCode: null, httpStatus: null });
   });
 
   it('an error code Google keeps returning pauses the scan, saying nothing was changed', async () => {
     const store = newStore();
     const source = standardAccount();
     source.failure = (op) => (op === 'library' ? new SourceError('RPC_ERROR', 'RPC lcxiM returned error code 3', null, 3) : null);
-    const { outcome } = await scan(source, store);
+    const { outcome, progress } = await scan(source, store);
     expect(outcome).toEqual({ kind: 'paused', reason: refusedText('library', 3), untilPhotosOpen: false });
+    expect(progress.at(-1)!.googleProblem).toMatchObject({ where: 'scan: library', kind: 'RPC_ERROR', rpcCode: 3 });
     expect(refusedText('library', 3)).toBe('Google Photos keeps refusing to send your library (code 3). Nothing in your library was changed. Try again later; if it keeps happening, check for a Photo Cleaner update.');
     expect(eligibleIndexes(await classifyLatest(store))).toEqual([]);
   });

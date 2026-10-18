@@ -6,7 +6,7 @@
 
 import type { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { plainMessage } from '../shared/errors';
-import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, PREVIEWS_STOPPED_TEXT, refusedText } from '../shared/googleProblems';
+import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, PREVIEWS_STOPPED_TEXT, refusedText, type GoogleProblem } from '../shared/googleProblems';
 import { SourceError, waitingForPhotosText, waitsForPhotos, type AnalysisSource, type LibraryPhoto, type Preview } from '../scan/source';
 import type { IndexedDbAnalysisStore } from './analysisStore';
 import { chooseDetail, FALLBACK_DETAIL, modelKey, PREFERRED_DETAIL, PREVIEW_SIZE_PX, SPEED_CHECK_PHOTOS, type Detail } from './model';
@@ -44,11 +44,13 @@ export interface AnalysisProgress {
   /** Why it is going slower or waiting right now (gentle mode); null at full speed. */
   waiting: string | null;
   notice: string | null;
+  /** When Google's answer stopped it, the details for a support request (absent in jobs saved before this existed). */
+  googleProblem?: GoogleProblem | null;
 }
 
 export const NO_ANALYSIS: AnalysisProgress = {
   stage: null, modelPercent: null, photos: 0, analysed: 0, newPhotos: null, newAnalysed: 0, failed: 0, photosPerSecond: null, etaSeconds: null, perPhotoMs: null,
-  detail: null, speedCheckText: null, waiting: null, notice: null,
+  detail: null, speedCheckText: null, waiting: null, notice: null, googleProblem: null,
 };
 
 export type AnalysisOutcome =
@@ -86,7 +88,7 @@ export interface AnalysisDeps {
 }
 
 class Pause extends Error {
-  constructor(message: string, readonly untilPhotosOpen = false) {
+  constructor(message: string, readonly untilPhotosOpen = false, readonly googleProblem: GoogleProblem | null = null) {
     super(message);
   }
 }
@@ -165,7 +167,7 @@ class AnalysisSession {
     } catch (e) {
       if (e instanceof UserStop) return { kind: 'stopped' };
       if (e instanceof Pause) {
-        this.progress = { ...this.progress, notice: e.message, waiting: null };
+        this.progress = { ...this.progress, notice: e.message, waiting: null, googleProblem: e.googleProblem };
         await this.emit(true);
         return { kind: 'paused', reason: e.message, untilPhotosOpen: e.untilPhotosOpen };
       }
@@ -325,8 +327,7 @@ class AnalysisSession {
             throw new Pause(waitingForPhotosText(e), true);
           case 'PROTOCOL':
           case 'BAD_REQUEST':
-            logGoogleProblem('analysis: preview', e);
-            throw new Pause(INCOMPATIBLE_TEXT);
+            throw new Pause(INCOMPATIBLE_TEXT, false, logGoogleProblem('analysis: preview', e));
           default: // this photo's preview is missing, or the network hiccuped: counted as failed, tried next time
             return null;
         }
@@ -352,15 +353,11 @@ class AnalysisSession {
       } catch (e) {
         if (!(e instanceof SourceError)) throw e;
         if (waitsForPhotos(e)) throw new Pause(waitingForPhotosText(e), true);
-        if (isIncompatible(e.kind)) {
-          logGoogleProblem('analysis: library', e);
-          throw new Pause(INCOMPATIBLE_TEXT);
-        }
+        if (isIncompatible(e.kind)) throw new Pause(INCOMPATIBLE_TEXT, false, logGoogleProblem('analysis: library', e));
         if (attempt >= MAX_PAGE_ATTEMPTS) {
           if (e.kind === 'RATE_LIMIT') throw new Pause('Google is limiting requests. Resume the analysis later.');
           if (e.kind === 'TRANSIENT') throw new Pause('Google Photos could not be reached. Resume when the connection is back.');
-          logGoogleProblem('analysis: library', e);
-          throw new Pause(refusedText('library', e.rpcCode ?? e.httpStatus));
+          throw new Pause(refusedText('library', e.rpcCode ?? e.httpStatus), false, logGoogleProblem('analysis: library', e));
         }
         await this.sleep(5_000 * attempt);
       }

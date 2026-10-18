@@ -10,7 +10,7 @@ import {
   normalizeTimelinePage,
   normalizeTrashPage,
 } from './normalize';
-import { callRpc, OpFailure, readSessionTokens, type Fetcher, type SessionTokens } from './rpc';
+import { callRpc, OpFailure, readBody, readSessionTokens, type Fetcher, type SessionTokens } from './rpc';
 import { skeleton } from './skeleton';
 
 export interface PageEnvironment {
@@ -103,7 +103,7 @@ async function fetchPreview(env: PageEnvironment, params: Record<string, unknown
   if (!contentType.startsWith('image/')) {
     throw new OpFailure({ kind: 'PREVIEW_UNAVAILABLE', message: 'Preview response is not an image' });
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const bytes = new Uint8Array(await readBody(() => response.arrayBuffer(), 'a preview'));
   return { contentType, byteLength: bytes.length, base64: toBase64(bytes) };
 }
 

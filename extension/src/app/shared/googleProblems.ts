@@ -61,12 +61,44 @@ export function previewProblem(where: string, error: unknown): string {
   return previewProblemText(null);
 }
 
-/** The details behind an INCOMPATIBLE_TEXT or refusedText, for whoever fixes it. Never photo data. */
-export function logGoogleProblem(where: string, error: { kind: ErrorKind; message: string; rpcCode?: number | null; httpStatus?: number | null }): void {
-  console.warn(`Photo Cleaner: unexpected answer from Google Photos (${where})`, {
+/**
+ * The details behind an INCOMPATIBLE_TEXT or refusedText, for whoever fixes it: saved with the job
+ * that stopped, so the user can copy them into a support request. Never photo data.
+ */
+export interface GoogleProblem {
+  /** Which request, e.g. "analysis: preview" or "scan: album list". */
+  where: string;
+  kind: ErrorKind;
+  message: string;
+  rpcCode: number | null;
+  httpStatus: number | null;
+}
+
+/**
+ * Anything in a message that could be an address or an ID (a photo's, an album's, a token) is cut
+ * out: the messages are fixed texts, except an unexpected error's own, which could quote anything.
+ */
+function scrubbed(message: string): string {
+  return message.replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, '…').replace(/[A-Za-z0-9_-]{20,}/g, '…');
+}
+
+/** Logs the details of a changed or refused answer from Google, and returns them for saving with the job. */
+export function logGoogleProblem(where: string, error: { kind: ErrorKind; message: string; rpcCode?: number | null; httpStatus?: number | null }): GoogleProblem {
+  const problem: GoogleProblem = {
+    where,
     kind: error.kind,
-    message: error.message,
+    message: scrubbed(error.message),
     rpcCode: error.rpcCode ?? null,
     httpStatus: error.httpStatus ?? null,
-  });
+  };
+  console.warn(`Photo Cleaner: unexpected answer from Google Photos (${where})`, problem);
+  return problem;
+}
+
+/** "For support: analysis: preview · PROTOCOL · Item with an unexpected mediaKey · code 3 · HTTP 400". */
+export function googleProblemLine(problem: GoogleProblem): string {
+  return ['For support: ' + problem.where, problem.kind, problem.message,
+    ...(problem.rpcCode !== null ? [`code ${problem.rpcCode}`] : []),
+    ...(problem.httpStatus !== null ? [`HTTP ${problem.httpStatus}`] : []),
+  ].join(' · ');
 }

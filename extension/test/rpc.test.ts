@@ -80,6 +80,11 @@ describe('callRpc', () => {
     expect(await kindOfAsync(callRpc('lcxiM', [], tokens, '/', fetcher))).toBe('TRANSIENT');
   });
 
+  it('treats a connection lost while the answer comes in as transient, not as a changed answer', async () => {
+    const fetcher = respond(200, '', { text: async () => { throw new TypeError('network error'); } });
+    expect(await kindOfAsync(callRpc('lcxiM', [], tokens, '/', fetcher))).toBe('TRANSIENT');
+  });
+
   it('posts to the batchexecute endpoint of the signed-in path', async () => {
     let seenUrl = '';
     let seenRequest: RequestInit = {};

@@ -33,6 +33,13 @@ describe('job life cycle', () => {
     expect(resumeJob(paused, 4_000)).toMatchObject({ status: 'running', progress: { notice: null } });
   });
 
+  it("resuming clears Google's details behind the last stop, so an old problem isn't reported again", () => {
+    const problem = { where: 'scan: library', kind: 'PROTOCOL' as const, message: 'Library item has 18 fields, expected 16 or 17', rpcCode: null, httpStatus: null };
+    const stopped = endJob(reportProgress(started, { ...progress, googleProblem: problem }, 2_000), 'paused', 'Not understood.', 3_000);
+    expect(stopped.progress.googleProblem).toEqual(problem);
+    expect(resumeJob(stopped, 4_000).progress.googleProblem).toBeNull();
+  });
+
   it('a job paused for want of Google Photos carries on when Photos of its account is back, and only then', () => {
     const waiting = endJob(started, 'paused', 'Google Photos was closed.', 3_000, true);
     expect(waiting).toMatchObject({ status: 'paused', resumeWhenPhotosOpen: true });

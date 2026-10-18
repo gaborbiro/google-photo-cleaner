@@ -148,5 +148,18 @@ export async function callRpc(
             : 'RPC_ERROR';
     throw new OpFailure({ kind, message: `HTTP ${status} from ${rpcid}`, httpStatus: status });
   }
-  return decodeEnvelope(rpcid, await response.text());
+  return decodeEnvelope(rpcid, await readBody(() => response.text(), rpcid));
+}
+
+/**
+ * The body of a response whose headers already arrived. The connection can still drop while the body
+ * comes in (a network blip, the computer going to sleep): that is a network error like a failed
+ * fetch, not a changed answer from Google.
+ */
+export async function readBody<T>(read: () => Promise<T>, what: string): Promise<T> {
+  try {
+    return await read();
+  } catch {
+    throw new OpFailure({ kind: 'TRANSIENT', message: `Connection lost while reading the answer to ${what}` });
+  }
 }

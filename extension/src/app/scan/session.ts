@@ -5,7 +5,7 @@
 
 import type { IndexedDbInventoryStore } from './inventoryStore';
 import type { AlbumStatus, ScanPhase, ScanRun } from './model';
-import { INCOMPATIBLE_TEXT, logGoogleProblem, refusedText } from '../shared/googleProblems';
+import { INCOMPATIBLE_TEXT, logGoogleProblem, refusedText, type GoogleProblem } from '../shared/googleProblems';
 import { SourceError, waitingForPhotosText, waitsForPhotos, type PhotosSource } from './source';
 
 export interface ScanPolicy {
@@ -38,6 +38,8 @@ export interface ScanProgress {
   libraryReachedMs: number | null;
   /** Something the user should know right now (a retry, a reset); null when all is well. */
   notice: string | null;
+  /** When Google's answer stopped it, the details for a support request (absent in jobs saved before this existed). */
+  googleProblem?: GoogleProblem | null;
 }
 
 export type ScanOutcome =
@@ -93,6 +95,7 @@ class ScanSession {
   private run!: ScanRun;
   private phase: ScanPhase | null = null;
   private notice: string | null = null;
+  private googleProblem: GoogleProblem | null = null;
   private libraryReachedMs: number | null = null;
 
   constructor(private readonly deps: ScanDeps) {
@@ -286,7 +289,7 @@ class ScanSession {
         if (!(e instanceof RpcFailed)) throw e;
         if (!usingSavedToken) {
           if (phase === 'ALBUM_MEMBERS') throw e;
-          logGoogleProblem(`scan: ${label}`, e.error);
+          this.googleProblem = logGoogleProblem(`scan: ${label}`, e.error);
           throw new ScanStop('paused', refusedText(label, e.error.rpcCode ?? e.error.httpStatus), e.error);
         }
         this.notice = `The saved position in the ${label} expired; reading it again from the start.`;
@@ -347,7 +350,7 @@ class ScanSession {
           case 'PROTOCOL':
           case 'BAD_REQUEST':
           case 'PREVIEW_UNAVAILABLE': // a listing never fetches previews
-            logGoogleProblem(`scan: ${label}`, e);
+            this.googleProblem = logGoogleProblem(`scan: ${label}`, e);
             throw new ScanStop('failed', INCOMPATIBLE_TEXT, e);
         }
       }
@@ -385,6 +388,7 @@ class ScanSession {
       albumsFailed: albums.filter((a) => a.failureReason !== null).length,
       libraryReachedMs: this.phase === 'LIBRARY' ? this.libraryReachedMs : null,
       notice: this.notice,
+      googleProblem: this.googleProblem,
     });
   }
 

@@ -495,6 +495,38 @@ describe('clicks and keys reach what they should', () => {
     expect(library.querySelector('details')!.open).toBe(false);
   });
 
+  it("review: after Google's answer stopped the analysis, the protection details show the details for support, and Copy report copies them", async () => {
+    await scannedAndAnalysed(indexedDB);
+    const jobs = new IndexedDbJobStore(indexedDB);
+    const problem = { where: 'analysis: preview', kind: 'PROTOCOL' as const, message: 'Preview response is not an image', rpcCode: null, httpStatus: 200 };
+    const running = reportProgress(startAnalysisJob('account-a', NOW, null, NO_ANALYSIS), {
+      ...NO_ANALYSIS, stage: 'analysing', detail: 140, photos: 6, newPhotos: 6, newAnalysed: 2, googleProblem: problem,
+    }, NOW);
+    await jobs.update(jobId('analysis', 'account-a'), () => endJob(running, 'paused', 'Google may have changed something.', NOW));
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      const root = await open('review', '?account=account-a');
+      const line = 'For support: analysis: preview · PROTOCOL · Preview response is not an image · HTTP 200';
+      await shows(root, 'Protection details', line);
+      const [library, analysis] = [...root.querySelectorAll<HTMLElement>('.scan-step')];
+      expect(library.querySelector('details.protection .support-line')?.textContent).toBe(line);
+      expect(analysis.textContent).not.toContain('For support');
+      library.querySelector('summary')!.click();
+      await click(root, 'Copy report');
+      await vi.waitFor(() => expect(library.querySelector('.report-actions button')?.textContent).toBe('Copied'));
+      const copied = writeText.mock.calls[0]![0];
+      expect(copied).toMatch(/^Protection coverage/);
+      expect(copied.endsWith(`\n${line}`)).toBe(true);
+
+      // Resumed: the old details are gone.
+      await click(root, 'Resume');
+      await vi.waitFor(() => expect(root.textContent).not.toContain('For support'));
+    } finally {
+      delete (navigator as { clipboard?: unknown }).clipboard;
+    }
+  });
+
   it('panel: Open in tab asks for the review tab on Scan', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('panel');

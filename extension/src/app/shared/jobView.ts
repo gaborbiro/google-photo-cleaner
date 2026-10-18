@@ -56,6 +56,7 @@ export interface ScanStepView {
   state: 'pending' | 'running' | 'paused' | 'failed' | 'complete' | 'stale';
   statusText: string;
   phase: string | null;
+  /** "Detail 140", the AI analysis's level of detail: shown quietly beside the protection details' scan times. */
   detailText: string | null;
   lines: string[];
   percent: number | null;
@@ -230,7 +231,7 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       state: libraryState,
       statusText: STEP_STATUS[libraryState],
       phase: null,
-      detailText: null,
+      detailText,
       // Once read, the report supplies the final counts; don't keep the live counters above it.
       lines: libraryReady ? [] : library?.lines ?? [],
       indeterminate: scan?.status === 'running',
@@ -246,7 +247,7 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       state: analysisState,
       statusText: analysisReady ? STEP_STATUS[analysisState] : scan ? 'Up next' : 'Not started',
       phase: analysisReady && analysis.status !== 'finished' ? ANALYSIS_PHASES[analysis.progress.stage ?? 'analysing'] : null,
-      detailText,
+      detailText: null,
       lines: analysisReady ? (analysis.status === 'finished' ? [summary.lines[0]] : summary.lines) : [],
       percent: analysisReady ? summary.percent : null,
       waiting: analysisReady ? summary.waiting : 'Starts automatically after step 1.',

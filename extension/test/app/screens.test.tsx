@@ -443,7 +443,7 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(async () => expect(await jobs.get(jobId('analysis', 'account-a'))).toMatchObject({ status: 'running', fullSpeed: false }));
   });
 
-  it.each(['popup', 'panel', 'review'] as const)('%s: the protection report stays in step 1, analysis detail follows its phase, and Resume stays at the top', async (page) => {
+  it.each(['popup', 'panel', 'review'] as const)('%s: the protection report stays in step 1 with the analysis detail beside its scan times, and Resume stays at the top', async (page) => {
     await scannedAndAnalysed(indexedDB);
     const jobs = new IndexedDbJobStore(indexedDB);
     await jobs.update(jobId('analysis', 'account-a'), () => reportProgress(startAnalysisJob('account-a', NOW, null, NO_ANALYSIS), {
@@ -452,11 +452,10 @@ describe('clicks and keys reach what they should', () => {
     const root = await open(page, page === 'review' ? '?account=account-a' : '');
     await shows(root, 'Protection details', 'Detail 140');
     const [library, analysis] = [...root.querySelectorAll<HTMLElement>('.scan-step')];
-    expect(library.querySelector('details.protection')).not.toBeNull();
-    expect(library.textContent).not.toContain('Detail 140');
+    const timesRow = () => library.querySelector('details.protection .report-times');
+    expect(timesRow()?.textContent).toMatch(/^Scan started .*Detail 140$/);
     expect(analysis.querySelector('details.protection')).toBeNull();
-    expect(analysis.textContent).toContain('Detail 140');
-    expect(analysis.querySelector('.step-phase')?.nextElementSibling?.textContent).toBe('Detail 140');
+    expect(analysis.textContent).not.toContain('Detail 140');
     expect(analysis.getAttribute('aria-current')).toBe('step');
     library.querySelector('summary')!.click();
     expect(library.querySelector('details')!.open).toBe(true);
@@ -467,7 +466,8 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(root.querySelector('.scan-title button')?.textContent).toBe('Resume'));
     expect(analysis.querySelector('.step-heading button')).toBeNull();
     expect(analysis.querySelector('.step-status')?.textContent).toBe('Paused');
-    expect(analysis.querySelector('.step-phase')?.nextElementSibling?.textContent).toBe('Detail 140');
+    expect(timesRow()?.textContent).toMatch(/Detail 140$/);
+    expect(analysis.textContent).not.toContain('Detail 140');
     expect(library.querySelector('details')!.open).toBe(true);
     await click(root, 'Resume');
     await vi.waitFor(async () => expect(await jobs.get(jobId('analysis', 'account-a'))).toMatchObject({ status: 'running' }));

@@ -34,7 +34,8 @@ describe('one Scan in two stages', () => {
     expect(library).toMatchObject({ state: 'complete', statusText: 'Complete', protectionKnown: true, percent: null, fullSpeed: null, timesText: 'Checked today 21:40' });
     expect(library.lines).toEqual([]); // The final counts are supplied by the protection report.
     expect(analysis).toMatchObject({ state: 'running', statusText: 'In progress', percent: 24, fullSpeed: false, protectionKnown: false });
-    expect(analysis.detailText).toBe('Detail 140');
+    expect(library.detailText).toBe('Detail 140'); // Shown beside the protection details' scan times.
+    expect(analysis.detailText).toBeNull();
     expect(analysis.lines[0]).toBe('New photos: 4,300 of 17,202 analysed');
   });
 
@@ -44,7 +45,7 @@ describe('one Scan in two stages', () => {
     expect(library).toMatchObject({ state: 'running', protectionKnown: false, indeterminate: true });
     expect(analysis).toMatchObject({ state: 'pending', statusText: 'Up next', fullSpeed: true, percent: null });
     expect(analysis.lines).toEqual([]);
-    expect(analysis.detailText).toBe('Detail 140');
+    expect(library.detailText).toBe('Detail 140');
   });
 
   it('keeps analysis detail after completion and flags an old library separately', () => {
@@ -53,7 +54,7 @@ describe('one Scan in two stages', () => {
     expect(library).toMatchObject({ state: 'stale', statusText: 'Needs a refresh', protectionKnown: true });
     expect(library.notice).toContain('before anything can be trashed');
     expect(analysis).toMatchObject({ state: 'complete', statusText: 'Complete', fullSpeed: false });
-    expect(analysis.detailText).toBe('Detail 140');
+    expect(library.detailText).toBe('Detail 140');
     expect(analysis.notice).toBeNull();
   });
 
@@ -104,7 +105,7 @@ describe('one Scan in two stages', () => {
     const view = scanView(scanned, analysing, NOW);
     expect(view).toMatchObject({ title: 'Scanning', stage: 'Stage 2 of 2 · Analysing new photos', percent: 24, action: 'pause', target: 'analysis', fullSpeed: false, indeterminate: false });
     expect(view.lines).toEqual(['New photos: 4,300 of 17,202 analysed', '5.7 photos/s over the last minute · about 38 min left']);
-    expect(view.steps[1].detailText).toBe('Detail 140');
+    expect(view.steps[0].detailText).toBe('Detail 140');
   });
 
   it('checking again counts only the new photos, not the whole library', () => {

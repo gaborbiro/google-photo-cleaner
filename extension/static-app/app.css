@@ -189,6 +189,9 @@ details.protection[open] > summary { border-bottom: 1px solid var(--pc-border); 
 .protection-report .counts caption { font-size: 16px; }
 .protection-report .report-lines .mono { font-size: 14px; color: var(--pc-muted); }
 .report-lines { display: flex; flex-direction: column; gap: var(--space-1); }
+/* The scan times, with the AI's level of detail quietly at the end of the same row. */
+.report-times { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.protection-report .report-lines .report-detail { margin-left: auto; font-size: 12px; opacity: 0.75; }
 .report-actions { border-top: 1px solid var(--pc-border); padding-top: var(--space-3); }
 
 table { border-collapse: collapse; width: 100%; }

@@ -30,7 +30,6 @@ export function ScanCard({ account, scan, analysis, report }: { account: string;
             <div className="step-body">
               <p className="muted">{step.description}</p>
               {step.phase && <p className="step-phase">{step.phase}</p>}
-              {step.detailText && <p className="mono step-detail">{step.detailText}</p>}
               {step.indeterminate && <div className="bar indeterminate"><div /></div>}
               {step.percent !== null && <div className="bar"><div style={{ width: `${step.percent}%` }} /></div>}
               {step.lines.length > 0 && <div className="lines">{step.lines.map((line) => <div key={line} className="mono">{line}</div>)}</div>}
@@ -46,7 +45,7 @@ export function ScanCard({ account, scan, analysis, report }: { account: string;
               {/* Protection warnings stay outside the folded report. */}
               {step.protectionKnown && report && <p>{report.summary}</p>}
               {step.protectionKnown && report?.warningText && <p className="warn">{report.warningText}</p>}
-              {step.protectionKnown && report && <ProtectionDetails report={report} />}
+              {step.protectionKnown && report && <ProtectionDetails report={report} detailText={step.detailText} />}
             </div>
           </li>
         ))}
@@ -56,7 +55,7 @@ export function ScanCard({ account, scan, analysis, report }: { account: string;
 }
 
 /** Folded away by default: when the scan ran and how many photos are protected, eligible or unknown. */
-function ProtectionDetails({ report }: { report: ReportView }) {
+function ProtectionDetails({ report, detailText }: { report: ReportView; detailText: string | null }) {
   const [copied, setCopied] = useState(false);
   const copy = () => void navigator.clipboard.writeText(report.copyText).then(() => setCopied(true), logFailure('copying the report'));
   return (
@@ -64,7 +63,10 @@ function ProtectionDetails({ report }: { report: ReportView }) {
       <summary>Protection details</summary>
       <div className="protection-report">
         <div className="report-lines">
-          <p className="mono">{report.timesLine}</p>
+          <div className="report-times">
+            <p className="mono">{report.timesLine}</p>
+            {detailText && <p className="mono report-detail">{detailText}</p>}
+          </div>
           {report.issueLines.map((line) => <p key={line} className="warn">{line}</p>)}
           {report.noteLines.map((line) => <p key={line} className="muted">{line}</p>)}
         </div>

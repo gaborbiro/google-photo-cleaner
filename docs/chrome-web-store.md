@@ -29,7 +29,7 @@ the two to match, replace `key` with the public key from the dashboard (Package 
 **Name** (from the manifest): Photo Cleaner
 
 **Summary** (from the manifest, max 132 characters):
-Find and trash duplicate photos in Google Photos with on-device AI. Private: your photos never leave your computer.
+Find and trash duplicate photos in Google Photos with on-device AI. Free and private: your photos never leave your computer.
 
 **Description:**
 

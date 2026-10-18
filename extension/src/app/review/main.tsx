@@ -74,7 +74,7 @@ function Review() {
     window.scrollTo({ top: scrollOf.current.get(tab) ?? 0 });
   }, [tab]);
   // The Scan tab shows its status, as on the desktop: "1 · Scan (done)"; the browser tab its progress.
-  const scan = selected !== null && job !== undefined && analysis !== undefined ? scanView(job, analysis, Date.now()) : null;
+  const scan = selected !== null && job !== undefined && analysis !== undefined ? scanView(job, analysis, Date.now(), 'tab') : null;
   const pageTitle = scan ? documentTitle(scan) : 'Photo Cleaner';
   useEffect(() => {
     document.title = pageTitle;
@@ -142,7 +142,7 @@ function Review() {
           {opened.has('search') && search && <Search model={search} active={tab === 'search'} openScan={() => open('scan')} />}
           {opened.has('scan') && (
             <div className="scan-tab" hidden={tab !== 'scan'}>
-              {job !== undefined && analysis !== undefined && <ScanCard account={selected} scan={job} analysis={analysis} report={report} />}
+              {job !== undefined && analysis !== undefined && <ScanCard account={selected} scan={job} analysis={analysis} report={report} surface="tab" />}
               {choices !== undefined && <ProtectionCard account={selected} choices={choices} />}
               <EraseCard />
             </div>

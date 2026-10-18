@@ -107,18 +107,21 @@ export function documentTitle(view: ScanView): string {
   return view.title === 'Scan paused' ? 'Scan paused · Photo Cleaner' : 'Photo Cleaner';
 }
 
+/** Where a Scan is shown: the popup, the panel inside Google Photos, or the review tab. */
+export type ScanSurface = 'popup' | 'panel' | 'tab';
+
 /** The account's Scan: what it is doing, how far it is and the one button the user needs next. */
-export function scanView(scan: ScanJob | null, analysis: AnalysisJob | null, nowMs: number): ScanView {
-  const summary = scanSummary(scan, analysis, nowMs);
+export function scanView(scan: ScanJob | null, analysis: AnalysisJob | null, nowMs: number, surface: ScanSurface): ScanView {
+  const summary = scanSummary(scan, analysis, nowMs, surface);
   return { ...summary, steps: scanSteps(scan, analysis, summary, nowMs) };
 }
 
-function scanSummary(scan: ScanJob | null, analysis: AnalysisJob | null, nowMs: number): ScanSummary {
+function scanSummary(scan: ScanJob | null, analysis: AnalysisJob | null, nowMs: number, surface: ScanSurface): ScanSummary {
   if (scan === null) return { ...NONE, title: 'Not scanned yet', action: 'start', actionLabel: 'Scan library', target: 'library-scan', tabStatus: 'needed' };
   if (scan.status !== 'finished') return readingView(scan, analysis?.fullSpeed ?? false);
   return analysis === null
     ? { ...NONE, title: 'Photos not analysed yet', stage: 'Stage 2 of 2 · Analysing new photos', action: 'start', actionLabel: 'Analyse photos', target: 'analysis', tabStatus: 'needed', protectionKnown: true, fullSpeed: false }
-    : analysingView(scan, analysis, nowMs);
+    : analysingView(scan, analysis, nowMs, surface);
 }
 
 /** Stage 1: reading the photo list (the library scan). */
@@ -149,7 +152,7 @@ function readingView(scan: ScanJob, fullSpeed: boolean): ScanSummary {
 }
 
 /** Stage 2: analysing the new photos; once done, the Scan is up to date. */
-function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanSummary {
+function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number, surface: ScanSurface): ScanSummary {
   const p = job.progress;
   if (job.status === 'finished') {
     const finishedAt = scan.finishedAtMs ?? job.updatedAtMs;
@@ -183,7 +186,8 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanSumm
   if (job.status === 'running' && p.photosPerSecond !== null) {
     lines.push(`${p.photosPerSecond.toFixed(1)} photos/s over the last minute` + (p.etaSeconds !== null ? ` · about ${duration(p.etaSeconds)} left` : ''));
   }
-  if (job.status === 'running' && p.perPhotoMs !== null) {
+  // Where each photo's time goes: only in the review tab, which has room for it.
+  if (surface === 'tab' && job.status === 'running' && p.perPhotoMs !== null) {
     const t = p.perPhotoMs;
     const ms = (value: number) => Math.round(value);
     lines.push(`Per photo (ms): AI ${ms(t.ai)} · preview ${ms(t.preview)} · save ${ms(t.save)} · gentle ${ms(t.pace)} · other ${ms(t.other)}`);
@@ -301,7 +305,7 @@ export function reviewPageView(input: {
   const { selected, signedIn, jobs, scan, analysis, choices, nowMs } = input;
   const emailOf = (account: string) => (signedIn?.fingerprint === account ? signedIn.email : null);
   const analysisOf = (account: string) => jobs.find((j): j is AnalysisJob => j.kind === 'analysis' && j.account === account) ?? null;
-  const shown = selected !== null && scan !== undefined && analysis !== undefined ? scanView(scan, analysis, nowMs) : null;
+  const shown = selected !== null && scan !== undefined && analysis !== undefined ? scanView(scan, analysis, nowMs, 'tab') : null;
   return {
     accountName: selected === null ? null : accountLabel(selected, emailOf(selected)),
     tabLabels: { scan: shown ? scanTabTitle(shown) : '1 · Scan', duplicates: '2 · Duplicates', search: 'Search' },
@@ -311,7 +315,7 @@ export function reviewPageView(input: {
         account: j.account,
         href: `?account=${encodeURIComponent(j.account)}`,
         label: accountLabel(j.account, emailOf(j.account)),
-        scanTitle: scanView(j, analysisOf(j.account), nowMs).title,
+        scanTitle: scanView(j, analysisOf(j.account), nowMs, 'tab').title,
       })),
     refreshKey: scan === undefined || analysis === undefined || choices === undefined ? null
       : `${scan?.finishedAtMs ?? '-'}:${analysis?.finishedAtMs ?? '-'}:${JSON.stringify(choices)}`,

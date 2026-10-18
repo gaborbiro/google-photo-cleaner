@@ -24,7 +24,7 @@ function Popup() {
       {view.state === 'problem' && <p className="warn">{view.problemText}</p>}
       {view.account && (
         <>
-          {scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} />}
+          {scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} surface="popup" />}
           <div className="launch">
             {reviewText && <button className="primary" onClick={() => void send({ kind: 'app-open-review', account: view.account })}>{reviewText}</button>}
             <button onClick={() => void send({ kind: 'app-show-panel' })}>Open panel in Google Photos <span aria-hidden="true">↗</span></button>

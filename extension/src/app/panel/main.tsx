@@ -19,11 +19,8 @@ function Panel() {
       <StorageProblem />
       {view.state === 'looking' && <p className="muted">Checking which account is signed in…</p>}
       {view.problemText && <p className="warn">{view.problemText}</p>}
-      {view.account && scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} />}
+      {view.account && scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} surface="panel" />}
       <div className="explanation">
-        <p>
-          Reads the list of your photos, favourites, archive and every album (read-only) and works out which photos are protected; then the AI analyses the new photos on this computer's graphics card.
-        </p>
         <p>
           <strong>Photos never leave your computer.</strong> It runs in the extension's background, so closing this panel doesn't stop it; pausing keeps its progress.
         </p>

@@ -84,7 +84,7 @@ Find and trash duplicate photos in Google Photos with on-device AI. Free and pri
 |---|---|---|
 | Store icon, 128×128 | `icon-128.png` | |
 | Small promo tile, 440×280 | `store-thumbnail-440x280.png` | |
-| Screenshots, 1280×800 (1 to 5) | still to make | At least one is required. Use a test account or demo photos: real photos would be public. Suggested: the panel in Google Photos during a scan, a Duplicates group, a Search with results, the popup |
+| Screenshots, 1280×800 (1 to 5) | `extension/release/store-screenshot-1.png` (published 2026-10-18) | Not in git: `release/` is ignored, as it shows real photos. A Duplicates group (coffee and cake, no people), the browser bar cropped off, the account's email replaced with the contact address nomadworkz@gmail.com, sides filled with the page's background. To redo when the app is finished; more ideas: a Search with results, the panel in Google Photos during a scan, the popup. Screenshots go public: no people, no place names, no email |
 | Marquee, 1400×560 | (optional) | Only used if the store features the extension |
 
 **Additional fields:** Homepage URL: https://github.com/gaborbiro/google-photo-cleaner ·

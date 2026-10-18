@@ -1,7 +1,7 @@
 // What the surfaces show for an account's Scan: plain values, worked out here rather than in the UI.
 // A Scan is one job for the user in two stages: reading the photo list (the library scan), then
 // analysing the new photos (the analysis, which a finished library scan starts by itself). They
-// are saved as two jobs, each resumable; here they become one card with one button.
+// are saved as two jobs, each resumable; here they become two visible steps with one button.
 
 import { MODEL_DOWNLOAD_BYTES } from '../ai/model';
 import { SCAN_MAX_AGE_MS } from '../scan/report';
@@ -19,7 +19,7 @@ export function accountLabel(fingerprint: string, email: string | null): string 
   return email ?? `account ${fingerprint.slice(0, 8)}…`;
 }
 
-export interface ScanView {
+interface ScanSummary {
   /** "Not scanned yet", "Scanning", "Scan paused", "Scan stopped", "Scan complete" or "Scan out of date". */
   title: string;
   /** The status dot beside the title: complete, needs attention (paused, out of date) or stopped; null without one. */
@@ -45,8 +45,30 @@ export interface ScanView {
   protectionKnown: boolean;
   /** For the tab, as on the desktop: "scanning", "needed", "out of date" or "done". */
   tabStatus: 'scanning' | 'needed' | 'out of date' | 'done';
-  /** The Full speed switch, while analysing; null when it isn't shown. */
+  /** The Full speed switch throughout both scan stages; null when it isn't shown. */
   fullSpeed: boolean | null;
+}
+
+export interface ScanStepView {
+  number: 1 | 2;
+  title: string;
+  description: string;
+  state: 'pending' | 'running' | 'paused' | 'failed' | 'complete' | 'stale';
+  statusText: string;
+  phase: string | null;
+  detailText: string | null;
+  lines: string[];
+  percent: number | null;
+  indeterminate: boolean;
+  waiting: string | null;
+  notice: string | null;
+  timesText: string | null;
+  fullSpeed: boolean | null;
+  protectionKnown: boolean;
+}
+
+export interface ScanView extends ScanSummary {
+  steps: [ScanStepView, ScanStepView];
 }
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -86,18 +108,24 @@ export function documentTitle(view: ScanView): string {
 
 /** The account's Scan: what it is doing, how far it is and the one button the user needs next. */
 export function scanView(scan: ScanJob | null, analysis: AnalysisJob | null, nowMs: number): ScanView {
+  const summary = scanSummary(scan, analysis, nowMs);
+  return { ...summary, steps: scanSteps(scan, analysis, summary, nowMs) };
+}
+
+function scanSummary(scan: ScanJob | null, analysis: AnalysisJob | null, nowMs: number): ScanSummary {
   if (scan === null) return { ...NONE, title: 'Not scanned yet', action: 'start', actionLabel: 'Scan library', target: 'library-scan', tabStatus: 'needed' };
-  if (scan.status !== 'finished') return readingView(scan);
+  if (scan.status !== 'finished') return readingView(scan, analysis?.fullSpeed ?? false);
   return analysis === null
-    ? { ...NONE, title: 'Photos not analysed yet', stage: 'Stage 2 of 2 · Analysing new photos', action: 'start', actionLabel: 'Analyse photos', target: 'analysis', tabStatus: 'needed', protectionKnown: true }
+    ? { ...NONE, title: 'Photos not analysed yet', stage: 'Stage 2 of 2 · Analysing new photos', action: 'start', actionLabel: 'Analyse photos', target: 'analysis', tabStatus: 'needed', protectionKnown: true, fullSpeed: false }
     : analysingView(scan, analysis, nowMs);
 }
 
 /** Stage 1: reading the photo list (the library scan). */
-function readingView(scan: ScanJob): ScanView {
+function readingView(scan: ScanJob, fullSpeed: boolean): ScanSummary {
   const p = scan.progress;
   const base = {
     ...NONE,
+    fullSpeed,
     stage: 'Stage 1 of 2 · Reading your photo list',
     lines: [
       `Library: ${count(p.libraryEntries, 'entry', 'entries')}` + (p.libraryReachedMs !== null ? `, reached photos from ${day(p.libraryReachedMs)}` : ''),
@@ -120,7 +148,7 @@ function readingView(scan: ScanJob): ScanView {
 }
 
 /** Stage 2: analysing the new photos; once done, the Scan is up to date. */
-function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanView {
+function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanSummary {
   const p = job.progress;
   if (job.status === 'finished') {
     const finishedAt = scan.finishedAtMs ?? job.updatedAtMs;
@@ -144,7 +172,6 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanView
       tabStatus: stale ? 'out of date' : 'done',
     };
   }
-  const stages = { model: 'Getting the AI model ready (once)', 'speed-check': 'Checking this computer’s speed', analysing: 'Analysing new photos' };
   // The bar fills once for the model download, then again for this run's new photos.
   const percent = p.stage === 'model' ? (p.modelPercent ?? 0) : p.newPhotos ? Math.floor((p.newAnalysed * 100) / p.newPhotos) : null;
   const lines: string[] = [];
@@ -160,11 +187,10 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanView
     const ms = (value: number) => Math.round(value);
     lines.push(`Per photo (ms): AI ${ms(t.ai)} · preview ${ms(t.preview)} · save ${ms(t.save)} · gentle ${ms(t.pace)} · other ${ms(t.other)}`);
   }
-  if (p.detail !== null) lines.push(`Detail ${p.detail}`);
   const base = {
     ...NONE,
     protectionKnown: true,
-    stage: `Stage 2 of 2 · ${stages[p.stage ?? 'analysing']}`,
+    stage: `Stage 2 of 2 · ${ANALYSIS_PHASES[p.stage ?? 'analysing']}`,
     percent,
     // (The speed check's verdict isn't shown: the live speed and time left say it better.)
     lines,
@@ -180,6 +206,54 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number): ScanView
     default:
       return { ...base, title: 'Scan stopped', tone: 'negative', action: 'restart', actionLabel: 'Try again', tabStatus: 'needed' };
   }
+}
+
+const ANALYSIS_PHASES = { model: 'Getting the AI model ready (once)', 'speed-check': 'Checking this computer’s speed', analysing: 'Analysing new photos' };
+const STEP_STATUS = { pending: 'Not started', running: 'In progress', paused: 'Paused', failed: 'Stopped', complete: 'Complete', stale: 'Needs a refresh' };
+
+/** Keep the completed library report visible while analysis works, and never show old results as a new run's. */
+function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: ScanSummary, nowMs: number): [ScanStepView, ScanStepView] {
+  const libraryReady = scan?.status === 'finished';
+  const stale = libraryReady && nowMs - (scan.finishedAtMs ?? scan.updatedAtMs) > SCAN_MAX_AGE_MS;
+  const libraryState = stale ? 'stale' : scan?.status === 'finished' ? 'complete' : scan?.status ?? 'pending';
+  const analysisReady = libraryReady && analysis !== null;
+  const analysisState = analysisReady ? (analysis.status === 'finished' ? 'complete' : analysis.status) : 'pending';
+  const library = scan ? readingView(scan, false) : null;
+  const detail = analysis?.progress.detail;
+  const detailText = detail !== undefined && detail !== null ? `Detail ${detail}` : null;
+  return [
+    {
+      ...NONE,
+      number: 1,
+      title: 'Read your library',
+      description: 'Count your photos and check which ones are protected.',
+      state: libraryState,
+      statusText: STEP_STATUS[libraryState],
+      phase: null,
+      detailText: null,
+      // Once read, the report supplies the final counts; don't keep the live counters above it.
+      lines: libraryReady ? [] : library?.lines ?? [],
+      indeterminate: scan?.status === 'running',
+      notice: stale ? 'More than a day old: check for new photos before anything can be trashed.' : scan?.progress.notice ?? null,
+      timesText: libraryReady ? checkedText(scan.finishedAtMs ?? scan.updatedAtMs, nowMs) : library?.timesText ?? null,
+      protectionKnown: libraryReady,
+    },
+    {
+      ...NONE,
+      number: 2,
+      title: 'Analyse photos',
+      description: 'Find similar photos and make your library searchable, on this computer.',
+      state: analysisState,
+      statusText: analysisReady ? STEP_STATUS[analysisState] : scan ? 'Up next' : 'Not started',
+      phase: analysisReady && analysis.status !== 'finished' ? ANALYSIS_PHASES[analysis.progress.stage ?? 'analysing'] : null,
+      detailText,
+      lines: analysisReady ? (analysis.status === 'finished' ? [summary.lines[0]] : summary.lines) : [],
+      percent: analysisReady ? summary.percent : null,
+      waiting: analysisReady ? summary.waiting : 'Starts automatically after step 1.',
+      notice: analysisReady ? analysis.progress.notice : null,
+      fullSpeed: analysis?.fullSpeed ?? false,
+    },
+  ];
 }
 
 // --- the review tab's page ---

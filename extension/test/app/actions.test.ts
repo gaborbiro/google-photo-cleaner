@@ -88,6 +88,22 @@ describe('scan actions (on the real job store, in memory)', () => {
 });
 
 describe('analysis actions', () => {
+  it('stage 1 saves full speed without starting analysis, and stage 2 keeps the choice', async () => {
+    const store = new IndexedDbJobStore(new IDBFactory());
+    const { sent, send } = recorder();
+    await startScan(store, send, 'acc1', 1_000);
+    await setAnalysisFullSpeed(store, 'acc1', true, 2_000);
+    expect(await store.get(jobId('analysis', 'acc1'))).toMatchObject({ status: 'paused', fullSpeed: true });
+    expect(await store.get(scanOf('acc1'))).toMatchObject({ status: 'running' });
+    expect(await store.get(jobId('analysis', 'acc2'))).toBeNull();
+    expect(sent).toEqual([{ kind: 'app-wake-engine' }]);
+
+    await startAnalysis(store, send, 'acc1', 3_000);
+    expect(await store.get(jobId('analysis', 'acc1'))).toMatchObject({ status: 'running', fullSpeed: true });
+    await setAnalysisFullSpeed(store, 'acc1', false, 4_000);
+    expect(await store.get(jobId('analysis', 'acc1'))).toMatchObject({ status: 'running', fullSpeed: false });
+  });
+
   it('starting the analysis wakes the background page; full speed is remembered on the job', async () => {
     const store = new IndexedDbJobStore(new IDBFactory());
     const { sent, send } = recorder();

@@ -34,6 +34,12 @@ One-time setup on a new machine (needs network):
 The extension's tests and build refuse to run against an old copy of the shared Kotlin rules. If they
 say so, run `npm run kotlin` (or `npm run check`, which does it).
 
+**Extension versions.** Whenever you change and rebuild the extension, increment the patch (third)
+component of its version before rebuilding, including `npm run check`, in its source manifest
+(`extension/static-app/manifest.json`). Verify that the built manifest has the same new version and
+report that version to the user, so they can click Reload in Chrome's extensions
+page and confirm the new fixes or improvements are loaded.
+
 ## Layout
 
 | Path | What |

@@ -26,6 +26,10 @@ library (since March 2025) and can't trash anything; only code inside photos.goo
 The work runs in a hidden background page (offscreen document), so closing the panel or a tab never
 stops a scan or loses anything; the three surfaces are windows onto the same saved state.
 
+Scan shows two numbered sections (2026-10-18): **Read your library** holds the counts and protection
+report, ready as soon as the photo list is read; **Analyse photos** holds AI progress, detail and
+**Full speed**, which can be chosen before starting. One Scan button still runs both steps in order.
+
 ### Design principles
 
 - Techy and in control rather than polished: show what's happening and what's stored, in plain

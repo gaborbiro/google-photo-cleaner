@@ -65,5 +65,10 @@ export async function resumeWaitingForPhotos(store: JobStore, account: string, n
 }
 
 export function setAnalysisFullSpeed(store: JobStore, account: string, fullSpeed: boolean, nowMs: number): Promise<Job | null> {
-  return store.update(jobId('analysis', account), (job) => (job?.kind === 'analysis' ? setFullSpeed(job, fullSpeed, nowMs) : job));
+  return store.update(jobId('analysis', account), (job) => {
+    // Stage 1 can set the choice before there is an analysis job. Keep it paused until the
+    // photo list is finished; the engine then starts it with this saved choice.
+    const analysis = job?.kind === 'analysis' ? job : pauseJob(startAnalysisJob(account, nowMs, null, NO_ANALYSIS), nowMs);
+    return setFullSpeed(analysis, fullSpeed, nowMs);
+  });
 }

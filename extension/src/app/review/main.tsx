@@ -110,7 +110,7 @@ function Review() {
       <header className="collapsing page-header">
         <div className="surface-header">
           <div>
-            <h1>Photo Cleaner <span className="muted">/ review</span></h1>
+            <h1>Photo Cleaner</h1>
             {page.accountName && <p className="account mono" title="The Google account whose library this is">{page.accountName}</p>}
           </div>
           <button onClick={() => void send({ kind: 'app-open-photos' })}>Open Google Photos <span aria-hidden="true">↗</span></button>

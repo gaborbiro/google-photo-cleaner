@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
-import { endJob, NO_PROGRESS, pauseJob, reportProgress, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
+import { endJob, NO_PROGRESS, pauseJob, reportProgress, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 import { accountLabel, checkedText, documentTitle, reviewAccount, reviewButtonText, reviewPageView, scanTabTitle, scanView, surfaceView } from '../../src/app/shared/jobView';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
@@ -23,10 +23,66 @@ describe('one Scan in two stages', () => {
     expect(scanView(null, null, NOW)).toMatchObject({ title: 'Not scanned yet', action: 'start', actionLabel: 'Scan library', target: 'library-scan', lines: [], stage: null, fullSpeed: null });
   });
 
+  it('shows both steps before starting, with the speed choice in analysis only', () => {
+    const [library, analysis] = scanView(null, null, NOW).steps;
+    expect(library).toMatchObject({ number: 1, title: 'Read your library', state: 'pending', statusText: 'Not started', protectionKnown: false, fullSpeed: null });
+    expect(analysis).toMatchObject({ number: 2, title: 'Analyse photos', state: 'pending', statusText: 'Not started', fullSpeed: false, waiting: 'Starts automatically after step 1.' });
+  });
+
+  it('keeps library counts and protection in step 1 while step 2 analyses', () => {
+    const [library, analysis] = scanView(scanned, analysing, NOW).steps;
+    expect(library).toMatchObject({ state: 'complete', statusText: 'Complete', protectionKnown: true, percent: null, fullSpeed: null, timesText: 'Checked today 21:40' });
+    expect(library.lines).toEqual([]); // The final counts are supplied by the protection report.
+    expect(analysis).toMatchObject({ state: 'running', statusText: 'In progress', percent: 24, fullSpeed: false, protectionKnown: false });
+    expect(analysis.detailText).toBe('Detail 140');
+    expect(analysis.lines[0]).toBe('New photos: 4,300 of 17,202 analysed');
+  });
+
+  it('does not present a previous analysis or protection report as the new scan completing', () => {
+    const previous = endJob(setFullSpeed(analysing, true, NOW), 'completed', null, NOW);
+    const [library, analysis] = scanView(reading, previous, NOW).steps;
+    expect(library).toMatchObject({ state: 'running', protectionKnown: false, indeterminate: true });
+    expect(analysis).toMatchObject({ state: 'pending', statusText: 'Up next', fullSpeed: true, percent: null });
+    expect(analysis.lines).toEqual([]);
+    expect(analysis.detailText).toBe('Detail 140');
+  });
+
+  it('keeps analysis detail after completion and flags an old library separately', () => {
+    const done = endJob(analysing, 'completed', null, NOW);
+    const [library, analysis] = scanView(scanned, done, NOW + 2 * 86_400_000).steps;
+    expect(library).toMatchObject({ state: 'stale', statusText: 'Needs a refresh', protectionKnown: true });
+    expect(library.notice).toContain('before anything can be trashed');
+    expect(analysis).toMatchObject({ state: 'complete', statusText: 'Complete', fullSpeed: false });
+    expect(analysis.detailText).toBe('Detail 140');
+    expect(analysis.notice).toBeNull();
+  });
+
+  it.each(['paused', 'failed'] as const)('shows which step is %s without changing the other step', (state) => {
+    const libraryStopped = scanView(endJob(reading, state, 'Library problem.', NOW), analysing, NOW).steps;
+    expect(libraryStopped[0]).toMatchObject({ state, notice: 'Library problem.' });
+    expect(libraryStopped[1]).toMatchObject({ state: 'pending', notice: null });
+    const analysisStopped = scanView(scanned, endJob(analysing, state, 'Analysis problem.', NOW), NOW).steps;
+    expect(analysisStopped[0]).toMatchObject({ state: 'complete', notice: null });
+    expect(analysisStopped[1]).toMatchObject({ state, notice: 'Analysis problem.' });
+  });
+
   it('stage 1 reads the photo list: counts, how far back it has got, a bar without a measure', () => {
     const view = scanView(reading, null, NOW);
-    expect(view).toMatchObject({ title: 'Scanning', stage: 'Stage 1 of 2 · Reading your photo list', action: 'pause', target: 'library-scan', indeterminate: true, percent: null });
+    expect(view).toMatchObject({ title: 'Scanning', stage: 'Stage 1 of 2 · Reading your photo list', action: 'pause', target: 'library-scan', indeterminate: true, percent: null, fullSpeed: false });
     expect(view.lines[0]).toBe('Library: 12,500 entries, reached photos from 3 May 2021');
+  });
+
+  it('full speed stays visible and keeps its choice across both stages and pauses', () => {
+    const fullSpeed = setFullSpeed(analysing, true, NOW);
+    const previous = endJob(fullSpeed, 'completed', null, NOW);
+    expect(scanView(reading, previous, NOW).fullSpeed).toBe(true);
+    expect(scanView(pauseJob(reading, NOW), fullSpeed, NOW).fullSpeed).toBe(true);
+    expect(scanView(scanned, null, NOW).fullSpeed).toBe(false);
+    for (const stage of ['model', 'speed-check', 'analysing'] as const) {
+      const job = reportProgress(fullSpeed, { ...fullSpeed.progress, stage }, NOW);
+      expect(scanView(scanned, job, NOW).fullSpeed).toBe(true);
+      expect(scanView(scanned, pauseJob(job, NOW), NOW).fullSpeed).toBe(true);
+    }
   });
 
   it('a paused or stopped stage 1 is resumed or started again', () => {
@@ -47,7 +103,8 @@ describe('one Scan in two stages', () => {
     expect(downloading.lines[0]).toBe('Downloading the AI model (once): 42% of about 320 MB');
     const view = scanView(scanned, analysing, NOW);
     expect(view).toMatchObject({ title: 'Scanning', stage: 'Stage 2 of 2 · Analysing new photos', percent: 24, action: 'pause', target: 'analysis', fullSpeed: false, indeterminate: false });
-    expect(view.lines).toEqual(['New photos: 4,300 of 17,202 analysed', '5.7 photos/s over the last minute · about 38 min left', 'Detail 140']);
+    expect(view.lines).toEqual(['New photos: 4,300 of 17,202 analysed', '5.7 photos/s over the last minute · about 38 min left']);
+    expect(view.steps[1].detailText).toBe('Detail 140');
   });
 
   it('checking again counts only the new photos, not the whole library', () => {
@@ -58,7 +115,12 @@ describe('one Scan in two stages', () => {
   });
 
   it('a paused or stopped stage 2 is resumed or tried again', () => {
-    expect(scanView(scanned, pauseJob(analysing, 2), NOW)).toMatchObject({ title: 'Scan paused', action: 'resume', actionLabel: 'Resume', target: 'analysis', fullSpeed: false });
+    const paused = scanView(scanned, pauseJob(analysing, 2), NOW);
+    expect(paused).toMatchObject({ title: 'Scan paused', action: 'resume', actionLabel: 'Resume', target: 'analysis', fullSpeed: false });
+    expect(paused.steps[1].statusText).toBe('Paused');
+    const resumed = scanView(scanned, analysing, NOW);
+    expect(resumed.actionLabel).toBe('Pause');
+    expect(resumed.steps[1].statusText).toBe('In progress');
     expect(scanView(scanned, endJob(analysing, 'failed', 'Broken.', 2), NOW)).toMatchObject({ title: 'Scan stopped', actionLabel: 'Try again', target: 'analysis' });
   });
 

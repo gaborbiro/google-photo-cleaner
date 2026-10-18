@@ -157,6 +157,20 @@ body.popup .scan-title, body.panel .scan-title { flex-direction: column; align-i
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); flex: none; }
 .scan-card .lines { display: flex; flex-direction: column; gap: 6px; }
 .scan-card .setting { border-top: 1px solid var(--pc-border); padding-top: var(--space-3); margin-top: var(--space-1); }
+.scan-steps { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.scan-step { border: 1px solid var(--pc-border); border-radius: var(--radius-control); padding: var(--space-4); }
+.scan-step.is-running { border-color: var(--pc-accent); }
+.step-heading { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.step-heading h3 { margin: 0; font-size: 17px; line-height: 24px; }
+.step-number { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: none; border: 1px solid var(--pc-border); border-radius: 50%; font-weight: 600; color: var(--pc-muted); }
+.step-status { margin-left: auto; font-size: 14px; color: var(--pc-muted); }
+.is-running > .step-heading .step-number { background: var(--pc-accent); border-color: var(--pc-accent); color: var(--pc-on-accent); }
+.is-running > .step-heading .step-status { color: var(--pc-accent); }
+.is-complete > .step-heading .step-number, .is-complete > .step-heading .step-status { color: var(--pc-keep); }
+.is-paused > .step-heading .step-status, .is-stale > .step-heading .step-status { color: var(--pc-amber); }
+.is-failed > .step-heading .step-status { color: var(--pc-trash); }
+.step-body { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); min-width: 0; overflow-wrap: anywhere; }
+body.popup .scan-step, body.panel .scan-step { padding: var(--space-3); }
 
 .bar { height: 6px; background: var(--pc-hover); border-radius: 3px; overflow: hidden; margin: var(--space-1) 0; }
 .bar > div { height: 100%; background: var(--pc-accent); transition: width 0.15s linear; }
@@ -164,12 +178,18 @@ body.popup .scan-title, body.panel .scan-title { flex-direction: column; align-i
 .bar.indeterminate > div { width: 30%; animation: indeterminate 1.4s ease-in-out infinite; }
 @keyframes indeterminate { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 
-/* Protection details, folded away at the bottom of the Scan card. */
-details.protection { border-top: 1px solid var(--pc-border); padding-top: var(--space-3); margin-top: var(--space-1); display: flex; flex-direction: column; gap: var(--space-2); }
-details.protection > summary { color: var(--pc-muted); cursor: pointer; user-select: none; width: fit-content; }
-details.protection > summary:hover { color: var(--pc-text); }
-details.protection[open] > summary { margin-bottom: var(--space-2); }
+/* A contained report inside the library step; its heading stays visible when folded. */
+details.protection { border: 1px solid var(--pc-border); border-radius: var(--radius-control); background: var(--pc-bg); margin-top: var(--space-2); overflow: hidden; }
+details.protection > summary { padding: var(--space-3) var(--space-4); font-size: 18px; line-height: 26px; font-weight: 650; color: var(--pc-text); cursor: pointer; user-select: none; }
+details.protection > summary::marker { color: var(--pc-muted); }
+details.protection > summary:hover { background: var(--pc-hover); }
+details.protection[open] > summary { border-bottom: 1px solid var(--pc-border); }
+.protection-report { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4); font-size: 15px; }
+.protection-report .tables { margin-top: 0; }
+.protection-report .counts caption { font-size: 16px; }
+.protection-report .report-lines .mono { font-size: 14px; color: var(--pc-muted); }
 .report-lines { display: flex; flex-direction: column; gap: var(--space-1); }
+.report-actions { border-top: 1px solid var(--pc-border); padding-top: var(--space-3); }
 
 table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; border-bottom: 1px solid var(--pc-border); padding: 8px 0; vertical-align: top; }

@@ -1,5 +1,4 @@
-// The account's Scan with its one button and, folded away at the bottom, what the scan found out
-// about protection; the same card in every surface.
+// The account's Scan: two visible steps, one action, and each step's own results and settings.
 
 import { useState } from 'react';
 import type { AppRequest } from '../shared/messages';
@@ -20,26 +19,38 @@ export function ScanCard({ account, scan, analysis, report }: { account: string;
         <h2>{view.tone && <span className={`dot tone-${view.tone}`} aria-hidden="true" />}{view.title}</h2>
         <button className={view.action === 'pause' ? '' : 'primary'} onClick={act}>{view.actionLabel}</button>
       </div>
-      {view.stage && <p>{view.stage}</p>}
-      {view.indeterminate && <div className="bar indeterminate"><div /></div>}
-      {view.percent !== null && <div className="bar"><div style={{ width: `${view.percent}%` }} /></div>}
-      {view.lines.length > 0 && (
-        <div className="lines">
-          {view.lines.map((line) => <div key={line} className="mono">{line}</div>)}
-        </div>
-      )}
-      {view.waiting && <p className="muted">{view.waiting}</p>}
-      {view.notice && <p className="warn">{view.notice}</p>}
-      {view.timesText && <p className="muted mono">{view.timesText}</p>}
-      {view.fullSpeed !== null && (
-        <label className="setting">
-          <input type="checkbox" checked={view.fullSpeed} onChange={(e) => void setAnalysisFullSpeed(store, account, e.target.checked, Date.now()).catch(logFailure('changing full speed'))} />
-          Full speed <span className="muted">(don't slow down while I use the computer or on battery)</span>
-        </label>
-      )}
-      {/* Incomplete protection data changes what can be done: said outside the folded part (an old scan says so above). */}
-      {view.protectionKnown && report?.warningText && <p className="warn">{report.warningText}</p>}
-      {view.protectionKnown && report && <ProtectionDetails report={report} />}
+      <ol className="scan-steps" aria-label="Scan steps">
+        {view.steps.map((step) => (
+          <li key={step.number} className={`scan-step is-${step.state}`} aria-current={step.state === 'running' ? 'step' : undefined}>
+            <div className="step-heading">
+              <span className="step-number" aria-hidden="true">{step.number}</span>
+              <h3>{step.title}</h3>
+              <span className="step-status">{step.statusText}</span>
+            </div>
+            <div className="step-body">
+              <p className="muted">{step.description}</p>
+              {step.phase && <p className="step-phase">{step.phase}</p>}
+              {step.detailText && <p className="mono step-detail">{step.detailText}</p>}
+              {step.indeterminate && <div className="bar indeterminate"><div /></div>}
+              {step.percent !== null && <div className="bar"><div style={{ width: `${step.percent}%` }} /></div>}
+              {step.lines.length > 0 && <div className="lines">{step.lines.map((line) => <div key={line} className="mono">{line}</div>)}</div>}
+              {step.waiting && <p className="muted">{step.waiting}</p>}
+              {step.notice && <p className="warn">{step.notice}</p>}
+              {step.timesText && <p className="muted mono">{step.timesText}</p>}
+              {step.fullSpeed !== null && (
+                <label className="setting">
+                  <input type="checkbox" checked={step.fullSpeed} onChange={(e) => void setAnalysisFullSpeed(store, account, e.target.checked, Date.now()).catch(logFailure('changing full speed'))} />
+                  Full speed <span className="muted">(don't slow down while I use the computer or on battery)</span>
+                </label>
+              )}
+              {/* Protection warnings stay outside the folded report. */}
+              {step.protectionKnown && report && <p>{report.summary}</p>}
+              {step.protectionKnown && report?.warningText && <p className="warn">{report.warningText}</p>}
+              {step.protectionKnown && report && <ProtectionDetails report={report} />}
+            </div>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -51,24 +62,26 @@ function ProtectionDetails({ report }: { report: ReportView }) {
   return (
     <details className="protection">
       <summary>Protection details</summary>
-      <div className="report-lines">
-        <p className="mono">{report.timesLine}</p>
-        {report.issueLines.map((line) => <p key={line} className="warn">{line}</p>)}
-        {report.noteLines.map((line) => <p key={line} className="muted">{line}</p>)}
+      <div className="protection-report">
+        <div className="report-lines">
+          <p className="mono">{report.timesLine}</p>
+          {report.issueLines.map((line) => <p key={line} className="warn">{line}</p>)}
+          {report.noteLines.map((line) => <p key={line} className="muted">{line}</p>)}
+        </div>
+        <div className="tables">
+          {report.tables.map((t) => (
+            <table key={t.title} className="counts">
+              <caption>{t.title}</caption>
+              <tbody>
+                {t.rows.map((r) => (
+                  <tr key={r.label} className={r.indent ? 'count-detail' : 'count-total'}><th scope="row">{r.label}</th><td className="num">{r.value}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          ))}
+        </div>
+        <div className="report-actions"><button className="small" onClick={copy} title="Counts only, no album names">{copied ? 'Copied' : 'Copy report'}</button></div>
       </div>
-      <div className="tables">
-        {report.tables.map((t) => (
-          <table key={t.title} className="counts">
-            <caption>{t.title}</caption>
-            <tbody>
-              {t.rows.map((r) => (
-                <tr key={r.label} className={r.indent ? 'count-detail' : 'count-total'}><th scope="row">{r.label}</th><td className="num">{r.value}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        ))}
-      </div>
-      <div><button className="small" onClick={copy} title="Counts only, no album names">{copied ? 'Copied' : 'Copy report'}</button></div>
     </details>
   );
 }

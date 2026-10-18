@@ -25,21 +25,32 @@ and copy the console (right-click the page → Inspect → Console).
 4. **Open in tab**: the review tab opens with the heading "Photo Cleaner", "Account: <email>",
    and the tabs **1 · Scan**, **2 · Duplicates**, **Search**.
 5. Close the Photos tab, open the popup: it says Photo Cleaner works inside Google Photos and offers
-   **Open Google Photos**, which opens it.
+   **Open Google Photos**, which opens it with the Photo Cleaner panel already visible once the page
+   loads. With Photos already open, **Open panel in Google Photos** focuses that tab and opens one panel.
 
 ## 2. Scan
 
-1. **Scan library**. Stage 1 counts entries and says how far back it has got. The review tab's
-   browser tab shows a spinning ring as its icon.
-2. **Pause**, then **Resume**: it carries on where it stopped, not from the start.
+1. Before starting, the popup, panel and Scan tab show two numbered sections: **Read your library**
+   and **Analyse photos**. **Full speed** is in the second section and can already be chosen.
+   **Scan library** starts step 1: it counts entries and says how far back it has got, while step 2
+   says **Up next**. The review tab's browser tab shows a spinning ring as its icon.
+2. **Pause**, then **Resume**: it carries on where it stopped, not from the start. Both buttons
+   stay at the top of the Scan card. Step 2 says **Paused** until resumed, then **In progress**.
 3. Close the Google Photos tab while it scans: it pauses, saying Google Photos was closed. Open
    photos.google.com again (same account): it carries on by itself within a few seconds.
 4. Switch the Photos tab to another Google account: the scan pauses and says it's a different
    account. Switch back and resume.
-5. Stage 2: the first time, the AI model downloads (a bar), then the speed check, then
-   "Analysing new photos" with photos per second and time left. **Full speed** changes the pace.
+5. Step 1 says **Complete** and its **Protection details** can be opened immediately, while step 2
+   runs automatically. The first time, the AI model downloads (a bar), then the speed check, then
+   "Analysing new photos", immediately followed by detail (140 or 70), then progress, photos per
+   second and time left, all in step 2.
+   **Full speed** keeps the earlier choice and changes the pace. Check the two sections in the
+   narrow popup and panel as well as the review tab; their labels and counts stay readable.
 6. When it's done: "1 · Scan (done)", "Scan complete", the tab icon goes back to the normal one,
-   and **Protection details** opens a small table (photos, protected, eligible, unknown).
+   and both steps say **Complete**. **Protection details** stays under step 1, with space above
+   **Copy report**; detail and **Full speed** stay under step 2. Open the report: its heading is
+   larger than its body text, with a separate background, border and footer. Check it in light
+   and dark mode and at the panel's narrow width; fold it again to get back to the short summary.
 7. **Check for new photos**: it reads the photo list again but only analyses photos that are new;
    with none new it finishes quickly.
 8. Note the speed (photos per second) and how long the full library took.

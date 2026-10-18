@@ -213,14 +213,41 @@ async function eraseAll(): Promise<{ ok: true }> {
 
 // --- tabs ---
 
-async function openPhotos(): Promise<void> {
+async function openPhotos(): Promise<chrome.tabs.Tab> {
   const tab = (await photosTabs())[0];
   if (tab?.id !== undefined) {
     await chrome.tabs.update(tab.id, { active: true });
     if (tab.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true });
+    return tab;
   } else {
-    await chrome.tabs.create({ url: PHOTOS_URL });
+    return chrome.tabs.create({ url: PHOTOS_URL });
   }
+}
+
+/** A new or waking tab must finish loading before the panel is opened, or navigation hides it again. */
+function waitForPhotosTab(tabId: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => done(new Error('Google Photos is still loading. Try opening the panel again.')), RELOAD_TIMEOUT_MS);
+    function done(error?: unknown) {
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(updated);
+      chrome.tabs.onRemoved.removeListener(removed);
+      if (error) reject(error);
+      else resolve();
+    }
+    function updated(id: number, info: chrome.tabs.OnUpdatedInfo) {
+      if (id === tabId && info.status === 'complete') done();
+    }
+    function removed(id: number) {
+      if (id === tabId) done(new Error('The Google Photos tab was closed before the panel opened.'));
+    }
+    chrome.tabs.onUpdated.addListener(updated);
+    chrome.tabs.onRemoved.addListener(removed);
+    // Listen first so a tab that finishes between creation and this check cannot be missed.
+    void chrome.tabs.get(tabId).then((tab) => {
+      if (tab.status === 'complete') done();
+    }, done);
+  });
 }
 
 async function openReview(account: string | null): Promise<void> {
@@ -236,9 +263,11 @@ async function openReview(account: string | null): Promise<void> {
 }
 
 async function showPanel(): Promise<void> {
-  await openPhotos();
-  const tab = (await photosTabs())[0];
-  if (tab?.id !== undefined) await sendToTab(tab.id, { kind: 'app-toggle-panel', open: true });
+  const tab = await openPhotos();
+  if (tab.id !== undefined) {
+    await waitForPhotosTab(tab.id);
+    await sendToTab(tab.id, { kind: 'app-toggle-panel', open: true });
+  }
 }
 
 async function handle(request: AppRequest, sender: chrome.runtime.MessageSender): Promise<unknown> {
@@ -268,8 +297,6 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
       await openReview(request.account);
       return true;
     case 'app-open-photos':
-      await openPhotos();
-      return true;
     case 'app-show-panel':
       await showPanel();
       return true;

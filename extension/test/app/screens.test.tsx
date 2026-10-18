@@ -178,6 +178,7 @@ describe('the pages draw', () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('review', '?account=account-a');
     await shows(root, 'Photo Cleaner', 'someone@example.com', 'Never trash photos that are', 'Erase Photo Cleaner');
+    expect(root.querySelector('h1')?.textContent).toBe('Photo Cleaner');
 
     await click(root, '2 · Duplicates');
     await vi.waitFor(() => expect(root.querySelectorAll('.duplicates:not([hidden]) .tiles > *')).toHaveLength(3), { timeout: 3_000 });
@@ -411,6 +412,69 @@ describe('clicks and keys reach what they should', () => {
     await shows(root, 'Open Google Photos');
     await click(root, 'Open Google Photos');
     expect(requests('app-open-photos')).toHaveLength(1);
+  });
+
+  it.each(['popup', 'panel', 'review'] as const)('%s: Full speed can be chosen in stage 1 and stays checked in stage 2', async (page) => {
+    const jobs = new IndexedDbJobStore(indexedDB);
+    const reading = startScanJob('account-a', NOW);
+    await jobs.update(reading.id, () => reading);
+    const root = await open(page, page === 'review' ? '?account=account-a' : '');
+    await shows(root, 'Read your library', 'Analyse photos', 'Full speed');
+    const steps = () => [...root.querySelectorAll<HTMLElement>('.scan-step')];
+    expect(steps()).toHaveLength(2);
+    expect(steps()[0].getAttribute('aria-current')).toBe('step');
+    expect(steps()[0].textContent).not.toContain('Full speed');
+    expect(steps()[1].textContent).toContain('Up next');
+    expect(steps()[1].textContent).toContain('Full speed');
+    const checkbox = () => [...root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+      .find((input) => input.closest('label')?.textContent?.includes('Full speed'))!;
+    expect(checkbox().checked).toBe(false);
+    checkbox().click();
+    await vi.waitFor(async () => expect(await jobs.get(jobId('analysis', 'account-a'))).toMatchObject({ status: 'paused', fullSpeed: true }));
+    await vi.waitFor(() => expect(checkbox().checked).toBe(true));
+    expect(steps()[1].querySelector('button')).toBeNull(); // Choosing speed doesn't offer analysis before step 1 finishes.
+
+    await jobs.update(reading.id, (job) => endJob(job!, 'completed', null, NOW));
+    await jobs.update(jobId('analysis', 'account-a'), (previous) => startAnalysisJob('account-a', NOW, previous?.kind === 'analysis' ? previous : null, NO_ANALYSIS));
+    await vi.waitFor(() => expect(steps()[1].getAttribute('aria-current')).toBe('step'));
+    expect(steps()[0].textContent).toContain('Complete');
+    expect(checkbox().checked).toBe(true);
+    checkbox().click();
+    await vi.waitFor(async () => expect(await jobs.get(jobId('analysis', 'account-a'))).toMatchObject({ status: 'running', fullSpeed: false }));
+  });
+
+  it.each(['popup', 'panel', 'review'] as const)('%s: the protection report stays in step 1, analysis detail follows its phase, and Resume stays at the top', async (page) => {
+    await scannedAndAnalysed(indexedDB);
+    const jobs = new IndexedDbJobStore(indexedDB);
+    await jobs.update(jobId('analysis', 'account-a'), () => reportProgress(startAnalysisJob('account-a', NOW, null, NO_ANALYSIS), {
+      ...NO_ANALYSIS, stage: 'analysing', detail: 140, photos: 6, newPhotos: 6, newAnalysed: 2,
+    }, NOW));
+    const root = await open(page, page === 'review' ? '?account=account-a' : '');
+    await shows(root, 'Protection details', 'Detail 140');
+    const [library, analysis] = [...root.querySelectorAll<HTMLElement>('.scan-step')];
+    expect(library.querySelector('details.protection')).not.toBeNull();
+    expect(library.textContent).not.toContain('Detail 140');
+    expect(analysis.querySelector('details.protection')).toBeNull();
+    expect(analysis.textContent).toContain('Detail 140');
+    expect(analysis.querySelector('.step-phase')?.nextElementSibling?.textContent).toBe('Detail 140');
+    expect(analysis.getAttribute('aria-current')).toBe('step');
+    library.querySelector('summary')!.click();
+    expect(library.querySelector('details')!.open).toBe(true);
+    expect(library.querySelector('.protection-report .tables')).not.toBeNull();
+    expect(library.querySelector('.protection-report .report-actions button')?.textContent).toBe('Copy report');
+    await click(root, 'Pause');
+    await vi.waitFor(async () => expect(await jobs.get(jobId('analysis', 'account-a'))).toMatchObject({ status: 'paused' }));
+    await vi.waitFor(() => expect(root.querySelector('.scan-title button')?.textContent).toBe('Resume'));
+    expect(analysis.querySelector('.step-heading button')).toBeNull();
+    expect(analysis.querySelector('.step-status')?.textContent).toBe('Paused');
+    expect(analysis.querySelector('.step-phase')?.nextElementSibling?.textContent).toBe('Detail 140');
+    expect(library.querySelector('details')!.open).toBe(true);
+    await click(root, 'Resume');
+    await vi.waitFor(async () => expect(await jobs.get(jobId('analysis', 'account-a'))).toMatchObject({ status: 'running' }));
+    await vi.waitFor(() => expect(analysis.querySelector('.step-status')?.textContent).toBe('In progress'));
+    expect(root.querySelector('.scan-title button')?.textContent).toBe('Pause');
+    library.querySelector('summary')!.click();
+    expect(library.querySelector('details')!.open).toBe(false);
   });
 
   it('panel: Open in tab asks for the review tab', async () => {

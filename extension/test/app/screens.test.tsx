@@ -80,9 +80,9 @@ function pretendLayout() {
   window.scrollTo = (() => Promise.resolve()) as unknown as typeof window.scrollTo;
 }
 
-/** Account A: six photos scanned and analysed. Photos 0–2 are a burst; photo 0 is a favourite. */
-async function scannedAndAnalysed(factory: IDBFactory) {
-  const source = new FakePhotos(Array.from({ length: 6 }, (_, i) => fakeItem(i, { isFavourite: i === 0 })));
+/** Account A: six photos scanned and analysed, and [notAnalysed] more only scanned. Photos 0–2 are a burst; photo 0 is a favourite. */
+async function scannedAndAnalysed(factory: IDBFactory, notAnalysed = 0) {
+  const source = new FakePhotos(Array.from({ length: 6 + notAnalysed }, (_, i) => fakeItem(i, { isFavourite: i === 0 })));
   await scan(source, new IndexedDbInventoryStore(factory));
   const analysis = new IndexedDbAnalysisStore(factory);
   await analysis.saveSettings({ account: 'account-a', detail: 140, modelKey: modelKey(140), measuredPhotosPerSecond: 5, chosenAtMs: NOW });
@@ -190,6 +190,13 @@ describe('the pages draw', () => {
 
     await click(root, '1 · Scan');
     await shows(root, 'Never trash photos that are');
+  });
+
+  it('review tab: Duplicates says how many photos are not analysed yet', async () => {
+    await scannedAndAnalysed(indexedDB, 2);
+    const root = await open('review', '?account=account-a');
+    await click(root, '2 · Duplicates');
+    await shows(root, '2 photos are not analysed yet', 'D · Trash selected');
   });
 
   it('review tab before any scan: every tab says what to do first', async () => {

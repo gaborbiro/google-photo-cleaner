@@ -88,6 +88,8 @@ export interface DuplicatesView {
   groupsText: string | null;
   progressText: string | null;
   ruleText: string | null;
+  /** Photos the AI has not analysed yet are in no group, so a moment already decided can come back with one. */
+  notAnalysedText: string | null;
   blockedText: string | null;
   emptyText: string | null;
   problemText: string | null;
@@ -145,6 +147,7 @@ export class DuplicatesReview {
   private decided: { group: DuplicateGroup; kind: DecisionKind; wasDeferred: boolean }[] = [];
   private refreshAgain = false;
   private settings: ReviewQueue['settings'] | null = null;
+  private notAnalysed = 0;
   private notice: Notice | null = null;
   private sequence = 0;
   private queue: TrashQueueStatus | null = null;
@@ -254,6 +257,7 @@ export class DuplicatesReview {
     this.decidedGroups = queue.decidedGroups;
     this.blocked = queue.blocked;
     this.settings = queue.settings;
+    this.notAnalysed = queue.photosNotAnalysed;
     this.loaded = true;
     if (!queue.blocked) this.reportGroupsLeft();
     this.publish();
@@ -593,6 +597,10 @@ export class DuplicatesReview {
       ruleText: this.settings
         ? `Photos count as duplicates when they are at least ${percent(this.settings.threshold)} similar and taken within ${this.settings.windowMs / 60_000} minutes of each other. ` +
           'Nothing is trashed without your approval.'
+        : null,
+      notAnalysedText: loaded && this.blocked === null && this.notAnalysed > 0
+        ? `${count(this.notAnalysed, 'photo is', 'photos are')} not analysed yet, so a moment you have decided on may come back with a photo you haven’t seen. ` +
+          'Check for new photos on the Scan tab to analyse them.'
         : null,
       blockedText: this.blocked ? BLOCKED_TEXT[this.blocked] : null,
       emptyText: loaded && this.blocked === null && group === null ? 'No groups left to review.' : null,

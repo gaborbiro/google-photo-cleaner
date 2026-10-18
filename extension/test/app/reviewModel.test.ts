@@ -26,6 +26,7 @@ const g2 = () => group('g2', member('d', 'KEEPER'), member('e', 'PROPOSED'));
 class Fakes implements ReviewDeps {
   pending: DuplicateGroup[] = [g1(), g2()];
   blocked: ReviewQueue['blocked'] = null;
+  notAnalysed = 0;
   decisions: StoredDecision[] = [];
   loads = 0;
   /** When set, undo waits for it, so the screen can be checked meanwhile. */
@@ -43,7 +44,7 @@ class Fakes implements ReviewDeps {
     const pending = this.blocked ? [] : this.pending.filter((g) => !decided.has(g.id));
     return {
       blocked: this.blocked, pending, deferredIds: [], totalGroups: this.pending.length, decidedGroups: decided.size,
-      analysedAtMs: null, photosAnalysed: 100, photosNotAnalysed: 0, settings: { threshold: 0.915, windowMs: 120_000 },
+      analysedAtMs: null, photosAnalysed: 100, photosNotAnalysed: this.notAnalysed, settings: { threshold: 0.915, windowMs: 120_000 },
     };
   }
 
@@ -80,7 +81,7 @@ describe('the Duplicates review', () => {
   it('shows the first group with the proposals selected for the trash', async () => {
     const { view } = await opened();
     expect(view()).toMatchObject({
-      groupsText: '2 groups', progressText: '0 decided · 2 to go', emptyText: null, blockedText: null,
+      groupsText: '2 groups', progressText: '0 decided · 2 to go', emptyText: null, blockedText: null, notAnalysedText: null,
       ruleText: 'Photos count as duplicates when they are at least 91.5% similar and taken within 2 minutes of each other. Nothing is trashed without your approval.',
     });
     const g = view().group!;
@@ -379,6 +380,30 @@ describe('the Duplicates review', () => {
     expect(view()).toMatchObject({ groupsText: null, progressText: null });
     review.approve();
     expect(view().notice!.text).toBe(view().blockedText);
+  });
+
+  it('says how many photos are not analysed yet, since their moments can come back with them', async () => {
+    const fakes = new Fakes();
+    fakes.notAnalysed = 437;
+    const { review, view } = await opened(fakes);
+    expect(view().notAnalysedText).toBe(
+      '437 photos are not analysed yet, so a moment you have decided on may come back with a photo you haven’t seen. Check for new photos on the Scan tab to analyse them.',
+    );
+    fakes.notAnalysed = 1;
+    review.show();
+    await settle();
+    expect(view().notAnalysedText).toMatch(/^1 photo is not analysed yet,/);
+    // Gone once every photo is analysed.
+    fakes.notAnalysed = 0;
+    review.show();
+    await settle();
+    expect(view().notAnalysedText).toBeNull();
+    // While the review is blocked, the reason is what counts.
+    fakes.notAnalysed = 5;
+    fakes.blocked = 'SCAN_STALE';
+    review.show();
+    await settle();
+    expect(view().notAnalysedText).toBeNull();
   });
 
   it('a missing preview says so; the trash queue line counts the jobs', async () => {

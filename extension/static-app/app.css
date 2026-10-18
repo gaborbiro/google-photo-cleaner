@@ -78,7 +78,9 @@ html { background: var(--pc-bg); }
 body { margin: 0; background: var(--pc-bg); color: var(--pc-text); font: 16px/1.5 var(--font-ui); }
 main { padding: var(--space-5) var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
 body.popup main { width: 420px; }
-body.review main { max-width: 1100px; margin: 0 auto; padding: 28px var(--space-6) 40px; gap: 0; }
+/* Wide, so a group's photos sit side by side; running text keeps a readable line length. */
+body.review main { max-width: 1700px; margin: 0 auto; padding: 28px var(--space-6) 40px; gap: 0; }
+body.review main p, .status-lines > * { max-width: 80ch; }
 
 h1 { font-size: 20px; line-height: 28px; font-weight: 650; letter-spacing: -0.3px; margin: 0; }
 body.review h1 { font-size: 24px; line-height: 32px; letter-spacing: -0.5px; }
@@ -197,7 +199,8 @@ details.protection[open] > summary { border-bottom: 1px solid var(--pc-border); 
 table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; border-bottom: 1px solid var(--pc-border); padding: 8px 0; vertical-align: top; }
 th { color: var(--pc-muted); font-weight: 400; }
-.tables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; margin-top: var(--space-2); }
+/* No wider than before the review tab widened, so each count stays close to its label. */
+.tables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; margin-top: var(--space-2); max-width: 1050px; }
 body.popup .tables, body.panel .tables { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
 table.counts caption { text-align: left; font-size: 18px; line-height: 24px; font-weight: 650; margin-bottom: var(--space-2); }
 table.counts th { padding-right: var(--space-4); overflow-wrap: anywhere; }

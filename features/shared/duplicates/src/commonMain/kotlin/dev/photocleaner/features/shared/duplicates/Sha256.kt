@@ -1,8 +1,8 @@
 package dev.photocleaner.features.shared.duplicates
 
 /**
- * SHA-256 (FIPS 180-4), written out so group ids are the same on every platform: the desktop
- * used java.security.MessageDigest, which JavaScript doesn't have synchronously.
+ * SHA-256 (FIPS 180-4), written out so group ids are the same on every platform (JavaScript has
+ * no synchronous digest); the extension stores decisions under these ids.
  */
 internal object Sha256 {
     private val K = intArrayOf(

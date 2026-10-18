@@ -1,6 +1,5 @@
 // The duplicate rules: grouping, keeper choice, the review queue and the calibration report.
-// Multiplatform, so the desktop app (JVM) and the browser extension (JavaScript) apply exactly
-// the same tested rules.
+// Multiplatform: compiled to JavaScript for the extension and tested on the JVM.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
 }

@@ -1,7 +1,7 @@
-// Messages exchanged between the layers of the extension and the desktop app.
+// Messages exchanged between the layers of the extension.
 // The read operations change nothing in Google Photos. The only operations that do are the two
 // in WRITE_OPS (move to the trash, restore from it); they are accepted only where a page script and
-// relay are installed with writes allowed (Photo Cleaner's own, never the desktop connector's).
+// relay are installed with writes allowed (Photo Cleaner's own).
 
 export const READ_OPS = [
   'status',
@@ -70,12 +70,7 @@ export function isOpResult(value: unknown): value is OpResult {
     (ERROR_KINDS as readonly unknown[]).includes(r.error.kind) && typeof r.error.message === 'string';
 }
 
-/**
- * Page script <-> content script, over window.postMessage. Each extension that installs
- * a page script uses its own channel, so two of them in one page never answer each other.
- */
-export const PAGE_CHANNEL = 'photo-cleaner-connector';
-
+/** Page script <-> content script, over window.postMessage, on a channel of the extension's own. */
 export interface PageRequest {
   channel: string;
   dir: 'request';
@@ -97,15 +92,3 @@ export interface TabCommand {
   op: PageOp;
   params: Record<string, unknown>;
 }
-
-/** Desktop app <-> service worker, over the loopback WebSocket. */
-export type AppToExtension =
-  | { t: 'welcome'; appVersion: string }
-  | { t: 'cmd'; id: string; op: string; params: Record<string, unknown> };
-
-export type ExtensionToApp =
-  | { t: 'hello'; token: string; extensionVersion: string }
-  | { t: 'result'; id: string; result: OpResult }
-  | { t: 'keepalive' };
-
-export const DEFAULT_PORT = 47613;

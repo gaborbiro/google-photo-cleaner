@@ -21,7 +21,7 @@ object ProtectionJs {
         return JSON.stringify(toJs(result))
     }
 
-    /** The freshness limit the desktop app uses, so the extension can't drift from it. */
+    /** The freshness limit of the shared rules, so the extension can't drift from it. */
     fun defaultMaxAgeMs(): Double = InventoryClassifier.DEFAULT_MAX_AGE_MS.toDouble()
 }
 

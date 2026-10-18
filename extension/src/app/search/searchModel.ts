@@ -1,7 +1,6 @@
 // Search & sweep: find photos by description or by example ("more like these", "less like these"),
-// select them and move them to the trash queue. The browser twin of the desktop's SweepViewModel,
-// with the keyboard of the Duplicates review. The state machine lives here, and view() works out
-// every text the screen shows.
+// select them and move them to the trash queue, with the keyboard of the Duplicates review. The
+// state machine lives here, and view() works out every text the screen shows.
 
 import { count, n } from '../shared/format';
 import { ACTION_FAILED } from '../duplicates/reviewModel';

@@ -1,5 +1,4 @@
-// Where a scan's findings are saved: the browser twin of the desktop app's SqlInventoryRepository,
-// with the same rules, so both count the same library the same way. Each page is saved together
+// Where a scan's findings are saved. Each page is saved together
 // with its resume point in one transaction: a scan stopped at any moment resumes cleanly.
 
 import { committed, openDatabase, prefixRange, request, STORES } from '../shared/db';

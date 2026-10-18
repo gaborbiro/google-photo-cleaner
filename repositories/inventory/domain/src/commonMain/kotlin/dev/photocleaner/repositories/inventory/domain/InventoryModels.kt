@@ -54,10 +54,6 @@ data class InventoryItem(
     val thumbUrl: String?,
 )
 
-data class FavouriteEntry(val mediaKey: String, val dedupKey: String)
-
-data class ArchiveEntry(val mediaKey: String, val dedupKey: String)
-
 data class AlbumRecord(
     val albumKey: String,
     val title: String?,
@@ -67,8 +63,6 @@ data class AlbumRecord(
     val reportedItemCount: Int?,
     val authKey: String?,
 )
-
-data class AlbumMemberEntry(val mediaKey: String, val dedupKey: String)
 
 /** How a second read of an album's entries compared with the first. */
 enum class AlbumReread { SAME_ENTRIES, DIFFERENT_ENTRIES }

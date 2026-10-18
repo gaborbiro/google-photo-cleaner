@@ -153,7 +153,7 @@ describe('nothing changes Google Photos but the trash request, and only from Pho
     'XwAOJf', 'ycV3Nd', 'LjmOue', 'E1Cajb', 'laUYf', 'OXvT9d', 'QD9nKf', 'Ftfh0',
     'w7TP3c', 'StLnCe', 'Pp2Xxe', 'V8RKJ', 'Es7fke', 'EtUHOe', 'DaSgWe', 'AQNOFd',
   ];
-  /** The trash request's source, and Photo Cleaner's own page script bundle. Never the desktop connector's (dist/). */
+  /** The trash request's source, and Photo Cleaner's own page script bundle. */
   const TRASH_ALLOWED_IN = ['src/page/trashOps.ts', 'dist-app/page.js'];
 
   function files(dir: string): string[] {
@@ -162,7 +162,7 @@ describe('nothing changes Google Photos but the trash request, and only from Pho
       return statSync(path).isDirectory() ? files(path) : [path];
     });
   }
-  const sourceFiles = () => ['src', 'vendor', 'dist', 'dist-app'].filter((dir) => existsSync(dir)).flatMap(files)
+  const sourceFiles = () => ['src', 'vendor', 'dist-app'].filter((dir) => existsSync(dir)).flatMap(files)
     .map((path) => path.replace(/\\/g, '/'))
     .filter((path) => /\.(tsx?|m?js)$/.test(path));
 
@@ -170,7 +170,7 @@ describe('nothing changes Google Photos but the trash request, and only from Pho
     expect([...READ_OPS].sort()).toEqual(['fetchPreview', 'listAlbumItemsPage', 'listAlbumsPage', 'listArchivePage', 'listFavouritesPage', 'listLibraryPage', 'listTrashPage', 'status']);
     expect([...WRITE_OPS].sort()).toEqual(['moveToTrash', 'restoreFromTrash']);
     expect(isReadOp('moveToTrash')).toBe(false);
-    // Where writes aren't allowed (the desktop connector's relay), a write is refused like an unknown operation.
+    // Where writes aren't allowed (a relay installed without them, the default), a write is refused like an unknown operation.
     expect(isAllowedOp('moveToTrash', false)).toBe(false);
     expect(isAllowedOp('moveToTrash', true)).toBe(true);
     expect(isAllowedOp('removeItemsFromAlbum', true)).toBe(false);
@@ -187,7 +187,8 @@ describe('nothing changes Google Photos but the trash request, and only from Pho
   it("only Photo Cleaner's own page script includes the trash module, and only its relay allows writes", () => {
     const importers = sourceFiles().filter((path) => path.startsWith('src/') && /from '[./]+\/(page\/)?trashOps'/.test(readFileSync(path, 'utf8')));
     expect(importers).toEqual(['src/app/page/main.ts']);
-    expect(readFileSync('src/content/main.ts', 'utf8')).not.toMatch(/installRelay\([^)]*true/);
+    const writeRelays = sourceFiles().filter((path) => path.startsWith('src/') && /installRelay\([^)]*true/.test(readFileSync(path, 'utf8')));
+    expect(writeRelays).toEqual(['src/app/content/main.ts']);
     expect(readFileSync('src/app/content/main.ts', 'utf8')).toMatch(/installRelay\(APP_PAGE_CHANNEL, true\)/);
   });
 });

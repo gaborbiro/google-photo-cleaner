@@ -1,4 +1,4 @@
-// The library as a scan records it: the same shapes as the desktop app's inventory
+// The library as a scan records it: the same shapes as the shared rules' inventory
 // (repositories/inventory/domain), so a snapshot can be classified by the shared Kotlin rules.
 
 export type RunStatus = 'RUNNING' | 'PAUSED' | 'CANCELLED' | 'COMPLETED' | 'FAILED';

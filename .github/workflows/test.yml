@@ -1,5 +1,4 @@
-# Everything must pass on every push and pull request: the same `npm run check` as on a laptop,
-# plus the Python worker's tests. Windows, like the desktop app it also builds and tests.
+# Everything must pass on every push and pull request: the same `npm run check` as on a laptop.
 name: Test
 
 on:
@@ -24,21 +23,6 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: extension/package-lock.json
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      # The Kotlin tests start the worker with its fake model, which needs only these (no AI libraries).
-      - name: Worker test environment
-        working-directory: worker
-        run: |
-          python -m venv .venv
-          .\.venv\Scripts\python.exe -m pip install --disable-pip-version-check numpy pillow opencv-python-headless pytest
-
-      - name: Worker tests
-        working-directory: worker
-        run: .\.venv\Scripts\python.exe -m pytest -q
 
       - name: Extension dependencies
         working-directory: extension

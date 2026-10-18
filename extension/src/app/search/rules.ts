@@ -1,5 +1,4 @@
-// How Search ranks the library: the browser twin of the desktop's SearchPhotosUseCase, plus
-// "Less like these". A query is a description (its fingerprint from the AI model), example photos
+// How Search ranks the library, "Less like these" included. A query is a description (its fingerprint from the AI model), example photos
 // to find more of, and example photos to find fewer of. Which photos may be shown at all comes from
 // the shared protection rules: protected and unknown photos are never shown, only counted.
 

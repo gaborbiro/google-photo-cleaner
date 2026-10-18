@@ -1,5 +1,4 @@
-// Where review decisions and the trash queue are saved: the browser twin of the desktop's
-// SqlReviewRepository, per Google account. Recording an approval saves the selection and queues
+// Where review decisions and the trash queue are saved, per Google account. Recording an approval saves the selection and queues
 // one trash job per photo in the same transaction; undoing is one transaction too.
 
 import { CHANGES_CHANNEL } from '../shared/constants';

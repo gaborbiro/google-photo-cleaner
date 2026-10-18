@@ -1,6 +1,6 @@
 // The protection report of an account's latest scan. Classification is done by the shared Kotlin
-// rules (features/shared/protection, compiled to JavaScript), so the browser and the desktop app
-// can't disagree on what is protected. The wording follows the desktop's Scan library tab.
+// rules (features/shared/protection, compiled to JavaScript), so every check agrees on what is
+// protected.
 
 import { classifyInventoryJson, defaultMaxAgeMs } from '../../../generated/kotlin/PhotoCleaner-features-shared-duplicates.mjs';
 import { count, n } from '../shared/format';
@@ -82,7 +82,7 @@ export interface ReportView {
   /** Albums worth knowing about that don't block anything. */
   noteLines: string[];
   tables: { title: string; rows: { label: string; value: string; indent: boolean }[] }[];
-  /** Counts only, no album titles: for comparing with the desktop app. */
+  /** Counts only, no album titles: safe to copy and share. */
   copyText: string;
 }
 

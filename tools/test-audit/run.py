@@ -10,7 +10,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
@@ -43,19 +42,11 @@ def test(fault: dict, work: Path, phase: str) -> tuple[int, set[tuple[str, str]]
                   for file in data.get("testResults", []) for case in file["assertionResults"]
                   if case["status"] == "failed"}
         return code, failed
-    if fault["suite"] == "worker":
-        report = work / f"{phase}.xml"
-        python = ROOT / "worker/.venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-        command = [str(python) if python.exists() else sys.executable, "-m", "pytest", "-q", f"--junitxml={report}"]
-        code = execute(command, ROOT / "worker", work / f"{phase}.log")
-        failed = {("worker/tests/test_protocol.py", case.get("name", ""))
-                  for case in ET.parse(report).findall(".//testcase") if case.find("failure") is not None} if report.exists() else set()
-        return code, failed
     # Force fresh assertions; an up-to-date Gradle task is not a test execution.
     init = work / "force-tests.gradle"
     init.write_text("allprojects { tasks.withType(Test).configureEach { outputs.upToDateWhen { false }; timeout = java.time.Duration.ofSeconds(90) } }\n", encoding="utf-8")
-    command = (["cmd", "/d", "/c", "gradlew.bat"] if os.name == "nt" else ["./gradlew"])
-    command += ["test", ":features:shared:duplicates:jvmTest", "--continue", "--console=plain", "-I", str(init)]
+    command = [str(ROOT / ("gradlew.bat" if os.name == "nt" else "gradlew"))]
+    command += [":features:shared:duplicates:jvmTest", "--continue", "--console=plain", "-I", str(init)]
     import time
     began = time.time()
     code = execute(command, ROOT, work / f"{phase}.log")

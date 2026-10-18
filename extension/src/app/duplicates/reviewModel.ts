@@ -1,5 +1,4 @@
-// The Duplicates review: one group at a time, decided with the keyboard. The browser twin of the
-// desktop's ReviewViewModel: the state machine (focus, selection, decisions, undo, previews,
+// The Duplicates review: one group at a time, decided with the keyboard. The state machine (focus, selection, decisions, undo, previews,
 // viewer) lives here, and view() works out every text and colour the screen shows.
 
 import { count, n } from '../shared/format';

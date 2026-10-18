@@ -1,7 +1,7 @@
-// One library scan of one account: the browser port of the desktop app's ScanInventoryUseCase.
+// One library scan of one account.
 // Reads the library, favourites, archive, album list and every album's entries, one page at a
 // time, saving each page with its resume point; resumes the account's unfinished run if there
-// is one. Messages and retry policy follow the desktop app.
+// is one.
 
 import type { IndexedDbInventoryStore } from './inventoryStore';
 import type { AlbumStatus, ScanPhase, ScanRun } from './model';

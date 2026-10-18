@@ -1,7 +1,0 @@
--- 1 -> 2: every photo a decision covered (the whole group as shown), so photos already
--- reviewed are not proposed again when their moment's group changes.
-CREATE TABLE decision_member (
-    decision_id INTEGER NOT NULL,
-    media_key TEXT NOT NULL,
-    PRIMARY KEY (decision_id, media_key)
-);

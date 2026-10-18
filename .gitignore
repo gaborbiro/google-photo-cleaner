@@ -8,21 +8,17 @@ build/
 *.iml
 local.properties
 
-# JVM crash dumps and stray logs (the app writes its logs to %LOCALAPPDATA%\PhotoCleaner)
+# JVM crash dumps and stray logs
 hs_err_pid*.log
 *.log
 *logDir_IS_UNDEFINED/
 
-# Chrome extension: dependencies and build output (also in extension/.gitignore)
+# Chrome extension: dependencies (also in extension/.gitignore)
 extension/node_modules/
-extension/dist/
 
-# Python worker: environment, caches, packaging metadata
-worker/.venv/
+# Python caches (tools/test-audit, the calibration labels export)
 __pycache__/
 *.pyc
-.pytest_cache/
-*.egg-info/
 
 # OS clutter
 .DS_Store

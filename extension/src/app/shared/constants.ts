@@ -1,5 +1,4 @@
-// Names that keep the app extension apart from the desktop app's connector when both are
-// installed: each has its own page-script channel and window keys.
+// The page script's channel and window key, the change announcements' channel, and the database.
 
 export const APP_PAGE_CHANNEL = 'photo-cleaner-app';
 export const APP_PAGE_OWNER_KEY = '__photoCleanerAppPageId';

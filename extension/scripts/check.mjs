@@ -1,6 +1,6 @@
 // Everything that must pass before a change is done (`npm run check`), in the order that works:
-// 1. Gradle: build the shared Kotlin rules for the extension, run every Kotlin test (the desktop
-//    app's and the shared rules'), 2. the extension: typecheck, tests, build.
+// 1. Gradle: build the shared Kotlin rules for the extension and run their tests, 2. the extension:
+//    typecheck, tests, build.
 // Stops at the first failure. The same command runs in CI (.github/workflows/test.yml).
 
 import { spawnSync } from 'node:child_process';
@@ -23,9 +23,8 @@ function run(label, command, args, cwd) {
 }
 
 const gradlew = resolve(root, windows ? 'gradlew.bat' : 'gradlew');
-run('Kotlin: shared rules for the extension, and every Kotlin test', windows ? `"${gradlew}"` : gradlew, [
+run('Kotlin: shared rules for the extension, and their tests', windows ? `"${gradlew}"` : gradlew, [
   ':features:shared:duplicates:exportToExtension',
-  'test',
   ':features:shared:duplicates:jvmTest',
   '--console=plain',
 ], root);

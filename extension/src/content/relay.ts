@@ -6,7 +6,7 @@ const PAGE_TIMEOUT_MS = 90_000;
 
 /**
  * Relays this extension's tab commands to its page script on [channel]. [writesAllowed]: also the
- * trash operations (Photo Cleaner's own relay; the desktop connector's stays read-only).
+ * trash operations; without it the relay is read-only.
  */
 export function installRelay(channel: string, writesAllowed = false): void {
   const pending = new Map<string, (result: OpResult) => void>();

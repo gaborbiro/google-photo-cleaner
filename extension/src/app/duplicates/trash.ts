@@ -1,4 +1,4 @@
-// Moving approved photos to the trash: the browser twin of the desktop's ProcessTrashQueueUseCase.
+// Moving approved photos to the trash, one queue per account.
 // The trash is Google Photos' own (googleTrash.ts).
 
 import type { Classification } from '../scan/report';

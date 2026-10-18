@@ -1,6 +1,6 @@
 // The duplicate rules: grouping, keeper choice, the review queue and the calibration report come
-// from the shared Kotlin module (features/shared/duplicates, compiled to JavaScript), so the
-// browser and the desktop app group photos the same way. This file only types their answers.
+// from the shared Kotlin module (features/shared/duplicates, compiled to JavaScript), where they
+// are tested. This file only types their answers.
 
 import { calibrationReportJson, decisionItemsJson, defaultMaxAgeMs, reviewQueueJson } from '../../../generated/kotlin/PhotoCleaner-features-shared-duplicates.mjs';
 import { DUPLICATE_THRESHOLD, type Detail } from '../ai/model';
@@ -65,7 +65,7 @@ export interface GroupingSettings {
   tokenBudget: number;
 }
 
-/** The desktop's rules, with the threshold for the detail this library was analysed at. */
+/** The grouping rules, with the threshold for the detail this library was analysed at. */
 export function groupingSettings(detail: Detail): GroupingSettings {
   return { threshold: DUPLICATE_THRESHOLD[detail], windowMs: 120_000, maxGroupSize: 12, tokenBudget: detail };
 }

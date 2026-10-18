@@ -1,4 +1,4 @@
-// The Duplicates keys, as on the desktop: the left hand rests on A S D F with Z below; arrows,
+// The Duplicates keys: the left hand rests on A S D F with Z below; arrows,
 // Space and Enter work the grid. Shortcuts work wherever the focus is, except while typing or with
 // Ctrl/Alt/Cmd held. A held arrow keeps moving, as in a file manager (at our own pace); any other
 // held key counts once, so holding D or Space never decides or toggles more than intended.

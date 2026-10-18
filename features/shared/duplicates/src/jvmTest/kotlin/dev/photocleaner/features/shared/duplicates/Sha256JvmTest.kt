@@ -5,7 +5,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 
-/** Group ids must stay what the desktop app stored: the same digest as java.security's. */
+/** Group ids must never change (decisions are saved under them): the same digest as java.security's. */
 class Sha256JvmTest {
 
     @Test

@@ -1,7 +1,0 @@
--- 1 -> 2: original upload time and pixel size per photo, for keeper recommendation.
-CREATE TABLE photo_info (
-    media_key TEXT NOT NULL PRIMARY KEY,
-    uploaded_at INTEGER,
-    width INTEGER,
-    height INTEGER
-);

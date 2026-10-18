@@ -24,8 +24,8 @@ export interface PageScriptConfig {
    */
   exposeAccountEmail?: boolean;
   /**
-   * Also answers the trash operations (WRITE_OPS) with this handler. Only Photo Cleaner's own page
-   * script passes one; the desktop connector's has none, so its bundle doesn't even contain them.
+   * Also answers the trash operations (WRITE_OPS) with this handler. Only Photo Cleaner's page
+   * script passes one (a page script without it doesn't even contain them).
    * (Any script in the page could call Google directly anyway: this adds nothing for it.)
    */
   writes?: WriteHandler;

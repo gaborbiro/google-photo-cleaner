@@ -1,5 +1,5 @@
-// Library data types and the repository contract. Multiplatform: the desktop app uses the JVM
-// build, the browser extension the JavaScript one (through features:shared:protection).
+// Library data types: what a scan records, for the protection rules. Multiplatform: compiled to
+// JavaScript for the extension (through features:shared:protection) and tested on the JVM.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
 }
@@ -8,11 +8,5 @@ kotlin {
     jvm()
     js {
         browser()
-    }
-
-    sourceSets {
-        commonMain.dependencies {
-            api(libs.kotlinx.coroutines.core)
-        }
     }
 }

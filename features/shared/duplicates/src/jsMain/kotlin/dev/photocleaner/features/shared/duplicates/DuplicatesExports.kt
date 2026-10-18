@@ -23,7 +23,7 @@ import dev.photocleaner.repositories.review.domain.DecisionKind
 fun classifyInventoryJson(snapshotJson: String, nowMs: Double, maxAgeMs: Double, choicesJson: String): String =
     ProtectionJs.classifyInventoryJson(snapshotJson, nowMs, maxAgeMs, choicesJson)
 
-/** The freshness limit the desktop app uses, so the extension can't drift from it. */
+/** The freshness limit of the shared rules, so the extension can't drift from it. */
 @JsExport
 fun defaultMaxAgeMs(): Double = ProtectionJs.defaultMaxAgeMs()
 
@@ -44,7 +44,7 @@ fun decisionItemsJson(membersJson: String, kind: String, selectedJson: String): 
 }
 
 /**
- * The duplicate review queue for the browser extension, by the same rules as the desktop app.
+ * The duplicate review queue for the browser extension, by the shared rules.
  *
  * - [snapshotJson]: the latest library scan (as for classifyInventoryJson), or null before any scan.
  * - [photosJson]: one entry per analysed photo, `{mediaKey, sharpness, clipped, analysedAtMs,

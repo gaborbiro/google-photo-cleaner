@@ -4,6 +4,9 @@ Can EmbeddingGemma 2 run in the browser, on the graphics card (WebGPU), as fast 
 as the desktop app? Compares on the photos of the labelled calibration pairs. Nothing here is used
 by the app. `data/` holds personal photos and is git-ignored.
 
+The export steps below (`spikes/browser-ai/export`) needed the desktop app, and were removed with it
+on 2026-10-18; they are in the git history. The test pages still work on an existing `data/`.
+
 1. Close the desktop app (the export uses its connection to the extension), keep a signed-in
    photos.google.com tab open in Chrome, then from `C:\Work\PhotoCleaner-browser-ai`:
 

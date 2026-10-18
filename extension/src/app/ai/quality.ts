@@ -1,5 +1,5 @@
 // Cheap, content-free image quality measurements for choosing which duplicate to keep.
-// A port of the desktop worker's quality.py (OpenCV), on the same 512 px previews.
+// Measured on the 512 px previews (ported from the former desktop app's OpenCV worker).
 
 export interface RgbaImage {
   /** RGBA bytes, row by row. */

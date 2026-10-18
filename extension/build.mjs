@@ -10,34 +10,15 @@ try {
   process.exit(1);
 }
 
-// Two extensions from one project:
-//  dist/      the connector the desktop app talks to (unchanged while the desktop app is in use)
-//  dist-app/  the new Photo Cleaner extension (everything runs in the browser)
+// Builds the Photo Cleaner extension into dist-app/.
 
 const common = { bundle: true, target: 'chrome116', legalComments: 'inline', logLevel: 'info' };
 const gptkNotice = '/*! Includes code from Google Photos Toolkit (https://github.com/xob0t/Google-Photos-Toolkit), MIT License, Copyright (c) 2024 xob0t. See THIRD_PARTY_GPTK_LICENSE. */';
 
-function fresh(outdir) {
-  rmSync(outdir, { recursive: true, force: true });
-  mkdirSync(outdir);
-}
-
-// --- the connector ---
-{
-  const outdir = 'dist';
-  fresh(outdir);
-  await build({ ...common, entryPoints: { page: 'src/page/main.ts' }, outdir, format: 'iife', banner: { js: gptkNotice } });
-  await build({ ...common, entryPoints: { content: 'src/content/main.ts' }, outdir, format: 'iife' });
-  await build({ ...common, entryPoints: { popup: 'src/popup/main.ts' }, outdir, format: 'iife' });
-  await build({ ...common, entryPoints: { background: 'src/background/main.ts' }, outdir, format: 'esm' });
-  cpSync('static', outdir, { recursive: true });
-  cpSync('vendor/gptk/LICENSE', `${outdir}/THIRD_PARTY_GPTK_LICENSE`);
-}
-
-// --- the app ---
 {
   const outdir = 'dist-app';
-  fresh(outdir);
+  rmSync(outdir, { recursive: true, force: true });
+  mkdirSync(outdir);
   // Everything the bundles read, for the third-party notices.
   const inputs = new Set();
   const bundle = async (options) => {

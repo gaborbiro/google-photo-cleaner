@@ -5,13 +5,11 @@ Read this before changing anything. It applies to every agent (Codex, Claude Cod
 ## What this is
 
 Photo Cleaner finds duplicates and clutter in very large Google Photos libraries and moves what the user
-approves to the trash. There are two products in this repository:
-
-- **The browser extension** (`extension/`, the product): a Chrome extension that runs everything in the
-  browser. It reads the library through the user's photos.google.com tab, analyses photos with an AI model
-  on the graphics card (WebGPU), and stores everything in IndexedDB.
-- **The desktop app** (Kotlin, Compose Desktop): the original prototype. It is still used, and it shares
-  its tested rules with the extension.
+approves to the trash. It is a Chrome extension (`extension/`) that runs everything in the browser: it
+reads the library through the user's photos.google.com tab, analyses photos with an AI model on the
+graphics card (WebGPU), and stores everything in IndexedDB. The rules that decide what is protected and
+what counts as a duplicate are Kotlin Multiplatform, compiled to JavaScript for the extension. (A Kotlin
+desktop app, the original prototype, was removed on 2026-10-18; it is in the git history.)
 
 `docs/roadmap.md` (on the main branch) says where the project stands and what comes next.
 
@@ -26,21 +24,12 @@ npm run check
 
 It runs, in order, stopping at the first failure:
 1. Gradle: builds the shared Kotlin rules for the extension (`extension/generated/kotlin`), then runs
-   every Kotlin test (desktop and shared).
+   their tests.
 2. The extension's typecheck, tests (vitest) and build.
 
 One-time setup on a new machine (needs network):
-- JDK 22, Node 24, Python 3.12 on the PATH.
+- JDK 22 and Node 24 on the PATH.
 - `cd extension && npm ci`
-- The Python worker's test environment. The Kotlin tests start the worker with its fake model, which
-  only needs a few small libraries:
-  ```
-  cd worker
-  python -m venv .venv
-  .venv/Scripts/python -m pip install numpy pillow opencv-python-headless pytest   # Windows
-  .venv/bin/python -m pip install numpy pillow opencv-python-headless pytest       # Linux, macOS
-  ```
-  Worker tests: `.venv/Scripts/python -m pytest -q` from `worker/`.
 
 The extension's tests and build refuse to run against an old copy of the shared Kotlin rules. If they
 say so, run `npm run kotlin` (or `npm run check`, which does it).
@@ -54,11 +43,12 @@ say so, run `npm run kotlin` (or `npm run check`, which does it).
 | `extension/test/` | The extension's tests (vitest, fake-indexeddb, fakes in `test/app/fakes.ts`) |
 | `extension/generated/` | Built from Kotlin by `npm run kotlin`. Git-ignored. Never edit |
 | `extension/vendor/gptk/` | Copied verbatim from an MIT project. Never edit (see `UPSTREAM.md`) |
-| `features/shared/protection`, `features/shared/duplicates` | **Shared rules** (Kotlin Multiplatform, JVM and JS): what is protected, duplicate grouping, keeper choice, the review queue, calibration maths |
-| `repositories/*/domain` | Models and interfaces only (multiplatform where the shared rules need them) |
-| `app/`, `core/`, `features/*`, `repositories/*`, `services/*` | The desktop app |
-| `worker/` | The desktop app's Python AI worker |
-| `spikes/` | Experiments from phase 1; not part of the products |
+| `extension/src/page/`, `extension/src/content/relay.ts`, `extension/src/shared/` | The page script's operations on Google Photos (`trashOps.ts` holds the only writes), its relay, and their messages |
+| `features/shared/protection`, `features/shared/duplicates` | **Shared rules** (Kotlin Multiplatform, JVM and JS): what is protected, duplicate grouping, keeper choice, the review queue, calibration maths. Tests in `features/shared/duplicates/src/commonTest` |
+| `repositories/*/domain` | The models the shared rules read (multiplatform) |
+| `site/` | The privacy policy page, published by `.github/workflows/pages.yml` |
+| `spikes/` | Experiments from phase 1; not part of the product |
+| `tools/test-audit/` | Replays recorded faults to check the tests catch them (`docs/test-audit.md`) |
 
 ## Rules
 

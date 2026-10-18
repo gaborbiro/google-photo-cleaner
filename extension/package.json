@@ -1,5 +1,5 @@
 {
-  "name": "photo-cleaner-connector",
+  "name": "photo-cleaner",
   "version": "0.3.0",
   "private": true,
   "type": "module",

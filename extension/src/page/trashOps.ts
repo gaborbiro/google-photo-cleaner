@@ -1,7 +1,7 @@
 // The only requests that change the user's Google Photos: moving photos to the trash and restoring
 // them (GPTK src/api/api.ts:235 moveItemsToTrash, :247 restoreFromTrash; both rpcid XwAOJf). Kept
 // apart from the read-only dispatcher (ops.ts) so that only Photo Cleaner's own page script
-// includes them: the desktop connector's bundle doesn't contain this request at all.
+// includes them (the tripwire tests in ops.test.ts check this).
 //
 // Before anything is sent: the photos are 1 to MAX_TRASH_BATCH distinct, well-formed dedup keys,
 // and this tab is signed in to the account they belong to. What happened is checked afterwards by

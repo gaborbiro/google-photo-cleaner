@@ -1,5 +1,4 @@
-// The AI analysis of one account's library: the browser counterpart of the desktop app's
-// EmbedLibraryUseCase. Reads the library again page by page (newest first, so preview links are
+// The AI analysis of one account's library. Reads the library again page by page (newest first, so preview links are
 // fresh and recent photos are ready first), and for every photo not analysed yet fetches its
 // 512 px preview, measures its quality, fingerprints it and saves both. Photos already analysed
 // are skipped, so running again resumes. The first run starts with a speed check that chooses

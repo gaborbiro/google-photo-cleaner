@@ -1,5 +1,5 @@
-// Review decisions and trash jobs: models and the repository contract. Multiplatform: the desktop
-// app uses the JVM build, the browser extension the JavaScript one (through features:shared:duplicates).
+// Review decisions: the models the review queue rules read. Multiplatform: compiled to JavaScript for
+// the extension (through features:shared:duplicates) and tested on the JVM.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
 }
@@ -8,11 +8,5 @@ kotlin {
     jvm()
     js {
         browser()
-    }
-
-    sourceSets {
-        commonMain.dependencies {
-            api(libs.kotlinx.coroutines.core)
-        }
     }
 }

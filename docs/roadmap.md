@@ -68,9 +68,9 @@ stops a scan or loses anything; the three surfaces are windows onto the same sav
 ## 2. Build the browser version
 
 Target audience: people with huge libraries (anyone can review 500 photos by hand), so the first
-analysis time is the main UX challenge. The desktop app keeps working for my own clean-ups until the
-extension can do everything it does. UI in React + TypeScript (closest to Compose's model); `extension/`
-grows into the product; a new shared Kotlin module holds the tested rules, compiled to JavaScript.
+analysis time is the main UX challenge. The desktop app kept working for my own clean-ups until the
+extension could do everything it did; it was removed on 2026-10-18 (it is in the git history). UI in
+React + TypeScript (closest to Compose's model); `extension/` grows into the product; a new shared Kotlin module holds the tested rules, compiled to JavaScript.
 
 ### Milestones (each one usable on its own)
 
@@ -128,8 +128,8 @@ grows into the product; a new shared Kotlin module holds the tested rules, compi
         oldest; protected and unknown photos never shown. D asks, Enter moves the selection to the
         (simulated) trash queue after checking every photo again; Z undoes. Duplicates' "Search more
         like these" opens it with the group's photos as examples
-  - [ ] The ranking is TypeScript (a few lines of arithmetic); which photos may be shown comes from
-        the shared Kotlin protection rules. Share the ranking via Kotlin if the desktop gets "Less like these"
+  - [x] The ranking is TypeScript (a few lines of arithmetic); which photos may be shown comes from
+        the shared Kotlin protection rules. It stays TypeScript: the desktop app, its only other user, is gone (2026-10-18)
   - [ ] New: "Add to album…" for search results (a new album or an existing one). A write request,
         like trashing: needs M6's write path (one request at a time, every photo confirmed,
         failures shown). Bonus: photos in an album are protected, so it is also "keep all of these"
@@ -309,7 +309,7 @@ Kept up to date as we go; reviewed in full before publishing (phase 3).
       or image. Ideas for later: encrypt the stored data, make it less searchable
 - [ ] Metadata together says a lot about someone's life: when photos were taken, album titles,
       favourites, the account, the decision history. Same ideas: encryption, storing less
-- [ ] Photo links: the desktop inventory stores each photo's thumbnail address (`thumb_url`). If
+- [ ] Photo links: the inventory stores each photo's thumbnail address (`thumbUrl`). If
       such addresses open without being signed in, storing them is like storing a key to the photo.
       Check; if they do, don't store them, or only briefly
 - [ ] Optional thumbnail cache (for instant reviewing, ~30 KB each, ~500 MB for my library): real

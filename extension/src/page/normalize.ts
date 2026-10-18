@@ -1,4 +1,4 @@
-// Turns raw positional RPC payloads into the connector's wire DTOs.
+// Turns raw positional RPC payloads into the page script's wire DTOs.
 //
 // The vendored GPTK parser supplies keys, timestamps and URLs. Tri-state flags
 // (favourite, archived, owned, media type) are read here directly so that a

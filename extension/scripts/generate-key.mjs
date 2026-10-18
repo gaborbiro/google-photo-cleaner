@@ -1,6 +1,6 @@
-// One-off: generates the manifest "key" that pins the unpacked extension's ID,
-// so the desktop app can allow exactly one origin. The private key is not
-// needed for unpacked installs and is discarded.
+// One-off: generates the manifest "key" that pins the unpacked extension's ID, so it stays the
+// same wherever it is loaded from. The private key is not needed for unpacked installs and is
+// discarded.
 import { generateKeyPairSync, createHash } from 'node:crypto';
 
 const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });

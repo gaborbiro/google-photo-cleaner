@@ -13,8 +13,8 @@ import dev.photocleaner.repositories.inventory.domain.StoredMediaType
 
 /**
  * Classifies every item of one scan run and counts the outcome, by [EligibilityRules].
- * Pure: the desktop app (from its database) and the browser extension (from IndexedDB) both
- * call this with a snapshot, so they can never disagree on what is protected.
+ * Pure: the extension calls it with a snapshot from IndexedDB, and every check (the groups,
+ * Search, the trash queue) goes through it, so they can never disagree on what is protected.
  */
 object InventoryClassifier {
 

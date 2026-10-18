@@ -1,5 +1,4 @@
-// The app extension's page script: the connector's read operations plus the trash operations, on
-// its own channel, so both can be installed at once.
+// Photo Cleaner's page script: the read operations plus the trash operations, on its own channel.
 
 import { installPageScript } from '../../page/install';
 import { runWriteOp } from '../../page/trashOps';

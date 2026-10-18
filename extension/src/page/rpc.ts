@@ -1,5 +1,5 @@
 // Single-attempt batchexecute transport. Retries, backoff and pacing are the
-// desktop app's job; this layer reports exactly what went wrong.
+// caller's job (the scan, the analysis, the trash queue); this layer reports exactly what went wrong.
 //
 // Request encoding follows GPTK src/api/api.ts:43-112 (makeApiRequest) at the
 // pinned revision in vendor/gptk/UPSTREAM.md.

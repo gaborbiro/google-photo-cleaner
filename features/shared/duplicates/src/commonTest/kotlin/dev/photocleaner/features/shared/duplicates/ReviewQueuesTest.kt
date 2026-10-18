@@ -1,8 +1,13 @@
 package dev.photocleaner.features.shared.duplicates
 
 import dev.photocleaner.features.shared.duplicates.model.DuplicateGroup
+import dev.photocleaner.features.shared.duplicates.model.GroupMember
 import dev.photocleaner.features.shared.duplicates.model.GroupingSettings
 import dev.photocleaner.features.shared.duplicates.model.MemberRole
+import dev.photocleaner.features.shared.duplicates.model.PhotoFacts
+import dev.photocleaner.features.shared.protection.model.Eligibility
+import dev.photocleaner.repositories.inventory.domain.InventoryItem
+import dev.photocleaner.repositories.inventory.domain.StoredMediaType
 import dev.photocleaner.repositories.review.domain.Decision
 import dev.photocleaner.repositories.review.domain.DecisionItem
 import dev.photocleaner.repositories.review.domain.DecisionKind
@@ -121,5 +126,35 @@ class ReviewQueuesTest {
         val group = queue("a", "b", "c").pending.single()
         assertTrue(group.selectableMembers().any { it.role == MemberRole.KEEPER })
         assertEquals(3, group.decisionItems(DecisionKind.APPROVED, group.members.map { it.photo.item.mediaKey }.toSet()).size)
+    }
+
+    private fun member(key: String, role: MemberRole, eligibility: Eligibility = Eligibility.ELIGIBLE) = GroupMember(
+        PhotoFacts(InventoryItem(key, "d-$key", 1_000, StoredMediaType.PHOTO, false, false, true, 1, 1, null), eligibility, emptySet(), 1.0, 0.0, 1, null),
+        role, 0.97, emptyList(),
+    )
+
+    @Test
+    fun a_photo_from_outside_the_group_can_never_be_approved() {
+        val group = DuplicateGroup("g", listOf(member("k", MemberRole.KEEPER), member("a", MemberRole.PROPOSED)), 1_000)
+        assertFailsWith<IllegalArgumentException> { group.decisionItems(DecisionKind.APPROVED, setOf("a", "x")) }
+        assertFailsWith<IllegalArgumentException> { group.decisionItems(DecisionKind.APPROVED, setOf("x")) }
+    }
+
+    @Test
+    fun a_protected_or_unknown_photo_is_never_selectable_whatever_its_role() {
+        val withReference = DuplicateGroup(
+            "g",
+            listOf(member("k", MemberRole.KEEPER), member("a", MemberRole.PROPOSED), member("p", MemberRole.REFERENCE, Eligibility.PROTECTED)),
+            1_000,
+        )
+        assertEquals(setOf("k", "a"), withReference.selectableMembers().map { it.photo.item.mediaKey }.toSet())
+        assertFailsWith<IllegalArgumentException> { withReference.decisionItems(DecisionKind.APPROVED, setOf("k", "a", "p")) }
+        assertEquals(listOf(DecisionItem("a", "d-a"), DecisionItem("k", "d-k")), withReference.decisionItems(DecisionKind.APPROVED, setOf("k", "a")))
+
+        for (keeper in listOf(Eligibility.PROTECTED, Eligibility.UNKNOWN)) {
+            val group = DuplicateGroup("g2", listOf(member("k", MemberRole.KEEPER, keeper), member("a", MemberRole.PROPOSED)), 1_000)
+            assertEquals(setOf("a"), group.selectableMembers().map { it.photo.item.mediaKey }.toSet(), "keeper $keeper")
+            assertFailsWith<IllegalArgumentException>("keeper $keeper") { group.decisionItems(DecisionKind.APPROVED, setOf("k", "a")) }
+        }
     }
 }

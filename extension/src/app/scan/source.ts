@@ -74,7 +74,7 @@ export type RunOp = (op: ReadOp, params: Record<string, unknown>) => Promise<OpR
 
 type WithAccount<T> = T & { accountFingerprint: string };
 
-/** A [PhotosSource] over the page script's operations, mapped as the desktop's connector maps them. */
+/** A [PhotosSource] over the page script's operations. */
 export class OpPhotosSource implements PhotosSource, AnalysisSource {
   constructor(private readonly run: RunOp) {}
 

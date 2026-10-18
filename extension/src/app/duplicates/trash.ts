@@ -1,8 +1,6 @@
 // Moving approved photos to the trash: the browser twin of the desktop's ProcessTrashQueueUseCase.
-// The trash is simulated (nothing is sent to Google) unless the account has "Trash for real" on:
-// then it is Google Photos' own (googleTrash.ts).
+// The trash is Google Photos' own (googleTrash.ts).
 
-import { committed, openDatabase, request, STORES } from '../shared/db';
 import type { Classification } from '../scan/report';
 import type { IndexedDbReviewStore, TrashJob, TrashJobState } from './reviewStore';
 
@@ -20,7 +18,6 @@ export interface TrashOutcome {
 }
 
 export interface TrashService {
-  readonly simulated: boolean;
   moveToTrash(account: string, targets: TrashTarget[]): Promise<TrashOutcome[]>;
   restore(account: string, targets: TrashTarget[]): Promise<TrashOutcome[]>;
   /** Whether each dedup key is in the trash now. */
@@ -29,50 +26,8 @@ export interface TrashService {
   waitingReason?(): string | null;
 }
 
-/** Records what would be trashed, in the browser database; Google is never contacted. */
-export class SimulatedTrash implements TrashService {
-  readonly simulated = true;
-  private db: Promise<IDBDatabase> | null = null;
-
-  constructor(private readonly factory: IDBFactory = indexedDB) {}
-
-  private database(): Promise<IDBDatabase> {
-    this.db ??= openDatabase(this.factory, () => (this.db = null)).catch((error: unknown) => {
-      this.db = null;
-      throw error;
-    });
-    return this.db;
-  }
-
-  private async change(account: string, targets: TrashTarget[], put: boolean): Promise<TrashOutcome[]> {
-    const tx = (await this.database()).transaction(STORES.simulatedTrash, 'readwrite');
-    const store = tx.objectStore(STORES.simulatedTrash);
-    for (const t of targets) {
-      if (put) store.put({ account, dedupKey: t.dedupKey, mediaKey: t.mediaKey });
-      else store.delete([account, t.dedupKey]);
-    }
-    await committed(tx);
-    return targets.map((t) => ({ dedupKey: t.dedupKey, succeeded: true, error: null }));
-  }
-
-  moveToTrash(account: string, targets: TrashTarget[]) {
-    return this.change(account, targets, true);
-  }
-
-  restore(account: string, targets: TrashTarget[]) {
-    return this.change(account, targets, false);
-  }
-
-  async inTrash(account: string, dedupKeys: string[]): Promise<Map<string, boolean>> {
-    const store = (await this.database()).transaction(STORES.simulatedTrash, 'readonly').objectStore(STORES.simulatedTrash);
-    const found = await Promise.all(dedupKeys.map((k) => request(store.getKey([account, k]))));
-    return new Map(dedupKeys.map((k, i) => [k, found[i] !== undefined]));
-  }
-}
-
 export interface TrashQueueStatus {
   counts: Partial<Record<TrashJobState, number>>;
-  simulated: boolean;
   /** Why queued jobs are not moving, e.g. the library scan needs refreshing; null when they are. */
   waitingReason: string | null;
 }
@@ -103,11 +58,11 @@ export async function recoverInterrupted(deps: TrashQueueDeps): Promise<void> {
  */
 export async function processTrashQueue(deps: TrashQueueDeps): Promise<TrashQueueStatus> {
   const resting = deps.trash.waitingReason?.() ?? null;
-  if (resting !== null) return { counts: await deps.review.jobCounts(deps.account), simulated: deps.trash.simulated, waitingReason: resting };
+  if (resting !== null) return { counts: await deps.review.jobCounts(deps.account), waitingReason: resting };
   await reconcileUncertain(deps);
   await restoreRequested(deps);
   const waitingReason = await sendQueued(deps);
-  return { counts: await deps.review.jobCounts(deps.account), simulated: deps.trash.simulated, waitingReason };
+  return { counts: await deps.review.jobCounts(deps.account), waitingReason };
 }
 
 const batch = (deps: TrashQueueDeps) => deps.batchSize ?? 25;

@@ -56,7 +56,6 @@ Finds duplicate and unwanted photos in Google Photos with on-device AI. Your pho
 >   (each can be switched off).
 > • Every photo is checked again just before it is trashed. Trashed photos stay in Google Photos' trash
 >   for 60 days, and Photo Cleaner can bring them back.
-> • Practice first: until you switch on "Trash for real", trashing is only simulated.
 >
 > What you need
 > • Chrome on a Windows or Mac desktop or laptop, with a graphics card from about 2017 or later.
@@ -122,8 +121,8 @@ in the roadmap).
 > stage 2 downloads the AI model (about 300 MB from Hugging Face) and analyses the photos on the
 > graphics card (WebGPU). "Open review" opens the Duplicates and Search tabs.
 >
-> Trashing is simulated until "Trash for real" is switched on for the account, so reviewing changes
-> nothing in the library.
+> Approved photos go to Google Photos' trash, where they stay for 60 days; Undo (Z) brings them back.
+> Looking through the groups and the search results changes nothing in the library.
 >
 > The bundled Transformers.js library contains a fallback address on cdn.jsdelivr.net for ONNX Runtime.
 > It is never used: the extension sets the runtime's path to its own packed copy (`ort/`), and its

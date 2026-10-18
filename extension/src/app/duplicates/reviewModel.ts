@@ -670,8 +670,7 @@ export class DuplicatesReview {
     const status = this.queue;
     if (!status) return null;
     const c = (s: keyof TrashQueueStatus['counts']) => status.counts[s] ?? 0;
-    const prefix = status.simulated ? 'Trash queue (SIMULATED, nothing is sent to Google)' : 'Trash queue';
-    return `${prefix}: ${n(c('QUEUED') + c('SENDING') + c('UNCERTAIN'))} queued · ${n(c('COMPLETED'))} in trash · ${n(c('BLOCKED'))} blocked · ` +
+    return `Trash queue: ${n(c('QUEUED') + c('SENDING') + c('UNCERTAIN'))} queued · ${n(c('COMPLETED'))} in trash · ${n(c('BLOCKED'))} blocked · ` +
       `${n(c('FAILED'))} failed · ${n(c('CANCELLED'))} cancelled · ${n(c('RESTORED') + c('RESTORE_REQUESTED'))} restored`;
   }
 }

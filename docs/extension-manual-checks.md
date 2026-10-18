@@ -46,11 +46,13 @@ and copy the console (right-click the page → Inspect → Console).
 
 ## 3. Protection choices
 
+From here on, approving moves photos to Google Photos' trash: use photos you don't mind losing.
+
 1. On the Scan tab, untick **favourites**. The panel and popup show the change without a reload;
    Protection details count favourites as eligible.
 2. Tick it again. Duplicates and Search no longer offer favourites.
 3. With favourites unticked, approve a favourite for the trash: the trash queue line counts it in the
-   (simulated) trash within a few seconds, since approved photos are sent at once. **Z** brings it
+   trash within a few seconds, since approved photos are sent at once. **Z** brings it
    back. (A photo re-protected while still queued is blocked; that is tested automatically, because
    by hand there is no time to tick the box before it is sent.)
 
@@ -63,7 +65,7 @@ and copy the console (right-click the page → Inspect → Console).
    the bottom row stays in its column.
 3. **A** focuses the whole group (every photo bounces); **A** again unfocuses. **Space** toggles
    trash on the focused photo; clicking a photo toggles it without a bounce.
-4. **D** trashes the selection (simulated), **F** keeps all, **S** skips. **Z** undoes, with a
+4. **D** trashes the selection, **F** keeps all, **S** skips. **Z** undoes, with a
    spinner while it works.
 5. In a long group scrolled down, the next long group brings its top row into view without opening
    the folded toolbars.
@@ -77,7 +79,7 @@ and copy the console (right-click the page → Inspect → Console).
 2. Select a few → **M** (more like these): they show as + examples and the results change.
    **L** (less like these) shows − examples and drops look-alikes. Removing an example works.
    **Start over** clears everything.
-3. **D** asks to confirm; **Enter** moves them to the trash queue (simulated), **Esc** cancels.
+3. **D** asks to confirm; **Enter** moves them to the trash queue, **Esc** cancels.
    **Z** undoes it.
 4. From Duplicates, **Search more like these** opens Search with that group as examples.
 
@@ -86,19 +88,15 @@ and copy the console (right-click the page → Inspect → Console).
 Use photos you don't mind losing, a few at first. Everything trashed stays in Google Photos' trash
 for 60 days.
 
-1. Scan tab: **Trash for real** is off. Approve a group: the trash queue line says SIMULATED, and the
-   photos are still in Google Photos.
-2. Tick **Trash for real**. Approve a group of 2–3 photos. Within a few seconds the queue line counts
-   them in the trash, and Google Photos' **Trash** shows them (reload it). Nothing else is there that
-   you didn't approve.
-3. **Z**: the line counts them restored, and they are back in Google Photos (reload), in their albums
+1. Approve a group of 2–3 photos. Within a few seconds the queue line counts them in the trash, and
+   Google Photos' **Trash** shows them (reload it). Nothing else is there that you didn't approve.
+2. **Z**: the line counts them restored, and they are back in Google Photos (reload), in their albums
    as before, not in the trash.
-4. Search: select 2 photos, **D**: the question says they go to Google Photos' trash (no
-   "Simulated"); **Enter**: they appear in Google Photos' trash.
-5. Approve a group, then close the Google Photos tab at once: the queue line says it is waiting for
+3. Search: select 2 photos, **D**: the question says they go to Google Photos' trash; **Enter**: they
+   appear in Google Photos' trash.
+4. Approve a group, then close the Google Photos tab at once: the queue line says it is waiting for
    Google Photos; reopen it: the photos are trashed, once (not twice, nothing else).
-6. Approve groups quickly (D, D, D…): the line's queued count rises, then drains to "in trash".
-7. Untick **Trash for real**: new approvals are simulated again.
+5. Approve groups quickly (D, D, D…): the line's queued count rises, then drains to "in trash".
 
 ## 6. Erase Photo Cleaner's data
 

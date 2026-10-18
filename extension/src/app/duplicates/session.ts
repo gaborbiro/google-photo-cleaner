@@ -1,6 +1,5 @@
 // Connects the Duplicates review to the saved data of one account: the latest library scan, the
-// analysis (fingerprints, quality, photo facts), the decisions and the trash: simulated, or Google
-// Photos' own when the account has "Trash for real" on.
+// analysis (fingerprints, quality, photo facts), the decisions and Google Photos' trash.
 
 import { IndexedDbAnalysisStore } from '../ai/analysisStore';
 import { PREFERRED_DETAIL } from '../ai/model';
@@ -13,17 +12,15 @@ import { GoogleTrash, type RunPageOp } from './googleTrash';
 import type { ReviewDeps } from './reviewModel';
 import { IndexedDbReviewStore } from './reviewStore';
 import { groupingSettings, reviewQueue, type AnalysedPhoto, type ReviewQueue } from './rules';
-import { processTrashQueue, SimulatedTrash, type TrashQueueDeps, type TrashQueueStatus } from './trash';
+import { processTrashQueue, type TrashQueueDeps, type TrashQueueStatus } from './trash';
 
 /** The saved data the Duplicates review and the trash queue read and write; tests pass their own. */
 export interface DuplicatesStores {
   inventory: IndexedDbInventoryStore;
   analysis: IndexedDbAnalysisStore;
   review: IndexedDbReviewStore;
-  /** Where trashed photos go while trashing is simulated. */
-  trash: SimulatedTrash;
-  /** Google Photos' own trash, for accounts with "Trash for real" on. */
-  googleTrash: GoogleTrash;
+  /** Google Photos' own trash. */
+  trash: GoogleTrash;
   preferences: IndexedDbPreferences;
 }
 
@@ -32,8 +29,7 @@ export function duplicatesStores(factory: IDBFactory = indexedDB, run: RunPageOp
     inventory: new IndexedDbInventoryStore(factory),
     analysis: new IndexedDbAnalysisStore(factory),
     review: new IndexedDbReviewStore(factory),
-    trash: new SimulatedTrash(factory),
-    googleTrash: new GoogleTrash(run),
+    trash: new GoogleTrash(run),
     preferences: new IndexedDbPreferences(factory),
   };
 }
@@ -96,11 +92,7 @@ export function trashQueueDeps(account: string, stores: DuplicatesStores = share
   return { account, review: stores.review, trash: stores.trash, classify: () => classifyLatest(stores, account, now()), now };
 }
 
-/**
- * One pass of [account]'s trash queue, with the trash its "Trash for real" choice says: Google Photos'
- * own when on, the simulated one otherwise (read again at every pass, so turning it off stops sending).
- */
-export async function trashQueuePass(account: string, stores: DuplicatesStores = sharedStores(), now: () => number = Date.now): Promise<TrashQueueStatus> {
-  const trash = (await stores.preferences.trashForReal(account)) ? stores.googleTrash : stores.trash;
-  return processTrashQueue({ ...trashQueueDeps(account, stores, now), trash });
+/** One pass of [account]'s trash queue. */
+export function trashQueuePass(account: string, stores: DuplicatesStores = sharedStores(), now: () => number = Date.now): Promise<TrashQueueStatus> {
+  return processTrashQueue(trashQueueDeps(account, stores, now));
 }

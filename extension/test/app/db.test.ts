@@ -19,10 +19,11 @@ async function oldDatabase(factory: IDBFactory): Promise<IDBDatabase> {
 }
 
 /**
- * Every store as each version created it, with a record to keep and the indexes it had. [movedTo]: a
- * later version moved its records to that store (with [indexes] then the new store's).
+ * Every store as each version created it, with a record to keep and the indexes it had. [until]: the
+ * first version without it. [movedTo]: that version moved its records to this store (with [indexes]
+ * then the new store's); without it, the store was removed with its records.
  */
-const STORES_BY_VERSION: { since: number; name: string; options: IDBObjectStoreParameters; indexes: string[]; record: Record<string, unknown>; movedTo?: string }[] = [
+const STORES_BY_VERSION: { since: number; until?: number; name: string; options: IDBObjectStoreParameters; indexes: string[]; record: Record<string, unknown>; movedTo?: string }[] = [
   { since: 2, name: STORES.jobs, options: { keyPath: 'id' }, indexes: [], record: { id: 'library-scan:acc1', status: 'finished' } },
   { since: 2, name: STORES.runs, options: { keyPath: 'id', autoIncrement: true }, indexes: ['account'], record: { id: 1, accountFingerprint: 'acc1' } },
   { since: 2, name: STORES.cursors, options: { keyPath: ['runId', 'phase', 'scope'] }, indexes: [], record: { runId: 1, phase: 'LIBRARY', scope: '', token: 't' } },
@@ -31,18 +32,22 @@ const STORES_BY_VERSION: { since: number; name: string; options: IDBObjectStoreP
   { since: 2, name: STORES.archive, options: { keyPath: ['runId', 'mediaKey'] }, indexes: [], record: { runId: 1, mediaKey: 'm2' } },
   { since: 2, name: STORES.albums, options: { keyPath: ['runId', 'albumKey'] }, indexes: [], record: { runId: 1, albumKey: 'a1' } },
   { since: 2, name: STORES.albumMembers, options: { keyPath: ['runId', 'albumKey', 'mediaKey'] }, indexes: [], record: { runId: 1, albumKey: 'a1', mediaKey: 'm1' } },
-  { since: 3, name: 'embeddings', options: { keyPath: ['modelKey', 'mediaKey'] }, indexes: ['account'], record: { modelKey: 'k', mediaKey: 'm1', account: 'acc1', vector: new Float32Array([1, 0]) }, movedTo: STORES.fingerprints },
+  { since: 3, name: 'embeddings', options: { keyPath: ['modelKey', 'mediaKey'] }, indexes: ['account'], record: { modelKey: 'k', mediaKey: 'm1', account: 'acc1', vector: new Float32Array([1, 0]) }, movedTo: STORES.fingerprints, until: 6 },
   { since: 3, name: STORES.photoInfo, options: { keyPath: ['account', 'mediaKey'] }, indexes: [], record: { account: 'acc1', mediaKey: 'm1' } },
   { since: 3, name: STORES.analysisSettings, options: { keyPath: 'account' }, indexes: [], record: { account: 'acc1', detail: 140 } },
   { since: 4, name: STORES.decisions, options: { keyPath: 'id', autoIncrement: true }, indexes: ['account'], record: { id: 1, account: 'acc1', kind: 'APPROVED' } },
   { since: 4, name: STORES.trashJobs, options: { keyPath: 'id', autoIncrement: true }, indexes: ['account', 'decisionId'], record: { id: 1, account: 'acc1', decisionId: 1, state: 'QUEUED' } },
-  { since: 4, name: STORES.simulatedTrash, options: { keyPath: ['account', 'dedupKey'] }, indexes: [], record: { account: 'acc1', dedupKey: 'd1' } },
+  { since: 4, until: 7, name: 'simulatedTrash', options: { keyPath: ['account', 'dedupKey'] }, indexes: [], record: { account: 'acc1', dedupKey: 'd1' } },
   { since: 5, name: STORES.preferences, options: { keyPath: 'account' }, indexes: [], record: { account: 'acc1', protection: { favourites: false, albums: true, archived: true } } },
+  { since: 6, name: STORES.fingerprints, options: { keyPath: ['account', 'modelKey', 'mediaKey'] }, indexes: [], record: { account: 'acc1', modelKey: 'k', mediaKey: 'm2', vector: new Float32Array([0, 1]) } },
+  { since: 6, name: STORES.reviewSummaries, options: { keyPath: 'account' }, indexes: [], record: { account: 'acc1', groupsToReview: 3, atMs: 1 } },
 ];
+
+const storesIn = (version: number) => STORES_BY_VERSION.filter((s) => s.since <= version && (s.until === undefined || version < s.until));
 
 /** A database as [version] left it, with one record in every store, closed. */
 async function savedDatabase(factory: IDBFactory, version: number): Promise<void> {
-  const stores = STORES_BY_VERSION.filter((s) => s.since <= version);
+  const stores = storesIn(version);
   const open = factory.open(DB_NAME, version);
   open.onupgradeneeded = () => {
     for (const s of stores) {
@@ -58,14 +63,15 @@ async function savedDatabase(factory: IDBFactory, version: number): Promise<void
 }
 
 describe('database upgrades', () => {
-  for (const version of [2, 3, 4, 5]) {
+  for (const version of [2, 3, 4, 5, 6]) {
     it(`from version ${version}: every saved record and index is kept, and the new stores are added`, async () => {
       const factory = new IDBFactory();
       await savedDatabase(factory, version);
       const db = await openDatabase(factory);
       expect(db.version).toBe(DB_VERSION);
       expect([...db.objectStoreNames].sort()).toEqual(Object.values(STORES).sort());
-      for (const s of STORES_BY_VERSION.filter((s) => s.since <= version)) {
+      // Removed stores are gone with their records (the store list above); the rest keep theirs.
+      for (const s of storesIn(version).filter((s) => s.until === undefined || s.movedTo)) {
         const store = db.transaction(s.movedTo ?? s.name).objectStore(s.movedTo ?? s.name);
         expect(await request(store.getAll()), s.name).toEqual([s.record]);
         if (!s.movedTo) expect([...store.indexNames], s.name).toEqual(expect.arrayContaining(s.indexes));

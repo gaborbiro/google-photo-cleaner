@@ -191,8 +191,7 @@ export class SearchModel {
   private loadingModel = false;
   private modelPercent: number | null = null;
   private confirming = false;
-  /** Whether trashing is simulated for this account (until "Trash for real" is on): the question says so. */
-  private trashSimulated = true;
+
   private notice: Notice | null = null;
   private sequence = 0;
   private resultsVersion = 0;
@@ -413,12 +412,6 @@ export class SearchModel {
     this.allFocused = false;
   }
 
-  /** Whether trashing is simulated for this account (from the trash queue). */
-  setTrashSimulated(simulated: boolean): void {
-    if (simulated === this.trashSimulated) return;
-    this.trashSimulated = simulated;
-    this.publish();
-  }
 
   gridMeasured(columns: number): void {
     this.columns = Math.max(1, columns);
@@ -711,7 +704,7 @@ export class SearchModel {
       focusPulse: this.focusPulse,
       showMoreVisible: this.ranked.length >= this.limit,
       confirmText: this.confirming
-        ? `Move ${count(this.selected.size, 'photo', 'photos')} to the trash?` + (this.trashSimulated ? ' (Simulated: nothing is sent to Google.)' : " They go to Google Photos' trash, where they stay for 60 days.")
+        ? `Move ${count(this.selected.size, 'photo', 'photos')} to the trash? They go to Google Photos' trash, where they stay for 60 days.`
         : null,
       notice: this.notice,
       viewer: this.viewerIndex === null ? null : this.viewerView(this.viewerIndex, caption),

@@ -387,8 +387,8 @@ describe('the Duplicates review', () => {
     const { review, view } = await opened(fakes);
     expect(view().group!.tiles[1]).toMatchObject({ imageUrl: null, error: 'Preview unavailable: open Google Photos' });
     expect(view().group!.tiles[2]).toMatchObject({ imageUrl: null, error: 'Preview unavailable: Photo Cleaner needs an update' });
-    review.setQueueStatus({ counts: { QUEUED: 1, COMPLETED: 3, RESTORED: 1 }, simulated: true, waitingReason: null });
-    expect(view().queueText).toBe('Trash queue (SIMULATED, nothing is sent to Google): 1 queued · 3 in trash · 0 blocked · 0 failed · 0 cancelled · 1 restored');
+    review.setQueueStatus({ counts: { QUEUED: 1, COMPLETED: 3, RESTORED: 1 }, waitingReason: null });
+    expect(view().queueText).toBe('Trash queue: 1 queued · 3 in trash · 0 blocked · 0 failed · 0 cancelled · 1 restored');
   });
 
   it('a failed undo says so and leaves the review usable', async () => {

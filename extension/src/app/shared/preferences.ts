@@ -1,6 +1,5 @@
-// The user's choices, per Google account: which kinds of photo are never trashed, and whether
-// trashing is real (Google Photos' trash) or simulated. Saved in the browser database; a change is
-// announced to every open surface.
+// The user's choices, per Google account: which kinds of photo are never trashed. Saved in the
+// browser database; a change is announced to every open surface.
 
 import { CHANGES_CHANNEL } from './constants';
 import { committed, openDatabase, request, STORES } from './db';
@@ -18,8 +17,6 @@ export const ALL_PROTECTED: ProtectionChoices = { favourites: true, albums: true
 interface SavedPreferences {
   account: string;
   protection?: ProtectionChoices;
-  /** Approved photos go to Google Photos' trash; otherwise trashing is simulated. Off until the user turns it on. */
-  trashForReal?: boolean;
 }
 
 export class IndexedDbPreferences {
@@ -63,12 +60,4 @@ export class IndexedDbPreferences {
     await this.change(account, { protection });
   }
 
-  /** Whether approved photos go to Google Photos' trash; false (simulated) until the user turns it on. */
-  async trashForReal(account: string): Promise<boolean> {
-    return (await this.saved(account))?.trashForReal === true;
-  }
-
-  async setTrashForReal(account: string, trashForReal: boolean): Promise<void> {
-    await this.change(account, { trashForReal });
-  }
 }

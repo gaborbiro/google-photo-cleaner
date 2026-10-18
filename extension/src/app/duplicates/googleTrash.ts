@@ -23,7 +23,6 @@ export const REST_WITHOUT_PHOTOS_MS = 15_000;
 const PASSING: ReadonlySet<OpError['kind']> = new Set(['TRANSIENT', 'RATE_LIMIT', 'NO_PHOTOS_TAB', 'SESSION', 'RPC_ERROR']);
 
 export class GoogleTrash implements TrashService {
-  readonly simulated = false;
   private restUntilMs = 0;
   private restReason: string | null = null;
 

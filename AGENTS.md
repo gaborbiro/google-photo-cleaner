@@ -64,13 +64,13 @@ say so, run `npm run kotlin` (or `npm run check`, which does it).
 
 **Safety comes first.** The app moves photos to the trash. Nothing may ever be offered for the trash
 unless the shared rules call it ELIGIBLE with the user's protection choices. Photos of unknown status
-are never trashable. Trashing is **simulated** (`SimulatedTrash`) unless the account has "Trash for
-real" on; then photos go to Google Photos' trash (`duplicates/googleTrash.ts`), and what counts is
-where each photo is afterwards, read back from the trash. The only requests that change the user's
-Google Photos are trash and restore, in `extension/src/page/trashOps.ts`, which only Photo Cleaner's
-own page script includes (the tripwire tests in `extension/test/ops.test.ts` enforce this). Do not add
-any other (album edits, favourites…) unless the user explicitly asked for that change. Every write goes
-through the trash queue; every new write path needs tests for refusing protected photos.
+are never trashable. Approved photos go to Google Photos' trash (`duplicates/googleTrash.ts`); there
+is no simulated mode. What counts is where each photo is afterwards, read back from the trash. The
+only requests that change the user's Google Photos are trash and restore, in
+`extension/src/page/trashOps.ts`, which only Photo Cleaner's own page script includes (the tripwire
+tests in `extension/test/ops.test.ts` enforce this). Do not add any other (album edits, favourites…)
+unless the user explicitly asked for that change. Every write goes through the trash queue; every new
+write path needs tests for refusing protected photos.
 - Search's sweep and the trash queue check every photo again against a fresh scan and the current
   protection choices just before acting. `extension/test/app/sessions.test.ts` tests this through the
   real wiring (`duplicates/session.ts`, `search/session.ts`); a change to that wiring needs tests there.
@@ -89,10 +89,12 @@ tested in `commonTest`, and compiled for the extension. Don't reimplement them i
 
 **The extension's database** (`extension/src/app/shared/db.ts`, version in `shared/constants.ts`):
 - Add stores in `upgrade()` only through `create(...)`, which only adds and is safe to run again.
-  Never drop or clear users' data in an upgrade. (The one exception, already shipped: the upgrade from
-  version 1 clears the `jobs` store, which then held only M1's pretend scans.) Data may move to a new
-  store when its key must change: copy every record and remove the old store in the same upgrade, which
-  is one transaction (see `moveFingerprints` in `db.ts`), and mark the old store `movedTo` in the test.
+  Never drop or clear users' data in an upgrade. (The two exceptions: the upgrade from version 1
+  clears the `jobs` store, which then held only M1's pretend scans; version 7 removes the
+  `simulatedTrash` store, which held only pretend trashing, from before there were users.) Data may
+  move to a new store when its key must change: copy every record and remove the old store in the same
+  upgrade, which is one transaction (see `moveFingerprints` in `db.ts`), and mark the old store
+  `movedTo` in the test.
 - Raise `DB_VERSION` once per change set, with a comment saying what it adds. In
   `extension/test/app/db.test.ts`, add the new stores to `STORES_BY_VERSION` and the outgoing version
   to the versions upgraded from, so an update from every earlier version stays tested.

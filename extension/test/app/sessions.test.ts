@@ -140,25 +140,17 @@ describe('the count of groups waiting, for the popup', () => {
   });
 });
 
-describe('Trash for real', () => {
-  it('off (the default): trashing is simulated and nothing reaches Google', async () => {
-    const { search, queuePass, google } = await library();
-    await search.sweep(['lib-3']);
-    expect(await queuePass()).toMatchObject({ simulated: true, counts: { COMPLETED: 1 } });
-    expect(google.sent).toEqual([]);
-  });
-
-  it("on: approved photos go to Google Photos' trash, protected ones never; turning it off stops sending", async () => {
-    const { search, stores, queuePass, google } = await library();
-    await stores.preferences.setTrashForReal('account-a', true);
+describe("Google Photos' trash", () => {
+  it('approved photos go there; undo brings them back', async () => {
+    const { search, review, queuePass, google } = await library();
     await search.sweep(['lib-3', 'lib-4']);
-    expect(await queuePass()).toMatchObject({ simulated: false, counts: { COMPLETED: 2 } });
+    expect(await queuePass()).toMatchObject({ counts: { COMPLETED: 2 } });
     expect(google.sent).toEqual(['moveToTrash: dedup-3,dedup-4']);
     expect([...google.trash].sort()).toEqual(['dedup-3', 'dedup-4']);
 
-    await stores.preferences.setTrashForReal('account-a', false);
-    await search.sweep(['lib-5']);
-    await queuePass();
-    expect(google.sent).toHaveLength(1); // the simulated trash took it
+    await review.undo();
+    expect(await queuePass()).toMatchObject({ counts: { RESTORED: 2 } });
+    expect(google.trash.size).toBe(0);
+    expect(google.sent).toEqual(['moveToTrash: dedup-3,dedup-4', 'restoreFromTrash: dedup-3,dedup-4']);
   });
 });

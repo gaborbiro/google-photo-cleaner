@@ -14,7 +14,6 @@ import { NO_ANALYSIS } from '../../src/app/ai/analysis';
 import { IndexedDbAnalysisStore } from '../../src/app/ai/analysisStore';
 import { modelKey } from '../../src/app/ai/model';
 import { IndexedDbReviewStore } from '../../src/app/duplicates/reviewStore';
-import { SimulatedTrash } from '../../src/app/duplicates/trash';
 import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
 import { endJob, jobId, NO_PROGRESS, reportProgress, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 import type { AccountAnswer } from '../../src/app/shared/messages';
@@ -36,17 +35,24 @@ let account: AccountAnswer;
 /** What the pages asked the background page, in order. */
 let sent: { kind: string; [key: string]: unknown }[];
 let eraseAnswer: { ok?: true; error?: string };
+/** What Google Photos' trash holds (dedup keys). */
+let googleTrash: Set<string>;
 let errors: MockInstance;
 
-/** Chrome's side of the extension: the background page answers who is signed in, and previews. */
+/** Chrome's side of the extension: the background page answers who is signed in, previews, and Google Photos' trash. */
 function pretendExtension() {
   vi.stubGlobal('chrome', {
     runtime: {
-      sendMessage: async (request: { kind: string; op?: string }) => {
+      sendMessage: async (request: { kind: string; op?: string; account?: string; params?: { dedupKeys?: string[] } }) => {
         sent.push(request);
         if (request.kind === 'app-account') return account;
         if (request.kind === 'app-erase-all') return eraseAnswer;
         if (request.kind === 'app-run-op' && request.op === 'fetchPreview') return { ok: true, data: { contentType: 'image/jpeg', base64: 'AAAA' } };
+        if (request.kind === 'app-run-op' && request.op === 'listTrashPage') return { ok: true, data: { dedupKeys: [...googleTrash], nextPageToken: null, accountFingerprint: request.account } };
+        if (request.kind === 'app-run-op' && (request.op === 'moveToTrash' || request.op === 'restoreFromTrash')) {
+          for (const k of request.params!.dedupKeys!) (request.op === 'moveToTrash' ? googleTrash.add(k) : googleTrash.delete(k));
+          return { ok: true, data: { sent: request.params!.dedupKeys!.length } };
+        }
         return undefined;
       },
       getURL: (path: string) => `chrome-extension://photo-cleaner/${path}`,
@@ -128,6 +134,7 @@ beforeEach(() => {
   account = SIGNED_IN;
   sent = [];
   eraseAnswer = { ok: true };
+  googleTrash = new Set();
   pretendExtension();
   pretendLayout();
   localStorage.clear();
@@ -249,7 +256,6 @@ describe('clicks and keys reach what they should', () => {
 
   it('Duplicates: D trashes the selection (the trash queue sends it), Z undoes (and it comes back out)', async () => {
     const root = await duplicatesShown();
-    const trash = new SimulatedTrash(indexedDB);
     press('ArrowRight');
     press('ArrowRight');
     press(' '); // photo 2 kept: only photo 1 goes
@@ -258,12 +264,12 @@ describe('clicks and keys reach what they should', () => {
     press('d');
     await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(0));
     expect(await decisions()).toMatchObject([{ kind: 'APPROVED', items: [{ mediaKey: 'lib-1' }] }]);
-    await vi.waitFor(async () => expect(await trash.inTrash('account-a', ['dedup-1', 'dedup-2'])).toEqual(new Map([['dedup-1', true], ['dedup-2', false]])), { timeout: 6_000 });
+    await vi.waitFor(() => expect([...googleTrash]).toEqual(['dedup-1']), { timeout: 6_000 });
 
     press('z');
     await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(3));
     expect(await decisions()).toEqual([]);
-    await vi.waitFor(async () => expect((await trash.inTrash('account-a', ['dedup-1'])).get('dedup-1')).toBe(false), { timeout: 6_000 });
+    await vi.waitFor(() => expect(googleTrash.size).toBe(0), { timeout: 6_000 });
   }, 20_000);
 
   it('Duplicates: F keeps all, the S · Skip button skips, the Z · Undo button undoes', async () => {
@@ -337,18 +343,9 @@ describe('clicks and keys reach what they should', () => {
     expect(examples(root, 'More like:')).toBe(0);
   });
 
-  it("Scan tab: Trash for real is off until ticked; then Search's question says the photos really go to the trash", async () => {
+  it("Search: D asks first, saying the photos go to Google Photos' trash", async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('review', '?account=account-a');
-    const real = await vi.waitFor(() => {
-      const box = root.querySelector<HTMLInputElement>('.trash-mode-card input[type="checkbox"]');
-      if (!box) throw new Error('no Trash for real switch yet');
-      return box;
-    }, { timeout: 3_000 });
-    expect(real.checked).toBe(false);
-    real.click();
-    await vi.waitFor(async () => expect(await new IndexedDbPreferences(indexedDB).trashForReal('account-a')).toBe(true));
-
     await click(root, '2 · Duplicates');
     await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(3), { timeout: 3_000 });
     await click(root, 'Search more like these');
@@ -356,7 +353,6 @@ describe('clicks and keys reach what they should', () => {
     searchTiles(root)[0]!.querySelector<HTMLElement>('.search-tile-image')!.click();
     press('d');
     await shows(root, "They go to Google Photos' trash, where they stay for 60 days.");
-    expect(root.textContent).not.toContain('Simulated');
   }, 15_000);
 
   it('Scan tab: the protection checkboxes are saved and change the counts; the Scan button starts a scan', async () => {

@@ -88,27 +88,6 @@ export function setProtectionChoices(account: string, choices: ProtectionChoices
   return preferences.setProtection(account, choices);
 }
 
-/** Whether the account's approved photos go to Google Photos' trash (else simulated), kept up to date; undefined while loading. */
-export function useTrashForReal(account: string | null): boolean | undefined {
-  const [real, setReal] = useState<boolean | undefined>(undefined);
-  useEffect(() => {
-    if (account === null) return;
-    let alive = true;
-    const load = () => void preferences.trashForReal(account).then((r) => alive && setReal(r), logFailure('reading "Trash for real"'));
-    load();
-    const stop = onJobsChanged(load);
-    return () => {
-      alive = false;
-      stop();
-    };
-  }, [account]);
-  return real;
-}
-
-export function setTrashForReal(account: string, real: boolean): Promise<void> {
-  return preferences.setTrashForReal(account, real);
-}
-
 /** For actions started from a click: a failure goes to the log rather than vanishing ([what]: "starting the scan"). */
 export function logFailure(what: string): (error: unknown) => void {
   return (error) => console.error(`Photo Cleaner: ${what} failed`, error);

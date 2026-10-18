@@ -5,17 +5,17 @@ import { runAnalysis, type Embedder } from '../../src/app/ai/analysis';
 import { IndexedDbAnalysisStore } from '../../src/app/ai/analysisStore';
 import { SpeedMeter } from '../../src/app/ai/speed';
 import { IndexedDbReviewStore } from '../../src/app/duplicates/reviewStore';
-import { processTrashQueue, SimulatedTrash } from '../../src/app/duplicates/trash';
+import { processTrashQueue } from '../../src/app/duplicates/trash';
 import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
 import { SourceError } from '../../src/app/scan/source';
 import { committed, openDatabase, STORES } from '../../src/app/shared/db';
-import { classifyLatest, fakeAlbum, fakeItem, FakePhotos, NOW, scan } from './fakes';
+import { classifyLatest, fakeAlbum, fakeItem, FakePhotos, FakeTrash, NOW, scan } from './fakes';
 
 async function queued() {
   const factory = new IDBFactory();
   const inventory = new IndexedDbInventoryStore(factory);
   const review = new IndexedDbReviewStore(factory);
-  const trash = new SimulatedTrash(factory);
+  const trash = new FakeTrash();
   const source = new FakePhotos([fakeItem(0), fakeItem(1)]);
   await scan(source, inventory);
   await review.recordDecision('account-a', 'group', 'APPROVED', [{ mediaKey: 'lib-1', dedupKey: 'dedup-1' }], ['lib-0', 'lib-1'], NOW);
@@ -68,7 +68,7 @@ describe('trash queue safety at the service boundary', () => {
 
   it('undo during an in-flight send restores the photo without sending it twice', async () => {
     const { trash, review, send, deps } = await queued();
-    const move = SimulatedTrash.prototype.moveToTrash.bind(trash);
+    const move = FakeTrash.prototype.moveToTrash.bind(trash);
     let entered!: () => void;
     let release!: () => void;
     const started = new Promise<void>((resolve) => { entered = resolve; });

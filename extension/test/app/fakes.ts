@@ -3,6 +3,7 @@
 
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
+import type { TrashOutcome, TrashService, TrashTarget } from '../../src/app/duplicates/trash';
 import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
 import type { AlbumRecord, EntryRef, InventoryItem } from '../../src/app/scan/model';
 import { classify, type Classification } from '../../src/app/scan/report';
@@ -198,4 +199,24 @@ export function standardAccount(): FakePhotos {
     Array.from({ length: 10 }, (_, i) => fakeItem(i, { isFavourite: i === 1 || i === 2 })),
     [fakeAlbum('A', [2, 3, 4]), fakeAlbum('B', [4, 5], { shared: true })],
   );
+}
+
+/** A trash in memory, standing in for Google Photos' (googleTrash.test tests the real one against a pretend Google). */
+export class FakeTrash implements TrashService {
+  /** What it holds: `account/dedupKey`. */
+  readonly held = new Set<string>();
+
+  async moveToTrash(account: string, targets: TrashTarget[]): Promise<TrashOutcome[]> {
+    for (const t of targets) this.held.add(`${account}/${t.dedupKey}`);
+    return targets.map((t) => ({ dedupKey: t.dedupKey, succeeded: true, error: null }));
+  }
+
+  async restore(account: string, targets: TrashTarget[]): Promise<TrashOutcome[]> {
+    for (const t of targets) this.held.delete(`${account}/${t.dedupKey}`);
+    return targets.map((t) => ({ dedupKey: t.dedupKey, succeeded: true, error: null }));
+  }
+
+  async inTrash(account: string, dedupKeys: string[]): Promise<Map<string, boolean>> {
+    return new Map(dedupKeys.map((k) => [k, this.held.has(`${account}/${k}`)]));
+  }
 }

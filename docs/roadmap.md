@@ -145,6 +145,8 @@ grows into the product; a new shared Kotlin module holds the tested rules, compi
         counts is where each photo is afterwards, read back from the trash; passing failures are
         checked and sent again; the queue rests while Google limits requests. Undo restores. To check
         by hand with a few photos first (docs/extension-manual-checks.md, 5b)
+  - [x] (2026-10-17) The simulated trash and the "Trash for real" switch are gone: approved photos
+        always go to Google Photos' trash (a switch could leave a photo undone from the wrong trash)
   - [ ] Send the queue from the background page, not the review tab: approved photos keep going after
         the review tab closes (today they wait until it is open again)
   - [ ] Work out the "still eligible?" check once per scan and protection setting, not per batch
@@ -220,7 +222,7 @@ Scanning and reviewing
 - [x] Pick the detail level from the computer's speed (140 on a good graphics card, 70 on a weak one), fixed per library, each with its own tuned threshold (70's threshold still provisional)
 - [x] Calibration becomes a developer tool; users get the tuned threshold
 - [x] Review tab: Duplicates and Search & sweep (carry over the UX decisions from phase 0)
-- [x] Real trashing in Google Photos, with undo and safety checks (behind "Trash for real" while testing)
+- [x] Real trashing in Google Photos, with undo and safety checks
 
 Data controls (details in the Data privacy chapter)
 

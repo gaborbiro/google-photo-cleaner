@@ -6,7 +6,6 @@ import { gridKey } from '../duplicates/keys';
 import { DuplicatesReview, type DuplicatesView, type TileView } from '../duplicates/reviewModel';
 import { recoverInterrupted } from '../duplicates/trash';
 import { trashQueueDeps, trashQueuePass } from '../duplicates/session';
-import type { SearchModel } from '../search/searchModel';
 import { Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
 
 const TRASH_QUEUE_EVERY_MS = 2_000;
@@ -27,11 +26,10 @@ function useTopRowInView(groupId: string | null, bar: RefObject<HTMLElement | nu
 }
 
 /**
- * Runs the trash queue (simulated, or Google Photos' own with "Trash for real" on) while the review
- * tab is open and reports its counts: for sweeps from Search as well as Duplicates' decisions, so it
- * runs whichever tab is open. Search hears whether trashing is simulated, for its question.
+ * Runs the trash queue while the review tab is open and reports its counts: for sweeps from Search
+ * as well as Duplicates' decisions, so it runs whichever tab is open.
  */
-export function useTrashQueue(account: string | null, review: DuplicatesReview | null, search: SearchModel | null): void {
+export function useTrashQueue(account: string | null, review: DuplicatesReview | null): void {
   useEffect(() => {
     if (account === null || review === null) return;
     let alive = true;
@@ -39,10 +37,7 @@ export function useTrashQueue(account: string | null, review: DuplicatesReview |
     const pass = async () => {
       try {
         const status = await trashQueuePass(account);
-        if (alive) {
-          review.setQueueStatus(status);
-          search?.setTrashSimulated(status.simulated);
-        }
+        if (alive) review.setQueueStatus(status);
       } catch (error) {
         console.error('Photo Cleaner: the trash queue stopped for now', error);
       }
@@ -53,7 +48,7 @@ export function useTrashQueue(account: string | null, review: DuplicatesReview |
       alive = false;
       clearTimeout(timer);
     };
-  }, [account, review, search]);
+  }, [account, review]);
 }
 
 function Tile({ tile, focusPulse, review }: { tile: TileView; focusPulse: number; review: DuplicatesReview }) {

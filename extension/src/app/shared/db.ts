@@ -22,8 +22,7 @@ export const STORES = {
   decisions: 'decisions',
   /** One job per photo approved for the trash, with its state. */
   trashJobs: 'trashJobs',
-  /** What the simulated trash holds: [account, dedupKey]. Nothing is sent to Google before M6. */
-  simulatedTrash: 'simulatedTrash',
+
   /** The user's choices per account (which kinds of photo are protected). */
   preferences: 'preferences',
   /** Per account: how many duplicate groups are waiting for review, as last worked out, for the popup. */
@@ -91,6 +90,8 @@ function upgrade(open: IDBOpenDBRequest): void {
     const db = open.result;
     // Version 1 (M1) only held pretend scans, in an older shape: drop them.
     if (event.oldVersion === 1 && db.objectStoreNames.contains(STORES.jobs)) open.transaction?.objectStore(STORES.jobs).clear();
+    // Versions 4 to 6 kept a simulated trash, used before photos went to Google Photos' trash; it is gone.
+    if (db.objectStoreNames.contains(OLD_SIMULATED_TRASH)) db.deleteObjectStore(OLD_SIMULATED_TRASH);
     const create = (name: string, options: IDBObjectStoreParameters) => {
       if (!db.objectStoreNames.contains(name)) return db.createObjectStore(name, options);
       return null;
@@ -113,11 +114,13 @@ function upgrade(open: IDBOpenDBRequest): void {
     const jobs = create(STORES.trashJobs, { keyPath: 'id', autoIncrement: true });
     jobs?.createIndex('account', 'account');
     jobs?.createIndex('decisionId', 'decisionId');
-    create(STORES.simulatedTrash, { keyPath: ['account', 'dedupKey'] });
     create(STORES.preferences, { keyPath: 'account' });
     create(STORES.reviewSummaries, { keyPath: 'account' });
   };
 }
+
+/** Where versions 4 to 6 kept what the simulated trash held. */
+const OLD_SIMULATED_TRASH = 'simulatedTrash';
 
 /** Where versions 3 to 5 kept the fingerprints. */
 const OLD_FINGERPRINTS = 'embeddings';

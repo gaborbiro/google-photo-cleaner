@@ -5,15 +5,15 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
 import { IndexedDbReviewStore } from '../../src/app/duplicates/reviewStore';
-import { processTrashQueue, recoverInterrupted, SimulatedTrash, type TrashQueueDeps, type TrashTarget } from '../../src/app/duplicates/trash';
+import { processTrashQueue, recoverInterrupted, type TrashQueueDeps, type TrashTarget } from '../../src/app/duplicates/trash';
 import type { Classification } from '../../src/app/scan/report';
-import { classifyLatest, fakeItem, FakePhotos, newStore, NOW, scan } from './fakes';
+import { classifyLatest, fakeItem, FakePhotos, FakeTrash, newStore, NOW, scan } from './fakes';
 
 const item = (i: number) => ({ mediaKey: `lib-${i}`, dedupKey: `dedup-${i}` });
 const members = (...indexes: number[]) => indexes.map((i) => `lib-${i}`);
 
-/** A trash that fails for chosen photos, otherwise the simulated one. */
-class FlakyTrash extends SimulatedTrash {
+/** A trash that fails for chosen photos. */
+class FlakyTrash extends FakeTrash {
   failing = new Set<string>();
   override async moveToTrash(account: string, targets: TrashTarget[]) {
     const ok = targets.filter((t) => !this.failing.has(t.dedupKey));
@@ -25,7 +25,7 @@ class FlakyTrash extends SimulatedTrash {
 async function setup(opts: { favourites?: number[]; videos?: number[] } = {}) {
   const factory = new IDBFactory();
   const review = new IndexedDbReviewStore(factory);
-  const trash = new FlakyTrash(factory);
+  const trash = new FlakyTrash();
   const inventory = newStore();
   const source = new FakePhotos(Array.from({ length: 6 }, (_, i) => fakeItem(i, { isFavourite: opts.favourites?.includes(i) ?? false, mediaType: opts.videos?.includes(i) ? 'VIDEO' : 'PHOTO' })));
   await scan(source, inventory);
@@ -48,7 +48,7 @@ describe('review decisions and the trash queue', () => {
     const { review, trash, deps } = await setup();
     await review.recordDecision('account-a', 'g1', 'APPROVED', [item(1), item(2)], members(0, 1, 2), NOW);
     const status = await processTrashQueue(deps);
-    expect(status).toMatchObject({ counts: { COMPLETED: 2 }, simulated: true, waitingReason: null });
+    expect(status).toMatchObject({ counts: { COMPLETED: 2 }, waitingReason: null });
     expect(await trash.inTrash('account-a', ['dedup-0', 'dedup-1', 'dedup-2'])).toEqual(new Map([['dedup-0', false], ['dedup-1', true], ['dedup-2', true]]));
   });
 

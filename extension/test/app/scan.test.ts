@@ -43,32 +43,40 @@ describe('library scan', () => {
     expect(eligibilityOf(await classifyLatest(store), 3)).toMatchObject({ eligibility: 'PROTECTED', protectionReasons: ['IN_ALBUM'] });
   });
 
-  it('missing or negative proof makes items unknown, never eligible', async () => {
+  it('missing proof makes items unknown, never eligible', async () => {
     const store = newStore();
     const source = new FakePhotos(
       [
         fakeItem(0),
         fakeItem(1, { isFavourite: null }),
         fakeItem(2, { isArchived: null }),
-        fakeItem(3, { isOwned: false }),
-        fakeItem(4, { isOwned: null }),
-        fakeItem(5, { mediaType: null }),
-        fakeItem(6, { isFavourite: null }),
-        fakeItem(7, { isArchived: true }),
+        fakeItem(3, { mediaType: null }),
+        fakeItem(4, { isFavourite: null }),
+        fakeItem(5, { isArchived: true }),
       ],
       [],
-      { favourites: [fakeItem(6, { isFavourite: null })] },
+      { favourites: [fakeItem(4, { isFavourite: null })] },
     );
     await scan(source, store);
     const result = await classifyLatest(store);
     expect(eligibleIndexes(result)).toEqual([0]);
     expect(eligibilityOf(result, 1).unknownReasons).toEqual(['FAVOURITE_FLAG_MISSING']);
     expect(eligibilityOf(result, 2).unknownReasons).toEqual(['ARCHIVE_FLAG_MISSING']);
-    expect(eligibilityOf(result, 3).unknownReasons).toEqual(['NOT_OWNED']);
-    expect(eligibilityOf(result, 4).unknownReasons).toEqual(['NOT_OWNED']);
-    expect(eligibilityOf(result, 5).unknownReasons).toEqual(['MEDIA_TYPE_UNKNOWN']);
-    expect(eligibilityOf(result, 6).eligibility).toBe('PROTECTED'); // the favourites listing protects without the flag
-    expect(eligibilityOf(result, 7).eligibility).toBe('PROTECTED'); // archived photos are protected
+    expect(eligibilityOf(result, 3).unknownReasons).toEqual(['MEDIA_TYPE_UNKNOWN']);
+    expect(eligibilityOf(result, 4).eligibility).toBe('PROTECTED'); // the favourites listing protects without the flag
+    expect(eligibilityOf(result, 5).eligibility).toBe('PROTECTED'); // archived photos are protected
+  });
+
+  it('photos saved from someone else are judged like the user’s own: protected in an album, else eligible', async () => {
+    const store = newStore();
+    const source = new FakePhotos(
+      [fakeItem(0, { isOwned: false }), fakeItem(1, { isOwned: null }), fakeItem(2, { isOwned: false })],
+      [fakeAlbum('Shared trip', [2])],
+    );
+    await scan(source, store);
+    const result = await classifyLatest(store);
+    expect(eligibleIndexes(result)).toEqual([0, 1]);
+    expect(eligibilityOf(result, 2)).toMatchObject({ eligibility: 'PROTECTED', protectionReasons: ['IN_ALBUM'] });
   });
 
   it('the archive listing protects items whose archived flag is false', async () => {

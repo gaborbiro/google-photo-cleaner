@@ -57,7 +57,7 @@ class DuplicateGrouperTest {
 
     @Test
     fun groups_with_nothing_eligible_to_propose_are_dropped() {
-        assertEquals(emptyList(), groups(listOf(Spec("fav", 1_000, 0.0, favourite = true), Spec("saved", 2_000, 2.0, owned = false))).groups)
+        assertEquals(emptyList(), groups(listOf(Spec("fav", 1_000, 0.0, favourite = true), Spec("unknown", 2_000, 2.0, archived = null))).groups)
     }
 
     @Test
@@ -129,7 +129,7 @@ class DuplicateGrouperTest {
                     takenAtMs = i * random.nextLong(1_000, 40_000),
                     angleDeg = (i / 4) * 30.0 + random.nextDouble(0.0, 15.0),
                     favourite = random.nextInt(6) == 0,
-                    owned = random.nextInt(8) != 0,
+                    archived = if (random.nextInt(8) == 0) null else false,
                     sharpness = random.nextDouble(1.0, 500.0),
                     width = 1,
                     height = 1,

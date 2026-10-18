@@ -108,6 +108,10 @@ for 60 days.
 4. Approve a group, then close the Google Photos tab at once: the queue line says it is waiting for
    Google Photos; reopen it: the photos are trashed, once (not twice, nothing else).
 5. Approve groups quickly (D, D, D…): the line's queued count rises, then drains to "in trash".
+6. A photo saved from someone else (partner sharing, or from a shared album you've left), in no
+   album: it is offered like your own. Trash it: it appears in Google Photos' trash; **Z** brings it
+   back to the library. The person who shared it still has their copy (ask them, or check that the
+   shared album or partner's library still shows it).
 
 ## 6. Erase Photo Cleaner's data
 

@@ -119,7 +119,7 @@ describe('review decisions and the trash queue', () => {
   it('a photo whose status became unknown is blocked, never sent', async () => {
     const { review, trash, deps, source, rescan } = await setup();
     await review.recordDecision('account-a', 'g1', 'APPROVED', [item(1)], members(0, 1), NOW);
-    source.library[1] = fakeItem(1, { isOwned: false }); // e.g. now only shared with this account
+    source.library[1] = fakeItem(1, { isFavourite: null }); // e.g. Google stopped sending its favourite flag
     await rescan();
     await processTrashQueue(deps);
     expect(await review.jobs('account-a', ['BLOCKED'])).toMatchObject([{ mediaKey: 'lib-1', lastError: 'No longer eligible (UNKNOWN)' }]);

@@ -31,7 +31,7 @@ Python is not on PATH (only the Windows Store stubs). Not needed until the infer
 - No per-item metadata requests. Protection data (favourites, album membership) must come from bulk listings; if that turns out to be impossible, the affected items are reported as `UNKNOWN`, never `ELIGIBLE`.
 - Automatic collections (people, places, things) do not protect a photo. Real albums (own and shared) and favourites do.
 - Archived photos are protected (user decision, 2026-10-12): archiving counts as a deliberate keep.
-- Library photos not owned by the user (saved from shared albums or partner sharing) are `UNKNOWN` unless their album membership is proven (user decision, 2026-10-12). Saved shared-album photos are in an album by definition; partner-shared saves do not use the user's storage, so excluding them costs nothing.
+- Library photos not uploaded by the user (saved from shared albums or partner sharing) are judged like the user's own: protected by a favourite, an album or archive, otherwise eligible (user decision, 2026-10-18; replaces the 2026-10-12 decision that made them `UNKNOWN` unless in an album). Saving a photo into the library is the user's own act, like taking it, not a sign they want to keep it; and the clean-up is about clutter as well as storage. Trashing one uses the same request as Google's own Trash button, so it can't reach the sharer's copy. Ownership (Google's flag 27) is still recorded by the scan but no rule reads it.
 - Videos are classified and reported separately but are never cleanup candidates in this milestone.
 
 ## Live probe findings (2026-10-12)

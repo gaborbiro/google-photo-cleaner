@@ -23,8 +23,10 @@ import dev.photocleaner.repositories.inventory.domain.ScanPhase
  * - Positive evidence protects on its own: favourite flag, favourites listing,
  *   any album entry with the same dedupKey, archived flag, or archive listing.
  * - Eligibility needs proof of the negative: a complete, fresh inventory and
- *   explicit `false` flags on the item, uploaded by this account.
+ *   explicit `false` flags on the item.
  * - Anything else is UNKNOWN, with every reason recorded.
+ * - Who uploaded a photo doesn't matter: one saved from someone else's share is in the
+ *   library by the user's own act, like one they took, and judged the same way.
  */
 internal object EligibilityRules {
 
@@ -80,8 +82,7 @@ internal object EligibilityRules {
 
     /**
      * Only the protections the user [chose] count. A photo whose only protection was turned off is
-     * then judged like any other: eligible if it is surely the user's own, otherwise unknown (so a
-     * photo saved from someone else's share stays untouchable either way).
+     * then judged like any other: eligible if its flags were all read, otherwise unknown.
      */
     fun classify(item: InventoryItem, snapshot: InventorySnapshot, coverage: CoverageEvidence, chosen: ProtectionChoices): ClassifiedItem {
         val protection = buildSet {
@@ -96,7 +97,6 @@ internal object EligibilityRules {
             if (coverage.isStale) add(UnknownReason.INVENTORY_STALE)
             if (item.isFavourite == null) add(UnknownReason.FAVOURITE_FLAG_MISSING)
             if (item.isArchived == null) add(UnknownReason.ARCHIVE_FLAG_MISSING)
-            if (item.isOwned != true) add(UnknownReason.NOT_OWNED)
             if (item.mediaType == null) add(UnknownReason.MEDIA_TYPE_UNKNOWN)
         }
         return if (unknown.isEmpty()) {

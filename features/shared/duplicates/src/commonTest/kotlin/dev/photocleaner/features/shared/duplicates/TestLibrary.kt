@@ -22,7 +22,8 @@ internal data class Spec(
     val takenAtMs: Long,
     val angleDeg: Double,
     val favourite: Boolean = false,
-    val owned: Boolean = true,
+    /** Null: the scan didn't get the archived flag, so the photo's status is unknown. */
+    val archived: Boolean? = false,
     val sharpness: Double = 100.0,
     val width: Int = 4000,
     val height: Int = 3000,
@@ -40,7 +41,7 @@ internal fun classification(specs: List<Spec>, complete: Boolean = true, finishe
             PhaseCursor(it, "", null, 1, 0, 0, completed = complete)
         },
         items = specs.map {
-            InventoryItem(it.key, "d-${it.key}", it.takenAtMs, it.mediaType, it.favourite, false, it.owned, it.width, it.height, null)
+            InventoryItem(it.key, "d-${it.key}", it.takenAtMs, it.mediaType, it.favourite, it.archived, true, it.width, it.height, null)
         },
         favouriteDedupKeys = specs.filter { it.favourite }.map { "d-${it.key}" }.toSet(),
         archivedDedupKeys = emptySet(),

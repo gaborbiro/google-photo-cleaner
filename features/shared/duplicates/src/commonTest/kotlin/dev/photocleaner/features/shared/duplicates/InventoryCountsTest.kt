@@ -18,7 +18,7 @@ import kotlin.test.assertEquals
 /** The scan report's counts: photos, videos and items of unknown type apart, each protection counted. */
 class InventoryCountsTest {
 
-    private fun item(key: String, type: StoredMediaType?, favourite: Boolean = false, archived: Boolean = false, owned: Boolean? = true) =
+    private fun item(key: String, type: StoredMediaType?, favourite: Boolean? = false, archived: Boolean = false, owned: Boolean? = true) =
         InventoryItem(key, "d-$key", 1_000, type, favourite, archived, owned, 1, 1, null)
 
     @Test
@@ -30,7 +30,8 @@ class InventoryCountsTest {
             item("archived", StoredMediaType.PHOTO, archived = true),
             item("loose", StoredMediaType.PHOTO),
             item("loose2", StoredMediaType.PHOTO),
-            item("someoneElses", StoredMediaType.PHOTO, owned = false),
+            item("someoneElses", StoredMediaType.PHOTO, owned = false), // eligible: who uploaded it doesn't matter
+            item("flagMissing", StoredMediaType.PHOTO, favourite = null),
             item("clip", StoredMediaType.VIDEO),
             item("clipInAlbum", StoredMediaType.VIDEO),
             item("mystery", null),
@@ -49,9 +50,9 @@ class InventoryCountsTest {
 
         assertEquals(
             TypeCounts(
-                mediaType = StoredMediaType.PHOTO, total = 7, protectedTotal = 4, protectedByFavourite = 2, protectedByAlbum = 2,
-                protectedByArchive = 1, protectedByFavouriteAndAlbum = 1, eligible = 2, unknown = 1,
-                unknownByReason = mapOf(UnknownReason.NOT_OWNED to 1),
+                mediaType = StoredMediaType.PHOTO, total = 8, protectedTotal = 4, protectedByFavourite = 2, protectedByAlbum = 2,
+                protectedByArchive = 1, protectedByFavouriteAndAlbum = 1, eligible = 3, unknown = 1,
+                unknownByReason = mapOf(UnknownReason.FAVOURITE_FLAG_MISSING to 1),
             ),
             counts[StoredMediaType.PHOTO],
         )

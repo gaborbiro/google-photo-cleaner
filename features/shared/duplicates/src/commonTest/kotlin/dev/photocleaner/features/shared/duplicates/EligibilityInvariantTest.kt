@@ -116,7 +116,7 @@ class EligibilityInvariantTest {
                     it.isArchived == true || it.dedupKey in trueArchive
             }.map { it.mediaKey }.toSet()
             val trulyLoose = library.filter {
-                it.mediaKey !in trulyProtected && it.isFavourite == false && it.isArchived == false && it.isOwned == true && it.mediaType != null
+                it.mediaKey !in trulyProtected && it.isFavourite == false && it.isArchived == false && it.mediaType != null
             }.map { it.mediaKey }.toSet()
             val clean = status == RunStatus.COMPLETED && unfinished.isEmpty() &&
                 fates.values.all { it == AlbumFate.READ || it == AlbumFate.MISMATCH_READ_TWICE_SAME }

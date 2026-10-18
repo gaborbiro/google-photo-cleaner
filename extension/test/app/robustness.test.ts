@@ -25,7 +25,7 @@ async function queued() {
 }
 
 describe('trash queue safety at the service boundary', () => {
-  it.each(['favourite', 'album', 'archive', 'unknown ownership', 'missing favourite flag', 'unknown media type'] as const)(
+  it.each(['favourite', 'album', 'archive', 'missing archive flag', 'missing favourite flag', 'unknown media type'] as const)(
     'does not send a photo that becomes %s after approval', async (reason) => {
       const { inventory, source, review, trash, send, deps } = await queued();
       if (reason === 'favourite') {
@@ -34,7 +34,7 @@ describe('trash queue safety at the service boundary', () => {
       }
       if (reason === 'album') source.albums = [fakeAlbum('new-album', [1])];
       if (reason === 'archive') source.archive = [source.library[1]!]; // protects even when the flag is false
-      if (reason === 'unknown ownership') source.library[1] = fakeItem(1, { isOwned: null });
+      if (reason === 'missing archive flag') source.library[1] = fakeItem(1, { isArchived: null });
       if (reason === 'missing favourite flag') source.library[1] = fakeItem(1, { isFavourite: null });
       if (reason === 'unknown media type') source.library[1] = fakeItem(1, { mediaType: null });
       await scan(source, inventory);

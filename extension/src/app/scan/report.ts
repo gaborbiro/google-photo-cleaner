@@ -10,7 +10,7 @@ import type { IndexedDbInventoryStore } from './inventoryStore';
 import type { InventorySnapshot, StoredMediaType } from './model';
 
 export type Eligibility = 'PROTECTED' | 'ELIGIBLE' | 'UNKNOWN';
-export type UnknownReason = 'INVENTORY_INCOMPLETE' | 'INVENTORY_STALE' | 'FAVOURITE_FLAG_MISSING' | 'ARCHIVE_FLAG_MISSING' | 'NOT_OWNED' | 'MEDIA_TYPE_UNKNOWN';
+export type UnknownReason = 'INVENTORY_INCOMPLETE' | 'INVENTORY_STALE' | 'FAVOURITE_FLAG_MISSING' | 'ARCHIVE_FLAG_MISSING' | 'MEDIA_TYPE_UNKNOWN';
 
 interface Agreement { listed: number; flagged: number; flaggedButNotListed: number; listedButNotFlagged: number }
 
@@ -94,7 +94,6 @@ const REASON_LABELS: Record<UnknownReason, string> = {
   INVENTORY_STALE: 'scan out of date',
   FAVOURITE_FLAG_MISSING: 'favourite flag missing',
   ARCHIVE_FLAG_MISSING: 'archive flag missing',
-  NOT_OWNED: 'not uploaded by you, no album match',
   MEDIA_TYPE_UNKNOWN: 'media type unknown',
 };
 

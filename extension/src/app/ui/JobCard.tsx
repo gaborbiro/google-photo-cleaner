@@ -107,7 +107,7 @@ export function ProtectionCard({ account, choices }: { account: string; choices:
         {box('archived', 'archived')}
       </div>
       <p className="muted">
-        Photos of unknown status, such as ones saved from someone else's share, are always kept. Trashing a photo also removes it from every album it's in.
+        Photos of unknown status, whose details the scan couldn't read, are always kept. Trashing a photo also removes it from every album it's in.
       </p>
     </section>
   );

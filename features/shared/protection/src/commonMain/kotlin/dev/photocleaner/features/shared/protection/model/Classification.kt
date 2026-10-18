@@ -16,9 +16,6 @@ enum class UnknownReason {
     INVENTORY_STALE,
     FAVOURITE_FLAG_MISSING,
     ARCHIVE_FLAG_MISSING,
-
-    /** Not uploaded by this account (saved from a share) and not matched to an album. */
-    NOT_OWNED,
     MEDIA_TYPE_UNKNOWN,
 }
 

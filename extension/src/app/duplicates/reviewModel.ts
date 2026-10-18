@@ -125,7 +125,7 @@ function keepReasonLabel(m: GroupMember): string {
 function whyKept(m: GroupMember): string {
   return m.eligibility === 'PROTECTED'
     ? `is ${m.protectionReasons.map((r) => PROTECTION_PHRASES[r]).join(' and ')}`
-    : 'has an unknown status (uploaded by someone else and not matched to an album, or missing data)';
+    : 'has an unknown status (the scan is missing some of its details)';
 }
 
 export class DuplicatesReview {

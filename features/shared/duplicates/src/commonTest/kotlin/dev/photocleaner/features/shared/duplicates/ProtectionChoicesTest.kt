@@ -4,7 +4,6 @@ import dev.photocleaner.features.shared.protection.InventoryClassifier
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.model.ProtectionChoices
 import dev.photocleaner.features.shared.protection.model.ProtectionReason
-import dev.photocleaner.features.shared.protection.model.UnknownReason
 import dev.photocleaner.repositories.inventory.domain.InventoryItem
 import dev.photocleaner.repositories.inventory.domain.InventorySnapshot
 import dev.photocleaner.repositories.inventory.domain.PhaseCursor
@@ -54,11 +53,18 @@ class ProtectionChoicesTest {
     }
 
     @Test
-    fun a_photo_saved_from_someone_elses_share_is_never_trashable() {
-        // Protected for being in an album; without that protection it is of unknown status, not eligible.
+    fun a_photo_saved_from_someone_elses_share_is_judged_like_the_users_own() {
+        // Protected for being in an album; without that protection it is eligible, like any loose photo.
         val item = InventoryClassifier.classify(snapshot, NOW, chosen = ProtectionChoices(albums = false)).items.single { it.item.mediaKey == "shared" }
-        assertEquals(Eligibility.UNKNOWN, item.eligibility)
-        assertEquals(setOf(UnknownReason.NOT_OWNED), item.unknownReasons)
+        assertEquals(Eligibility.ELIGIBLE, item.eligibility)
+        assertEquals(emptySet(), item.unknownReasons)
+    }
+
+    @Test
+    fun a_loose_photo_saved_from_someone_elses_share_is_eligible() {
+        val loose = snapshot.copy(items = snapshot.items + item("savedLoose", owned = false))
+        val item = InventoryClassifier.classify(loose, NOW).items.single { it.item.mediaKey == "savedLoose" }
+        assertEquals(Eligibility.ELIGIBLE, item.eligibility)
     }
 
     @Test

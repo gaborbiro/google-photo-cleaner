@@ -66,7 +66,7 @@
       },
       {
         "file": "extension/test/app/robustness.test.ts",
-        "name": "trash queue safety at the service boundary does not send a photo that becomes unknown ownership after approval"
+        "name": "trash queue safety at the service boundary does not send a photo that becomes missing archive flag after approval"
       },
       {
         "file": "extension/test/app/robustness.test.ts",
@@ -114,7 +114,7 @@
       },
       {
         "file": "extension/test/app/scan.test.ts",
-        "name": "library scan missing or negative proof makes items unknown, never eligible"
+        "name": "library scan missing proof makes items unknown, never eligible"
       },
       {
         "file": "extension/test/app/scan.test.ts",
@@ -189,7 +189,7 @@
   {
     "suite": "extension",
     "file": "extension/src/app/duplicates/reviewModel.ts",
-    "offset": 23243,
+    "offset": 23213,
     "original": "this.settings",
     "replacement": "true",
     "description": "force consequent",
@@ -528,7 +528,7 @@
   {
     "suite": "jvm",
     "file": "features/shared/protection/src/commonMain/kotlin/dev/photocleaner/features/shared/protection/EligibilityRules.kt",
-    "offset": 5189,
+    "offset": 5248,
     "original": "if (protection.isNotEmpty())",
     "replacement": "if (false)",
     "description": "ignore positive protection evidence",
@@ -842,7 +842,7 @@
   {
     "suite": "jvm",
     "file": "features/shared/protection/src/commonMain/kotlin/dev/photocleaner/features/shared/protection/EligibilityRules.kt",
-    "offset": 5342,
+    "offset": 5401,
     "original": "if (!coverage.isComplete)",
     "replacement": "if (false)",
     "description": "allow eligibility on unfinished inventory",
@@ -1127,7 +1127,7 @@
   {
     "suite": "jvm",
     "file": "features/shared/protection/src/commonMain/kotlin/dev/photocleaner/features/shared/protection/EligibilityRules.kt",
-    "offset": 2701,
+    "offset": 2846,
     "original": "nowMs - finishedAt > maxAgeMs",
     "replacement": "false",
     "description": "never expire scan evidence",
@@ -1970,7 +1970,7 @@
   {
     "suite": "extension",
     "file": "extension/src/app/scan/report.ts",
-    "offset": 2914,
+    "offset": 2900,
     "original": "return JSON.parse(classifyInventoryJson(JSON.stringify(snapshot), nowMs, maxAgeMs, JSON.stringify(choices))) as Classification;",
     "replacement": "try { return JSON.parse(classifyInventoryJson(JSON.stringify(snapshot), nowMs, maxAgeMs, JSON.stringify(choices))) as Classification; } catch { return {} as Classification; }",
     "description": "silently accept malformed scan snapshot",
@@ -2055,31 +2055,6 @@
         "file": "extension/test/app/analysis.test.ts",
         "name": "AI analysis an answer from Google it does not understand stops it, saying so, before counting anything as failed"
       }
-    ]
-  },
-  {
-    "suite": "jvm",
-    "file": "features/shared/protection/src/commonMain/kotlin/dev/photocleaner/features/shared/protection/EligibilityRules.kt",
-    "offset": 5658,
-    "original": "if (item.isOwned != true)",
-    "replacement": "if (false)",
-    "description": "treat missing ownership as owned",
-    "id": "JVM-038",
-    "cases": [
-      {
-        "class": "dev.photocleaner.features.shared.duplicates.ProtectionChoicesTest",
-        "name": "a_photo_saved_from_someone_elses_share_is_never_trashable()[jvm]"
-      }
-    ],
-    "reports": [
-      "features/shared/duplicates/build/test-results/jvmTest/TEST-dev.photocleaner.features.shared.duplicates.AlbumCountTest.xml",
-      "features/shared/duplicates/build/test-results/jvmTest/TEST-dev.photocleaner.features.shared.duplicates.DuplicateGrouperTest.xml",
-      "features/shared/duplicates/build/test-results/jvmTest/TEST-dev.photocleaner.features.shared.duplicates.EligibilityInvariantTest.xml",
-      "features/shared/duplicates/build/test-results/jvmTest/TEST-dev.photocleaner.features.shared.duplicates.InventoryCountsTest.xml",
-      "features/shared/duplicates/build/test-results/jvmTest/TEST-dev.photocleaner.features.shared.duplicates.ProtectionChoicesTest.xml",
-      "features/shared/duplicates/build/test-results/jvmTest/TEST-dev.photocleaner.features.shared.duplicates.ReviewQueuesTest.xml",
-      "features/shared/duplicates/build/test-results/jvmTest/TEST-dev.photocleaner.features.shared.duplicates.Sha256JvmTest.xml",
-      "features/shared/duplicates/build/test-results/jvmTest/TEST-dev.photocleaner.features.shared.duplicates.SmallRulesTest.xml"
     ]
   },
   {

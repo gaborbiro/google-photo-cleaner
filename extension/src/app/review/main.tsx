@@ -5,6 +5,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { documentTitle, reviewAccount, reviewPageView, scanView } from '../shared/jobView';
+import { REVIEW_TABS, requestedReviewTab, type ReviewTab } from '../shared/messages';
 import { send, useAccount, useAllJobs, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useSpinningTabIcon, useStartOverWhenErased } from '../ui/hooks';
 import { EraseCard, ProtectionCard, ScanCard, StorageProblem } from '../ui/JobCard';
 import { DuplicatesReview } from '../duplicates/reviewModel';
@@ -15,8 +16,8 @@ import { Duplicates, useTrashQueue } from './Duplicates';
 import { Search } from './Search';
 import { usePinnedHeight } from '../ui/Workbench';
 
-type Tab = 'scan' | 'duplicates' | 'search';
-const TABS: Tab[] = ['scan', 'duplicates', 'search'];
+type Tab = ReviewTab;
+const TABS = REVIEW_TABS;
 const TAB_KEY = 'photo-cleaner.review-tab';
 
 /** The tab last open in this browser; Scan the first time (or when storage is unavailable). */
@@ -57,7 +58,7 @@ function Review() {
   const report = useReport(selected, job, choices);
   const analysis = useAnalysisJob(selected);
   const page = reviewPageView({ selected, signedIn, jobs, scan: job, analysis, choices, nowMs: Date.now() });
-  const [tab, setTab] = useState<Tab>(rememberedTab);
+  const [tab, setTab] = useState<Tab>(() => requestedReviewTab(location.hash) ?? rememberedTab());
   // A tab, once opened, stays alive while hidden: its groups, selections and place are kept.
   const [opened, setOpened] = useState<ReadonlySet<Tab>>(() => new Set([tab]));
   const scrollOf = useRef(new Map<Tab, number>());
@@ -68,6 +69,20 @@ function Review() {
     setOpened((o) => new Set(o).add(next));
     remember(next);
   };
+  // The popup and the panel ask for a tab in the address ("#duplicates"), as this page opens or while it
+  // is open. The request is then taken out of the address, so asking for the same tab again works.
+  useEffect(() => {
+    const follow = () => {
+      const asked = requestedReviewTab(location.hash);
+      if (asked === null) return;
+      history.replaceState(null, '', `${location.pathname}${location.search}`);
+      remember(asked);
+      open(asked);
+    };
+    follow();
+    window.addEventListener('hashchange', follow);
+    return () => window.removeEventListener('hashchange', follow);
+  });
   // Each tab comes back where it was left.
   // (A block, not an expression: newer Chrome returns a Promise from scrollTo, which React would take for a cleanup.)
   useLayoutEffect(() => {

@@ -85,7 +85,6 @@ function Status({ view, openScan }: { view: DuplicatesView; openScan: () => void
         </div>
       )}
       {view.groupsText && <strong>{view.groupsText}</strong>}
-      {view.progressText && <strong>{view.progressText}</strong>}
       {view.notAnalysedText && <span className="warn">{view.notAnalysedText}</span>}
       {view.queueText && <span className="muted">{view.queueText}</span>}
       {view.queueWaitingText && <span className="warn">{view.queueWaitingText}</span>}

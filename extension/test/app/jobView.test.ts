@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
 import { endJob, NO_PROGRESS, pauseJob, reportProgress, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
-import { accountLabel, checkedText, documentTitle, reviewAccount, reviewButtonText, reviewPageView, scanTabTitle, scanView, surfaceView } from '../../src/app/shared/jobView';
+import { accountLabel, checkedText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView } from '../../src/app/shared/jobView';
+import { requestedReviewTab, reviewUrl } from '../../src/app/shared/messages';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
 const NOW = new Date(2026, 9, 14, 21, 40).getTime();
@@ -246,23 +247,39 @@ describe('the popup and the panel', () => {
   });
 });
 
-describe("the popup's review button", () => {
+describe("the popup's and the panel's button to the review tab", () => {
   const scanned = endJob(startScanJob('acc1', 0), 'completed', null, NOW);
   const summary = { account: 'acc1', groupsToReview: 1_731, atMs: NOW + 1_000, protection: ALL_PROTECTED };
+  const toScan = { text: 'Open in tab', tab: 'scan' };
 
-  it('says how many groups wait, while that count can be trusted', () => {
-    expect(reviewButtonText(summary, scanned, null, ALL_PROTECTED, NOW + 2_000)).toBe('Review 1,731 groups');
-    expect(reviewButtonText({ ...summary, groupsToReview: 1 }, scanned, null, ALL_PROTECTED, NOW + 2_000)).toBe('Review 1 group');
+  it('offers the groups waiting, opening Duplicates, while that count can be trusted', () => {
+    expect(launchButton(summary, scanned, null, ALL_PROTECTED, NOW + 2_000)).toEqual({ text: 'Review 1,731 groups', tab: 'duplicates' });
+    expect(launchButton({ ...summary, groupsToReview: 1 }, scanned, null, ALL_PROTECTED, NOW + 2_000)).toEqual({ text: 'Review 1 group', tab: 'duplicates' });
   });
 
-  it('is left out when there is nothing to review or the count may be wrong', () => {
+  it('opens the Scan tab when there is nothing to review or the count may be wrong', () => {
     const at = NOW + 2_000;
-    expect(reviewButtonText(null, scanned, null, ALL_PROTECTED, at)).toBeNull();
-    expect(reviewButtonText({ ...summary, groupsToReview: 0 }, scanned, null, ALL_PROTECTED, at)).toBeNull();
-    expect(reviewButtonText(summary, endJob(startScanJob('acc1', 0), 'completed', null, NOW + 5_000), null, ALL_PROTECTED, at)).toBeNull(); // scanned since
-    expect(reviewButtonText(summary, startScanJob('acc1', NOW + 1_500), null, ALL_PROTECTED, at)).toBeNull(); // scanning now
-    expect(reviewButtonText(summary, scanned, null, { ...ALL_PROTECTED, albums: false }, at)).toBeNull(); // other choices
-    expect(reviewButtonText(summary, scanned, null, ALL_PROTECTED, NOW + 25 * 3_600_000)).toBeNull(); // the scan is out of date
+    expect(launchButton(null, scanned, null, ALL_PROTECTED, at)).toEqual(toScan);
+    expect(launchButton({ ...summary, groupsToReview: 0 }, scanned, null, ALL_PROTECTED, at)).toEqual(toScan);
+    expect(launchButton(summary, endJob(startScanJob('acc1', 0), 'completed', null, NOW + 5_000), null, ALL_PROTECTED, at)).toEqual(toScan); // scanned since
+    expect(launchButton(summary, startScanJob('acc1', NOW + 1_500), null, ALL_PROTECTED, at)).toEqual(toScan); // scanning now
+    expect(launchButton(summary, scanned, null, { ...ALL_PROTECTED, albums: false }, at)).toEqual(toScan); // other choices
+    expect(launchButton(summary, scanned, null, ALL_PROTECTED, NOW + 25 * 3_600_000)).toEqual(toScan); // the scan is out of date
+    expect(launchButton(summary, undefined, undefined, undefined, at)).toEqual(toScan); // still loading
+  });
+});
+
+describe("the review tab's address", () => {
+  it('names the account and the tab to open', () => {
+    expect(reviewUrl('chrome-extension://x/review.html', 'acc 1', 'duplicates')).toBe('chrome-extension://x/review.html?account=acc%201#duplicates');
+    expect(reviewUrl('chrome-extension://x/review.html', null, 'scan')).toBe('chrome-extension://x/review.html#scan');
+  });
+
+  it('is read back for the tab asked for, and nothing else', () => {
+    expect(requestedReviewTab('#duplicates')).toBe('duplicates');
+    expect(requestedReviewTab('#search')).toBe('search');
+    expect(requestedReviewTab('')).toBeNull();
+    expect(requestedReviewTab('#trash')).toBeNull();
   });
 });
 

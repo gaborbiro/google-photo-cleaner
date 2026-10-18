@@ -42,6 +42,7 @@ beforeEach(async () => {
   vi.stubGlobal('chrome', {
     runtime: {
       id: 'photo-cleaner',
+      getURL: (path: string) => `chrome-extension://photo-cleaner/${path}`,
       onMessage: { addListener: (listener: typeof receive) => { receive = listener; } },
       onStartup: { addListener: vi.fn() },
       onInstalled: { addListener: vi.fn() },
@@ -60,8 +61,12 @@ afterEach(() => {
 });
 
 function request(kind: 'app-open-photos' | 'app-show-panel') {
+  return send({ kind });
+}
+
+function send(message: AppRequest) {
   return new Promise<unknown>((resolve) => {
-    expect(receive({ kind }, { id: 'photo-cleaner' }, resolve)).toBe(true);
+    expect(receive(message, { id: 'photo-cleaner' }, resolve)).toBe(true);
   });
 }
 
@@ -123,5 +128,26 @@ describe('opening Google Photos with its panel', () => {
     expect(tabs.sendMessage).not.toHaveBeenCalled();
     expect(updated.listeners.size).toBe(0);
     expect(removed.listeners.size).toBe(0);
+  });
+});
+
+describe('opening the review tab', () => {
+  const page = 'chrome-extension://photo-cleaner/review.html';
+
+  it('opens a new tab on the tab asked for', async () => {
+    tabs.query.mockResolvedValue([]);
+    expect(await send({ kind: 'app-open-review', account: 'acc 1', tab: 'duplicates' })).toBe(true);
+    expect(tabs.query).toHaveBeenCalledWith({ url: `${page}*` });
+    expect(tabs.create).toHaveBeenCalledExactlyOnceWith({ url: `${page}?account=acc%201#duplicates` });
+    expect(tabs.update).not.toHaveBeenCalled();
+  });
+
+  it('brings an open review tab of the same account forward, changing only what follows # (so Chrome does not reload it)', async () => {
+    const open = { id: 9, windowId: 3, url: `${page}?account=acc1`, status: 'complete' } as chrome.tabs.Tab;
+    tabs.query.mockResolvedValue([open]);
+    expect(await send({ kind: 'app-open-review', account: 'acc1', tab: 'duplicates' })).toBe(true);
+    expect(tabs.create).not.toHaveBeenCalled();
+    expect(tabs.update).toHaveBeenCalledExactlyOnceWith(9, { active: true, url: `${open.url}#duplicates` });
+    expect(focusWindow).toHaveBeenCalledWith(3, { focused: true });
   });
 });

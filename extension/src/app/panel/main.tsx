@@ -6,7 +6,7 @@ import { ScanCard, StorageProblem } from '../ui/JobCard';
 
 function Panel() {
   useStartOverWhenErased();
-  const { view, scan, analysis, report } = useSignedInScan();
+  const { view, scan, analysis, report, launch } = useSignedInScan();
   return (
     <main className="panel">
       <header className="surface-header">
@@ -27,7 +27,7 @@ function Panel() {
       </div>
       {view.account && (
         <div className="launch">
-          <button onClick={() => void send({ kind: 'app-open-review', account: view.account })}>Open in tab <span aria-hidden="true">↗</span></button>
+          <button onClick={() => void send({ kind: 'app-open-review', account: view.account, tab: launch.tab })}>{launch.text} <span aria-hidden="true">↗</span></button>
         </div>
       )}
     </main>

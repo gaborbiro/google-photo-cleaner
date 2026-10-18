@@ -6,7 +6,7 @@ import { ScanCard, StorageProblem } from '../ui/JobCard';
 
 function Popup() {
   useStartOverWhenErased();
-  const { view, scan, analysis, report, reviewText } = useSignedInScan();
+  const { view, scan, analysis, report, launch } = useSignedInScan();
   return (
     <main className="popup">
       <header>
@@ -26,9 +26,8 @@ function Popup() {
         <>
           {scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} surface="popup" />}
           <div className="launch">
-            {reviewText && <button className="primary" onClick={() => void send({ kind: 'app-open-review', account: view.account })}>{reviewText}</button>}
+            <button className="primary" onClick={() => void send({ kind: 'app-open-review', account: view.account, tab: launch.tab })}>{launch.text} <span aria-hidden="true">↗</span></button>
             <button onClick={() => void send({ kind: 'app-show-panel' })}>Open panel in Google Photos <span aria-hidden="true">↗</span></button>
-            <button onClick={() => void send({ kind: 'app-open-review', account: view.account })}>Open in tab <span aria-hidden="true">↗</span></button>
           </div>
         </>
       )}

@@ -20,11 +20,16 @@ and copy the console (right-click the page → Inspect → Console).
 1. In Google Photos, click **Photo Cleaner** on the page. The panel opens on the right. Click it
    twice quickly: still one panel.
 2. Reload the extension (↻) and the Photos tab: still one button and, when opened, one panel.
-3. Toolbar icon → popup: the account's email, the Scan card, **Open in tab ⤢**, the erase button
-   at the bottom. Texts are comfortably readable (not tiny).
-4. **Open in tab**: the review tab opens with the heading "Photo Cleaner", "Account: <email>",
-   and the tabs **1 · Scan**, **2 · Duplicates**, **Search**.
-5. Close the Photos tab, open the popup: it says Photo Cleaner works inside Google Photos and offers
+3. Toolbar icon → popup: the account's email, the Scan card, then two buttons: **Open in tab ↗**
+   (or **Review N groups ↗** once groups are waiting) and **Open panel in Google Photos ↗**. Texts
+   are comfortably readable (not tiny).
+4. **Open in tab**: the review tab opens on **1 · Scan**, with the heading "Photo Cleaner", the
+   account's email, and the tabs **1 · Scan**, **2 · Duplicates**, **Search**.
+5. With groups waiting, the popup's and the panel's button says **Review N groups** and opens
+   **2 · Duplicates**. With the review tab already open on another tab, and a few photos selected in
+   Duplicates: the button brings that tab forward and switches it to Duplicates without reloading
+   (the selection and the place in the list are still there).
+6. Close the Photos tab, open the popup: it says Photo Cleaner works inside Google Photos and offers
    **Open Google Photos**, which opens it with the Photo Cleaner panel already visible once the page
    loads. With Photos already open, **Open panel in Google Photos** focuses that tab and opens one panel.
 

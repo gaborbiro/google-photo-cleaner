@@ -81,7 +81,7 @@ describe('the Duplicates review', () => {
   it('shows the first group with the proposals selected for the trash', async () => {
     const { view } = await opened();
     expect(view()).toMatchObject({
-      groupsText: '2 groups', progressText: '0 decided · 2 to go', emptyText: null, blockedText: null, notAnalysedText: null,
+      groupsText: '2 groups (0 decided · 2 to go)', emptyText: null, blockedText: null, notAnalysedText: null,
       ruleText: 'Photos count as duplicates when they are at least 91.5% similar and taken within 2 minutes of each other. Nothing is trashed without your approval.',
     });
     const g = view().group!;
@@ -114,7 +114,7 @@ describe('the Duplicates review', () => {
     review.keep();
     await settle();
     expect(fakes.decisions[0]).toMatchObject({ groupId: 'g1', kind: 'KEPT', items: [] });
-    expect(view()).toMatchObject({ notice: null, progressText: '1 decided · 1 to go' });
+    expect(view()).toMatchObject({ notice: null, groupsText: '2 groups (1 decided · 1 to go)' });
     expect(view().group!.tiles[0]!.mediaKey).toBe('d');
   });
 
@@ -295,7 +295,7 @@ describe('the Duplicates review', () => {
     const { review, view } = await opened();
     review.defer();
     await settle();
-    expect(view().progressText).toBe('0 decided · 2 to go (1 skipped)');
+    expect(view().groupsText).toBe('2 groups (0 decided · 2 to go · 1 skipped)');
     expect(view().group!.tiles[0]!.mediaKey).toBe('d');
     review.keep();
     await settle();
@@ -325,14 +325,14 @@ describe('the Duplicates review', () => {
     await settle();
     review.defer(); // g2 goes to the end
     await settle();
-    expect(view().progressText).toBe('1 decided · 1 to go (1 skipped)');
+    expect(view().groupsText).toBe('2 groups (1 decided · 1 to go · 1 skipped)');
     review.undo(); // the skip
     await settle();
-    expect(view().progressText).toBe('1 decided · 1 to go');
+    expect(view().groupsText).toBe('2 groups (1 decided · 1 to go)');
     expect(view().group!.tiles[0]!.mediaKey).toBe('d');
     review.undo(); // the keep
     await settle();
-    expect(view().progressText).toBe('0 decided · 2 to go');
+    expect(view().groupsText).toBe('2 groups (0 decided · 2 to go)');
     expect(view().group!.tiles[0]!.mediaKey).toBe('a');
     expect(fakes.loads).toBe(loads);
   });
@@ -352,7 +352,7 @@ describe('the Duplicates review', () => {
     expect(view().workingText).toBeNull();
     expect(fakes.loads).toBe(loads + 1);
     expect(view().group!.tiles[0]!.mediaKey).toBe('a');
-    expect(view().progressText).toBe('0 decided · 2 to go');
+    expect(view().groupsText).toBe('2 groups (0 decided · 2 to go)');
   });
 
   it('the viewer steps through the group, toggles, and leaves the focus on the last photo shown', async () => {
@@ -377,7 +377,7 @@ describe('the Duplicates review', () => {
     const { review, view } = await opened(fakes);
     expect(view()).toMatchObject({ blockedText: 'The library scan is more than a day old. Check for new photos on the Scan tab: it re-reads the list of your photos (about 2–3 minutes) and only looks at new ones.', group: null, emptyText: null });
     // The reason takes the place of the counts, which mean nothing without a usable scan.
-    expect(view()).toMatchObject({ groupsText: null, progressText: null });
+    expect(view()).toMatchObject({ groupsText: null });
     review.approve();
     expect(view().notice!.text).toBe(view().blockedText);
   });

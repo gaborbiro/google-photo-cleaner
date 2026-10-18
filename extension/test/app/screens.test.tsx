@@ -389,22 +389,39 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(labels(again)).toHaveLength(3), { timeout: 3_000 });
   });
 
-  it('popup: its buttons ask the background page for the right thing', async () => {
+  it('popup: its two buttons ask the background page for the review tab on Scan, and for the panel', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('popup');
     await shows(root, 'Open in tab');
+    expect([...root.querySelectorAll('.launch button')].map((b) => b.textContent)).toEqual(['Open in tab ↗', 'Open panel in Google Photos ↗']);
     await click(root, 'Open in tab');
     await click(root, 'Open panel in Google Photos');
-    expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a' }]);
+    expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a', tab: 'scan' }]);
     expect(requests('app-show-panel')).toHaveLength(1);
   });
 
-  it('popup: with groups waiting it offers to review them, opening the review tab', async () => {
+  it.each(['popup', 'panel'] as const)('%s: with groups waiting its button offers to review them, opening the review tab on Duplicates', async (page) => {
     await scannedAndAnalysed(indexedDB);
     await new IndexedDbReviewStore(indexedDB).saveSummary({ account: 'account-a', groupsToReview: 1_731, atMs: NOW + 1, protection: ALL_PROTECTED });
-    const root = await open('popup');
+    const root = await open(page);
     await click(root, 'Review 1,731 groups');
-    expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a' }]);
+    expect(root.textContent).not.toContain('Open in tab');
+    expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a', tab: 'duplicates' }]);
+  });
+
+  it('review tab: opens on the tab asked for, and switches when asked again while open', async () => {
+    await scannedAndAnalysed(indexedDB);
+    const root = await open('review', '?account=account-a#duplicates');
+    await vi.waitFor(() => expect(labels(root)).toHaveLength(3), { timeout: 3_000 });
+    expect(location.hash).toBe(''); // taken out, so asking again works
+    expect(location.search).toBe('?account=account-a');
+
+    location.hash = 'scan';
+    await vi.waitFor(() => expect(root.querySelector('.scan-tab')?.hasAttribute('hidden')).toBe(false));
+    expect(dupTiles(root)).toHaveLength(0); // Duplicates hidden
+    location.hash = 'duplicates';
+    await vi.waitFor(() => expect(labels(root)).toHaveLength(3)); // the same page: its groups kept
+    expect(location.hash).toBe('');
   });
 
   it('popup without Google Photos: Open Google Photos asks for it', async () => {
@@ -478,12 +495,12 @@ describe('clicks and keys reach what they should', () => {
     expect(library.querySelector('details')!.open).toBe(false);
   });
 
-  it('panel: Open in tab asks for the review tab', async () => {
+  it('panel: Open in tab asks for the review tab on Scan', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('panel');
     await shows(root, 'Open in tab');
     await click(root, 'Open in tab');
-    expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a' }]);
+    expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a', tab: 'scan' }]);
   });
 
   it('erase (in the review tab) takes two clicks; Cancel goes back; a failure is shown and can be tried again', async () => {

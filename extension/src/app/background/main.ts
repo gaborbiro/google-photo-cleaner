@@ -9,7 +9,7 @@ import { eraseAllData } from '../shared/erase';
 import { plainMessage } from '../shared/errors';
 import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, tabProblem } from '../shared/googleProblems';
 import { IndexedDbJobStore } from '../shared/store';
-import { isAppRequest, type AccountAnswer, type AppRequest, type TabRequest } from '../shared/messages';
+import { isAppRequest, reviewUrl, type AccountAnswer, type AppRequest, type ReviewTab, type TabRequest } from '../shared/messages';
 
 const PHOTOS_URL = 'https://photos.google.com/';
 const store = new IndexedDbJobStore();
@@ -250,10 +250,14 @@ function waitForPhotosTab(tabId: number): Promise<void> {
   });
 }
 
-async function openReview(account: string | null): Promise<void> {
+/**
+ * Opens the review tab on [tab], or brings the open one forward. For the account it already shows, only
+ * the part after # changes: Chrome then switches its tab without a reload, keeping selections and place.
+ */
+async function openReview(account: string | null, tab: ReviewTab): Promise<void> {
   const base = chrome.runtime.getURL('review.html');
   const existing = (await chrome.tabs.query({ url: `${base}*` }))[0];
-  const url = account ? `${base}?account=${encodeURIComponent(account)}` : base;
+  const url = reviewUrl(base, account, tab);
   if (existing?.id !== undefined) {
     await chrome.tabs.update(existing.id, { active: true, url });
     if (existing.windowId !== undefined) await chrome.windows.update(existing.windowId, { focused: true });
@@ -294,7 +298,7 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
     case 'app-idle-state':
       return chrome.idle.queryState(60);
     case 'app-open-review':
-      await openReview(request.account);
+      await openReview(request.account, request.tab);
       return true;
     case 'app-open-photos':
     case 'app-show-panel':

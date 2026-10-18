@@ -84,8 +84,8 @@ export interface DuplicatesView {
   loadingText: string | null;
   /** Shown with a spinner while something takes a moment ("Undoing…"); null otherwise. */
   workingText: string | null;
+  /** The groups and how far the review is, on one line: "1,952 groups (12 decided · 1,938 to go)". */
   groupsText: string | null;
-  progressText: string | null;
   ruleText: string | null;
   /** Photos the AI has not analysed yet are in no group, so a moment already decided can come back with one. */
   notAnalysedText: string | null;
@@ -588,9 +588,9 @@ export class DuplicatesReview {
       loadingText: !loaded && this.problem === null ? 'Finding duplicate groups…' : null,
       workingText: this.working,
       // Only once there are groups to count: while blocked (no scan yet, an old one) the reason takes their place.
-      groupsText: loaded && this.blocked === null ? count(this.totalGroups, 'group', 'groups') : null,
-      progressText: loaded && this.blocked === null
-        ? `${n(this.decidedGroups)} decided · ${n(this.pending.length)} to go` + (this.deferredIds.size > 0 ? ` (${n(this.deferredIds.size)} skipped)` : '')
+      groupsText: loaded && this.blocked === null
+        ? `${count(this.totalGroups, 'group', 'groups')} (${n(this.decidedGroups)} decided · ${n(this.pending.length)} to go` +
+          (this.deferredIds.size > 0 ? ` · ${n(this.deferredIds.size)} skipped)` : ')')
         : null,
       // What counts as a duplicate, in the same terms as each photo's "% similar".
       ruleText: this.settings

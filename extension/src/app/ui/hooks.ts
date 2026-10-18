@@ -9,7 +9,7 @@ import { IndexedDbJobStore, onErased, onJobsChanged } from '../shared/store';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { latestReport, reportKey, type ReportView } from '../scan/report';
 import { IndexedDbPreferences, type ProtectionChoices } from '../shared/preferences';
-import { reviewButtonText, surfaceView, type SurfaceView } from '../shared/jobView';
+import { launchButton, surfaceView, type LaunchButton, type SurfaceView } from '../shared/jobView';
 import { IndexedDbReviewStore, type ReviewSummary } from '../duplicates/reviewStore';
 
 export const store = new IndexedDbJobStore();
@@ -99,18 +99,18 @@ export function send(request: AppRequest): Promise<unknown> {
 
 /**
  * The popup's and the panel's data: which account is signed in, its Scan (undefined while loading),
- * and the "Review 1,731 groups" button's text (null when there's no count to trust).
+ * and the one button to the review tab ("Review 1,731 groups" or "Open in tab").
  */
 export function useSignedInScan(): {
-  view: SurfaceView; scan: ScanJob | null | undefined; analysis: AnalysisJob | null | undefined; report: ReportView | null | undefined; reviewText: string | null;
+  view: SurfaceView; scan: ScanJob | null | undefined; analysis: AnalysisJob | null | undefined; report: ReportView | null | undefined; launch: LaunchButton;
 } {
   const view = surfaceView(useAccount().answer);
   const scan = useScanJob(view.account);
   const analysis = useAnalysisJob(view.account);
   const choices = useProtectionChoices(view.account);
   const report = useReport(view.account, scan, choices);
-  const reviewText = reviewButtonText(useReviewSummary(view.account), scan, analysis, choices, Date.now());
-  return { view, scan, analysis, report, reviewText };
+  const launch = launchButton(useReviewSummary(view.account), scan, analysis, choices, Date.now());
+  return { view, scan, analysis, report, launch };
 }
 
 /** How many duplicate groups [account] has waiting, as last worked out, kept up to date; null when unknown. */

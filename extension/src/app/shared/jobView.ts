@@ -7,7 +7,7 @@ import { MODEL_DOWNLOAD_BYTES } from '../ai/model';
 import { SCAN_MAX_AGE_MS } from '../scan/report';
 import { count, n } from './format';
 import type { AnalysisJob, Job, JobKind, ScanJob } from './job';
-import type { AccountAnswer } from './messages';
+import type { AccountAnswer, ReviewTab } from './messages';
 import type { ReviewSummary } from '../duplicates/reviewStore';
 import type { ProtectionChoices } from './preferences';
 
@@ -347,15 +347,23 @@ export function surfaceView(answer: AccountAnswer | undefined): SurfaceView {
   return { ...none, state: answer.photosTabOpen ? 'problem' : 'no-photos', problemText: answer.problem };
 }
 
+/** The popup's and the panel's one button to the review tab: what it says, and which tab it opens there. */
+export interface LaunchButton {
+  text: string;
+  tab: ReviewTab;
+}
+
 /**
- * The popup's "Review 1,731 groups" (it opens the review tab), from the last count of groups waiting.
- * Null when there's nothing to review, or the count may be wrong: a scan or analysis finished since, the
- * scan is out of date (nothing can be offered), or the protection choices changed.
+ * "Review 1,731 groups", opening Duplicates, while the last count of groups waiting can be trusted.
+ * Otherwise "Open in tab", opening Scan: nothing to review yet, or the count may be wrong (a scan or
+ * analysis finished since, the scan is out of date so nothing can be offered, or the protection
+ * choices changed).
  */
-export function reviewButtonText(summary: ReviewSummary | null, scan: ScanJob | null | undefined, analysis: AnalysisJob | null | undefined, choices: ProtectionChoices | undefined, nowMs: number): string | null {
-  if (!summary || summary.groupsToReview === 0 || !scan || scan.finishedAtMs === null || choices === undefined) return null;
-  if (scan.finishedAtMs > summary.atMs || (analysis?.finishedAtMs ?? 0) > summary.atMs) return null;
-  if (nowMs - scan.finishedAtMs > SCAN_MAX_AGE_MS) return null;
-  if (JSON.stringify(choices) !== JSON.stringify(summary.protection)) return null;
-  return `Review ${count(summary.groupsToReview, 'group', 'groups')}`;
+export function launchButton(summary: ReviewSummary | null, scan: ScanJob | null | undefined, analysis: AnalysisJob | null | undefined, choices: ProtectionChoices | undefined, nowMs: number): LaunchButton {
+  const toScan: LaunchButton = { text: 'Open in tab', tab: 'scan' };
+  if (!summary || summary.groupsToReview === 0 || !scan || scan.finishedAtMs === null || choices === undefined) return toScan;
+  if (scan.finishedAtMs > summary.atMs || (analysis?.finishedAtMs ?? 0) > summary.atMs) return toScan;
+  if (nowMs - scan.finishedAtMs > SCAN_MAX_AGE_MS) return toScan;
+  if (JSON.stringify(choices) !== JSON.stringify(summary.protection)) return toScan;
+  return { text: `Review ${count(summary.groupsToReview, 'group', 'groups')}`, tab: 'duplicates' };
 }

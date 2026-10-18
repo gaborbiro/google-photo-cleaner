@@ -18,13 +18,30 @@ export type AppRequest =
    * request (only from the trash queue, which checks every photo again first).
    */
   | { kind: 'app-run-op'; account: string; op: PageOp; params: Record<string, unknown> }
-  | { kind: 'app-open-review'; account: string | null }
+  /** Open the review tab for [account] on [tab], or bring the open one forward and switch it there. */
+  | { kind: 'app-open-review'; account: string | null; tab: ReviewTab }
   | { kind: 'app-open-photos' }
   | { kind: 'app-show-panel' }
   /** A Google Photos page has loaded (from its content script): jobs waiting for it may carry on. */
   | { kind: 'app-photos-ready' }
   /** Erase everything Photo Cleaner saved on this computer; answers `{ ok: true }` or `{ error }`. */
   | { kind: 'app-erase-all' };
+
+export type ReviewTab = 'scan' | 'duplicates' | 'search';
+export const REVIEW_TABS: readonly ReviewTab[] = ['scan', 'duplicates', 'search'];
+
+/**
+ * The review tab's address for [account], opening [tab]: `review.html?account=…#duplicates`. Only the
+ * part after # differs for the same account, so Chrome switches an open review tab without reloading it.
+ */
+export function reviewUrl(page: string, account: string | null, tab: ReviewTab): string {
+  return `${page}${account ? `?account=${encodeURIComponent(account)}` : ''}#${tab}`;
+}
+
+/** The tab asked for in the review tab's address ("#duplicates"); null when none. */
+export function requestedReviewTab(hash: string): ReviewTab | null {
+  return REVIEW_TABS.find((t) => `#${t}` === hash) ?? null;
+}
 
 export interface AccountAnswer {
   /** null when no signed-in Photos tab answered. */

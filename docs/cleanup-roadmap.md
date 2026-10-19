@@ -1,0 +1,202 @@
+# Beyond duplicates: clean-up roadmap
+
+How Photo Cleaner grows from finding duplicates to clearing the rest of an old library's clutter.
+Started 2026-10-19 (extension 0.4.13). The main `docs/roadmap.md` points here.
+
+Legend: `[x]` done · `[ ]` to do · `[~]` in progress
+
+## Why
+
+Duplicates only find copies. Most of an old library's clutter is something else:
+
+- the same **kind** of photo repeated over years (receipts, screenshots, parking spots, whiteboards)
+- **failed shots** (pocket shots, black frames, heavy blur)
+- **too many near-identical shots** of one moment (14 of the same sunset, 30 of the candles)
+- **subjects one person photographs a lot** that nobody else would (meal-prep boxes, car parts)
+- **big videos** nobody watches
+
+The AI model already describes every photo (its fingerprint), and the scan already knows dates,
+quality, favourites and albums. Each milestone below turns some of that into suggestions the user
+reviews in the screens they already know: Search & sweep, or Duplicates.
+
+### What the AI model can and can't do
+
+EmbeddingGemma 2 puts photos and text in the same "meaning space". It can:
+
+- compare a photo with a description ("a receipt") — how Search works
+- compare photos with each other — how Duplicates and "More like these" work
+- group the whole library into themes nobody had to name
+- learn a direction from examples — "Less like these" does a simple version
+
+It can't write captions, reliably read the text in a photo, recognise particular people, or explain
+itself. That would need a second, generative model (see Later).
+
+## Rules for every milestone
+
+- **Safety first, as everywhere** (`AGENTS.md`): a suggestion only proposes; the user approves every
+  photo. Everything goes through the protection rules and the trash queue, with the fresh check
+  before acting.
+- Counts include only photos that may be trashed: never protected or unknown ones, and none already
+  in the trash queue. The number on a suggestion is exactly the number of photos it opens with.
+- Kinds of photo people keep (people, children, celebrations, pets, holidays) are never suggested
+  for the trash, only for thinning (milestone 3).
+- Size is not clutter: a big group of similar photos may be memories (2,000 birthday photos).
+- **Experiment first**: each milestone starts on a developer page (`dev-*.html`, not shipped), judged
+  on my library and one other, before it goes into the product.
+- Grouping and protection rules live in the shared Kotlin (`features/shared/*`); ranking and search
+  arithmetic may stay TypeScript, like Search.
+
+## Milestones at a glance
+
+| # | Milestone | What the user gets | Where it shows | State |
+|---|---|---|---|---|
+| 1 | Kinds of clutter | "Receipts · 340", "Parking spots · 480" | Search: suggestion chips | `[~]` developer page built |
+| 2 | Failed shots | "Accidental shots · 210" | Search: a suggestion like 1 | `[ ]` |
+| 3 | Thinning events | "Keep the best 2 of these 14" | Duplicates: "Similar shots" | `[ ]` |
+| 4 | Recurring subjects | "1,200 photos like these" | Search: suggestions, or a library map | `[ ]` |
+| 5 | Big videos | "Videos over 1 minute · 3.2 GB" | Search or its own list | `[ ]` to check first |
+| 6 | Learning from decisions | "Photos you'd probably trash" | Search: a ranking | later |
+
+Order: 1 → 2 (small, reuses 1) → 3 → 4. 5 can slot in anywhere once checked. 6 needs real usage first.
+
+---
+
+## 1. Kinds of clutter `[~]`
+
+A shipped list of kinds of clutter, counted in the user's library, offered as suggested searches.
+
+### How it works (built)
+
+- `extension/src/app/search/clutter.ts`: the categories and the counting; tests in
+  `extension/test/app/clutter.test.ts`.
+- 16 **clutter** categories (screenshots, photos of screens, receipts, documents, whiteboards, notes,
+  parking, signs, menus, tickets, products, barcodes and QR codes, meter readings, things to fix or
+  sell, memes, accidental shots), each described in several ways.
+- 7 **keep** categories (people, children, celebrations, pets, travel and nature, ordinary scenes,
+  old photos and keepsakes): never shown, they only compete, taking photos away from clutter.
+- Each photo goes to its **one best category** (a category scores as its best description) and counts
+  only when that score is at least the **minimum score** and at least the **minimum lead** above the
+  next category. Counts never overlap; a family photo in a car park goes to "people", not "parking".
+- Developer page `dev-clutter.html` (`extension/src/app/dev/clutter.tsx`): counts per category with
+  adjustable settings; the 12 strongest and 12 weakest photos still counted; protected, queued and
+  close-call counts; "Kept apart" shows where the keep categories' photos went.
+
+### Findings so far
+
+- 2026-10-19, first test on my library: a good start. *(Add notes: which categories are right, which
+  are noise, what clutter is missed, which settings looked best.)*
+
+### Judge and tune (developer page)
+
+- [ ] Go through every suggestion at a few settings; check its weakest counted photos (where mistakes
+      show)
+- [ ] Check "Kept apart": people and holiday photos there, not in clutter; note clutter found there
+- [ ] Refine the list: reword or split noisy categories, drop useless ones, add missing kinds and keep
+      categories where needed
+- [ ] Choose the default minimum score and lead (the lowest setting where the weakest counted photos
+      are still right); per-category settings only if one setting can't serve all
+- [ ] If judging by eye isn't enough: a labelling mode to measure precision per category, as
+      `dev-calibration.html` does for duplicates
+- [ ] Try one other library
+- [ ] Note how long describing the categories and matching take on a big library
+
+### In the product
+
+- [ ] Work suggestions out at the end of the Scan's "Analyse photos" step (the background page has the
+      AI model loaded), and again after each new scan
+- [ ] Save about 20 per account: a new store, so `DB_VERSION` up once and `test/app/db.test.ts`
+      updated. Or, with no database change, work them out when Search opens if that's fast enough
+- [ ] Chips in Search: "Parking spots · 480"; a chip opens exactly those photos, best match first;
+      More / Less like these as usual
+- [ ] Search marks where a suggestion's photos end (Search only ranks today; it has no cut-off)
+- [ ] Texts from the model (`search/searchModel.ts`); `test/app/screens.test.tsx` covers chips;
+      manual checks in `docs/extension-manual-checks.md`
+
+Done when: suggestions on two libraries I'd act on, then chips in Search after every scan.
+
+## 2. Failed shots `[ ]`
+
+Pocket shots, black frames, heavy blur, floors and ceilings.
+
+- The scan already stores quality numbers per photo (`ai/quality.ts`: sharpness, brightness, share of
+  very dark and very bright pixels); today only the duplicate keeper choice uses them.
+- [ ] On the developer page: a suggestion combining the numbers (very dark, very blurry) with
+      milestone 1's "Accidental shots" category. The AI alone confuses moody or night photos; the
+      numbers alone flag artistic blur. Together they should agree on real failures
+- [ ] Keep categories still win: a dark photo of people isn't a failed shot
+- [ ] In the product: one more suggestion chip, same mechanism as 1
+
+## 3. Thinning events `[ ]`
+
+Not about kinds of photo, so people are fine here: only the extra copies of one moment go.
+
+- [ ] Split the timeline into **events**: a new event starts after a gap of a few hours with no photos
+- [ ] Within an event, find **runs**: consecutive photos that are very alike, but below the duplicate
+      threshold (start around 0.85 and tune)
+- [ ] Suggest keeping the best 1–2 of each run (the existing keeper choice: sharpness, exposure) and
+      trashing the rest. The user picks; nothing pre-selected
+- [ ] Rules in Kotlin (`features/shared/duplicates`), next to duplicate grouping, tested in `commonTest`
+- [ ] Developer page first: events and runs, with what would be kept and trashed
+- [ ] In the product: "Similar shots" in Duplicates, which reviews the same way
+
+## 4. Recurring subjects `[ ]`
+
+What this user photographs a lot. The most uncertain milestone: do groups found by the AI make sense
+to people?
+
+- [ ] Group all fingerprints into about 100–200 groups (k-means on a sample of a few thousand photos,
+      then every photo to its nearest group); measure the time
+- [ ] Score each group for how likely it is clutter:
+  - few favourites or album photos (the user's own keep signals, the strongest sign)
+  - spread over many months: recurring, not one event
+  - very alike photos
+  - close to milestone 1's clutter descriptions rather than people, children or celebrations
+  - many poor-quality photos (milestone 2's numbers)
+- [ ] Name a group from the description list or a larger list of everyday phrases when one fits;
+      otherwise "1,200 photos like these" with 4 thumbnails
+- [ ] A group opens Search with its 5 most typical photos as "More like these"
+- [ ] Shown as "things you photograph often", never labelled clutter; groups of people, children or
+      celebrations never offered for the trash (thinning at most)
+- [ ] Possibly a "library map": every group with counts, as an overview of what's in the library
+
+## 5. Big videos `[ ]`
+
+Probably the biggest storage win per item reviewed, and needs no AI.
+
+- [ ] Check first: does the scan's answer from Google include a video's file size or length? (The scan
+      records the media type, not size)
+- [ ] If yes: suggestions like "Videos over 1 minute · 3.2 GB" and "Very short videos (likely
+      accidental) · 140"
+- [ ] Videos aren't analysed by the AI today; review would need a thumbnail and a link to play it in
+      Google Photos
+
+## 6. Learning from the user's decisions `later`
+
+The one that would feel like the app knows you, and the riskiest for memories.
+
+- Train a small model in the browser on the user's own decisions: what they trashed counts as
+  "doesn't keep", favourites and album photos as "keeps". Rank everything else by "you'd probably
+  trash this".
+- Could feed on quick keep/trash swipes through a suggestion, getting better as you go.
+- Needs enough decisions first, so only after milestones 1–4 have real users.
+- Ranking for review only, never "select all".
+
+## Later, not planned
+
+- A second, **generative AI model** (captions, reading the text in a photo): 1–3 GB and seconds per
+  photo, so only for small shortlists, e.g. explaining a suggestion. Not worth it now.
+
+## How we learn
+
+There is no telemetry, by choice. Evidence comes from my own library, one or two other libraries, and
+early testers ("which suggestions did you use, how many photos did you sweep"). If counts from users
+are ever wanted, they would be opt-in, and the privacy policy would say so.
+
+## Also open from the same conversation
+
+- Popup: every state without an account except "no tab" ("Looking for Google Photos…", tab not
+  responding, signed out, tab asleep) is a line of text with no button. Proposed: show **Open Google
+  Photos** in all of them, and give the account check a time limit (about 5 s) so "Looking…" can't
+  stay up. "Looking…" staying up was seen once and couldn't be reproduced in a fresh Chromium profile
+  (no tab → the button appears as designed). To find out: the exact wording seen, and whether a
+  photos.google.com tab was open in any window (possibly restored by Chrome but not loaded).

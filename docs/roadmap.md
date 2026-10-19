@@ -138,6 +138,15 @@ React + TypeScript (closest to Compose's model); `extension/` grows into the pro
         like trashing: needs M6's write path (one request at a time, every photo confirmed,
         failures shown). Bonus: photos in an album are protected, so it is also "keep all of these"
   - [x] New: "Less like these". Select results that don't belong and push that direction away.
+  - [~] Experiment: suggested searches for clutter (2026-10-19). A shipped list of kinds of clutter
+        (receipts, screenshots, parking…) competes with kinds of photo people keep (people, children,
+        pets, holidays, ordinary scenes); each photo goes to its one best category and counts only when
+        it is clearly ahead of the next, so counts never overlap and people photos aren't swept up.
+        Developer page `dev-clutter.html` (logic in `search/clutter.ts`) shows the counts with the
+        strongest and weakest matches. To do: judge it on my library and one other, choose the minimum
+        score and lead; if good, work them out at the end of the analysis and show them as chips in
+        Search. Then: thinning runs of near-identical photos within an event; then the user's own
+        recurring subjects (clusters)
         Ranking: text + average of the "more" examples − a share of the average of the "less"
         examples; plus a rule that a photo closer to any "less" example than to every "more"
         example drops out. The examples show above the results as +/− thumbnails, each removable

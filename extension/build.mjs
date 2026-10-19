@@ -45,6 +45,8 @@ const gptkNotice = '/*! Includes code from Google Photos Toolkit (https://github
       popup: 'src/app/popup/main.tsx', panel: 'src/app/panel/main.tsx', review: 'src/app/review/main.tsx',
       // Developer tool, not linked from the app: chrome-extension://<id>/dev-calibration.html
       'dev-calibration': 'src/app/dev/calibration.tsx',
+      // Developer tool, not linked from the app: chrome-extension://<id>/dev-clutter.html
+      'dev-clutter': 'src/app/dev/clutter.tsx',
     },
     outdir,
     format: 'iife',

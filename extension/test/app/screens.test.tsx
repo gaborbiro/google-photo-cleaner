@@ -55,6 +55,7 @@ function pretendExtension() {
         return undefined;
       },
       getURL: (path: string) => `chrome-extension://photo-cleaner/${path}`,
+      getManifest: () => ({ version: '1.2.3' }),
     },
   });
 }
@@ -180,6 +181,7 @@ describe('the pages draw', () => {
     const root = await open('review', '?account=account-a');
     await shows(root, 'Photo Cleaner', 'someone@example.com', 'Never trash photos that are', 'Erase Photo Cleaner');
     expect(root.querySelector('h1')?.textContent).toBe('Photo Cleaner');
+    expect(root.querySelector('.title-line .version')?.textContent).toBe('v1.2.3');
 
     await click(root, '2 · Duplicates');
     await vi.waitFor(() => expect(root.querySelectorAll('.duplicates:not([hidden]) .tiles > *')).toHaveLength(3), { timeout: 3_000 });
@@ -478,6 +480,7 @@ describe('clicks and keys reach what they should', () => {
     library.querySelector('summary')!.click();
     expect(library.querySelector('details')!.open).toBe(true);
     expect(library.querySelector('.protection-report .tables')).not.toBeNull();
+    expect(library.querySelector('.protection-report .version-line')?.textContent).toBe('Photo Cleaner 1.2.3');
     expect(library.querySelector('.protection-report .report-actions button')?.textContent).toBe('Copy report');
     await click(root, 'Pause');
     await vi.waitFor(async () => expect(await jobs.get(jobId('analysis', 'account-a'))).toMatchObject({ status: 'paused' }));
@@ -517,7 +520,7 @@ describe('clicks and keys reach what they should', () => {
       await vi.waitFor(() => expect(library.querySelector('.report-actions button')?.textContent).toBe('Copied'));
       const copied = writeText.mock.calls[0]![0];
       expect(copied).toMatch(/^Protection coverage/);
-      expect(copied.endsWith(`\n${line}`)).toBe(true);
+      expect(copied.endsWith(`\nPhoto Cleaner 1.2.3\n${line}`)).toBe(true);
 
       // Resumed: the old details are gone.
       await click(root, 'Resume');

@@ -97,6 +97,11 @@ export function send(request: AppRequest): Promise<unknown> {
   return chrome.runtime.sendMessage(request);
 }
 
+/** The extension's version, as its manifest says: "0.4.14". */
+export function extensionVersion(): string {
+  return chrome.runtime.getManifest().version;
+}
+
 /**
  * The popup's and the panel's data: which account is signed in, its Scan (undefined while loading),
  * and the one button to the review tab ("Review 1,731 groups" or "Open in tab").

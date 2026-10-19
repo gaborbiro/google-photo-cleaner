@@ -272,9 +272,14 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
   ];
 }
 
-/** What Copy report copies: the protection report, then Google's details behind a stop, if any. */
-export function copyReportText(report: ReportView, step: ScanStepView): string {
-  return [report.copyText, ...step.supportLines].join('\n');
+/** In the protection details and their copied report, so a support request says which version ran: "Photo Cleaner 0.4.14". */
+export function versionLine(version: string): string {
+  return `Photo Cleaner ${version}`;
+}
+
+/** What Copy report copies: the protection report, the version, then Google's details behind a stop, if any. */
+export function copyReportText(report: ReportView, step: ScanStepView, version: string): string {
+  return [report.copyText, versionLine(version), ...step.supportLines].join('\n');
 }
 
 // --- the review tab's page ---
@@ -294,6 +299,8 @@ export interface OtherAccountRow {
 export interface ReviewPageView {
   /** The account whose library this is, as shown: "someone@example.com"; null with no account yet. */
   accountName: string | null;
+  /** Beside the title, so the user can tell an update has loaded: "v0.4.14". */
+  versionLabel: string;
   /**
    * The tabs' labels, numbered as on the desktop (which has Calibration as its step 2); Search is not a
    * step. The Scan tab's carries its status: "1 · Scan (done)".
@@ -317,13 +324,15 @@ export function reviewPageView(input: {
   analysis: AnalysisJob | null | undefined;
   choices: ProtectionChoices | undefined;
   nowMs: number;
+  version: string;
 }): ReviewPageView {
-  const { selected, signedIn, jobs, scan, analysis, choices, nowMs } = input;
+  const { selected, signedIn, jobs, scan, analysis, choices, nowMs, version } = input;
   const emailOf = (account: string) => (signedIn?.fingerprint === account ? signedIn.email : null);
   const analysisOf = (account: string) => jobs.find((j): j is AnalysisJob => j.kind === 'analysis' && j.account === account) ?? null;
   const shown = selected !== null && scan !== undefined && analysis !== undefined ? scanView(scan, analysis, nowMs, 'tab') : null;
   return {
     accountName: selected === null ? null : accountLabel(selected, emailOf(selected)),
+    versionLabel: `v${version}`,
     tabLabels: { scan: shown ? scanTabTitle(shown) : '1 · Scan', duplicates: '2 · Duplicates', search: 'Search' },
     otherAccounts: jobs
       .filter((j): j is ScanJob => j.kind === 'library-scan' && j.account !== selected)

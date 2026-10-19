@@ -4,15 +4,16 @@ import { useState } from 'react';
 import type { AppRequest } from '../shared/messages';
 import { scanButton, setAnalysisFullSpeed } from '../shared/actions';
 import type { AnalysisJob, ScanJob } from '../shared/job';
-import { copyReportText, scanView, type ScanSurface } from '../shared/jobView';
+import { copyReportText, scanView, versionLine, type ScanSurface } from '../shared/jobView';
 import type { ReportView } from '../scan/report';
 import type { ProtectionChoices } from '../shared/preferences';
-import { logFailure, send, setProtectionChoices, store, useStorageProblem } from './hooks';
+import { extensionVersion, logFailure, send, setProtectionChoices, store, useStorageProblem } from './hooks';
 
 /** One Scan in two stages: reading the photo list, then analysing the new photos. */
 export function ScanCard({ account, scan, analysis, report, surface }: { account: string; scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null | undefined; surface: ScanSurface }) {
   const view = scanView(scan, analysis, Date.now(), surface);
   const act = () => void scanButton(view, store, send, account, Date.now()).catch(logFailure(view.actionLabel));
+  const version = extensionVersion();
   return (
     <section className="card scan-card" aria-live="polite">
       <div className="scan-title">
@@ -45,7 +46,7 @@ export function ScanCard({ account, scan, analysis, report, surface }: { account
               {/* Protection warnings stay outside the folded report. */}
               {step.protectionKnown && report && <p>{report.summary}</p>}
               {step.protectionKnown && report?.warningText && <p className="warn">{report.warningText}</p>}
-              {step.protectionKnown && report && <ProtectionDetails report={report} detailText={step.detailText} supportLines={step.supportLines} copyText={copyReportText(report, step)} />}
+              {step.protectionKnown && report && <ProtectionDetails report={report} detailText={step.detailText} versionText={versionLine(version)} supportLines={step.supportLines} copyText={copyReportText(report, step, version)} />}
             </div>
           </li>
         ))}
@@ -55,7 +56,7 @@ export function ScanCard({ account, scan, analysis, report, surface }: { account
 }
 
 /** Folded away by default: when the scan ran and how many photos are protected, eligible or unknown. */
-function ProtectionDetails({ report, detailText, supportLines, copyText }: { report: ReportView; detailText: string | null; supportLines: string[]; copyText: string }) {
+function ProtectionDetails({ report, detailText, versionText, supportLines, copyText }: { report: ReportView; detailText: string | null; versionText: string; supportLines: string[]; copyText: string }) {
   const [copied, setCopied] = useState(false);
   const copy = () => void navigator.clipboard.writeText(copyText).then(() => setCopied(true), logFailure('copying the report'));
   return (
@@ -69,6 +70,7 @@ function ProtectionDetails({ report, detailText, supportLines, copyText }: { rep
           </div>
           {report.issueLines.map((line) => <p key={line} className="warn">{line}</p>)}
           {report.noteLines.map((line) => <p key={line} className="muted">{line}</p>)}
+          <p className="mono muted version-line">{versionText}</p>
           {supportLines.map((line) => <p key={line} className="mono muted support-line">{line}</p>)}
         </div>
         <div className="tables">

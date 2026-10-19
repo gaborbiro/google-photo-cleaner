@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
 import { endJob, NO_PROGRESS, pauseJob, reportProgress, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 import type { ReportView } from '../../src/app/scan/report';
-import { accountLabel, checkedText, copyReportText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView } from '../../src/app/shared/jobView';
+import { accountLabel, checkedText, copyReportText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView, versionLine } from '../../src/app/shared/jobView';
 import { requestedReviewTab, reviewUrl } from '../../src/app/shared/messages';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
@@ -96,11 +96,15 @@ describe('one Scan in two stages', () => {
     const line = 'For support: analysis: preview · PROTOCOL · Preview response is not an image · code 3 · HTTP 400';
     expect(library.supportLines).toEqual([line]);
     expect(analysis.supportLines).toEqual([]);
-    expect(copyReportText({ copyText: 'Protection coverage complete' } as ReportView, library)).toBe(`Protection coverage complete\n${line}`);
+    expect(copyReportText({ copyText: 'Protection coverage complete' } as ReportView, library, '1.2.3')).toBe(`Protection coverage complete\nPhoto Cleaner 1.2.3\n${line}`);
     // Saved before the details existed: nothing to show.
     const { googleProblem: _, ...older } = stopped.progress;
     expect(scanView(scanned, { ...stopped, progress: older }, NOW, 'tab').steps[0].supportLines).toEqual([]);
-    expect(copyReportText({ copyText: 'Report' } as ReportView, scanView(scanned, analysing, NOW, 'tab').steps[0])).toBe('Report');
+    expect(copyReportText({ copyText: 'Report' } as ReportView, scanView(scanned, analysing, NOW, 'tab').steps[0], '1.2.3')).toBe('Report\nPhoto Cleaner 1.2.3');
+  });
+
+  it('the protection details and their copied report say which version ran', () => {
+    expect(versionLine('0.4.14')).toBe('Photo Cleaner 0.4.14');
   });
 
   it('a paused or stopped stage 1 is resumed or started again', () => {
@@ -231,18 +235,19 @@ describe('the review tab', () => {
     expect(reviewAccount(null, null)).toBeNull();
   });
 
-  it('names the account, labels the tabs and lists the other accounts with links', () => {
+  it('names the account, shows the version, labels the tabs and lists the other accounts with links', () => {
     const page = reviewPageView({
       selected: 'acc1', signedIn: { fingerprint: 'acc1', email: 'someone@example.com' },
-      jobs: [finishedScan('acc1'), finishedScan('acc2-0123456789')], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW,
+      jobs: [finishedScan('acc1'), finishedScan('acc2-0123456789')], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW, version: '0.4.14',
     });
     expect(page.accountName).toBe('someone@example.com');
+    expect(page.versionLabel).toBe('v0.4.14');
     expect(page.tabLabels).toEqual({ scan: '1 · Scan (needed)', duplicates: '2 · Duplicates', search: 'Search' });
     expect(page.otherAccounts).toEqual([{ account: 'acc2-0123456789', href: '?account=acc2-0123456789', label: 'account acc2-012…', scanTitle: 'Photos not analysed yet' }]);
   });
 
   it('builds the groups again only when a scan or the analysis finishes, or the choices change', () => {
-    const input = { selected: 'acc1', signedIn: null, jobs: [], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW };
+    const input = { selected: 'acc1', signedIn: null, jobs: [], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW, version: '0.4.14' };
     const key = reviewPageView(input).refreshKey;
     expect(key).not.toBeNull();
     expect(reviewPageView({ ...input, nowMs: NOW + 1_000 }).refreshKey).toBe(key);

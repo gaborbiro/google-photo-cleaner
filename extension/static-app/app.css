@@ -144,6 +144,9 @@ body.review .card.utility { padding: var(--space-4) var(--space-5); }
 /* --- Surface headers (popup, panel, review) --- */
 
 .surface-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+/* The title with the version beside it, quietly, on the title's baseline. */
+.title-line { display: flex; align-items: baseline; gap: var(--space-2); }
+.version { color: var(--pc-muted); font-size: 13px; }
 /* The Google account whose library this is: just its email, quietly. */
 .account { color: var(--pc-muted); overflow-wrap: anywhere; margin-top: var(--space-1); }
 body.review .account { margin-top: var(--space-2); }

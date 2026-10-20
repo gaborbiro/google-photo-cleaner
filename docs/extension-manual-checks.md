@@ -32,6 +32,12 @@ and copy the console (right-click the page → Inspect → Console).
 6. Close the Photos tab, open the popup: it says Photo Cleaner works inside Google Photos and offers
    **Open Google Photos**, which opens it with the Photo Cleaner panel already visible once the page
    loads. With Photos already open, **Open panel in Google Photos** focuses that tab and opens one panel.
+7. Reload the extension (↻) with a Photos tab open, without reloading that tab, then open the popup:
+   within a few seconds it shows the account; "Looking for Google Photos…" never stays longer than
+   about 5 s. Without an account it says why and offers **Open Google Photos**.
+8. Two Photos tabs, the one used last put to sleep (`chrome://discards` → Discard) and the other
+   awake, with some other tab active: the popup shows the awake tab's account. With every Photos tab asleep, it says the tab is asleep and
+   **Open Google Photos** wakes it.
 
 ## 2. Scan
 

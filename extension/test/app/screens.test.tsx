@@ -32,7 +32,8 @@ vi.mock('react-dom/client', async (original) => {
 const SIGNED_IN: AccountAnswer = { account: { fingerprint: 'account-a', email: 'someone@example.com' }, problem: null, photosTabOpen: true };
 const NO_TAB: AccountAnswer = { account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false };
 
-let account: AccountAnswer;
+/** The background's answer to which account is signed in: as it is, or one at a time, when each is asked. */
+let account: AccountAnswer | { error: string } | (() => Promise<AccountAnswer>);
 /** What the pages asked the background page, in order. */
 let sent: { kind: string; [key: string]: unknown }[];
 let eraseAnswer: { ok?: true; error?: string };
@@ -46,7 +47,7 @@ function pretendExtension() {
     runtime: {
       sendMessage: async (request: { kind: string; op?: PageOp; account?: string; params?: Record<string, unknown> }) => {
         sent.push(request);
-        if (request.kind === 'app-account') return account;
+        if (request.kind === 'app-account') return typeof account === 'function' ? account() : account;
         if (request.kind === 'app-erase-all') return eraseAnswer;
         if (request.kind === 'app-run-op' && request.op === 'fetchPreview') return { ok: true, data: { contentType: 'image/jpeg', base64: 'AAAA' } };
         if (request.kind === 'app-run-op' && (request.op === 'listTrashPage' || request.op === 'moveToTrash' || request.op === 'restoreFromTrash')) {
@@ -424,6 +425,53 @@ describe('clicks and keys reach what they should', () => {
     location.hash = 'duplicates';
     await vi.waitFor(() => expect(labels(root)).toHaveLength(3)); // the same page: its groups kept
     expect(location.hash).toBe('');
+  });
+
+  it.each([
+    ['still looking', null],
+    ['a sleeping tab', 'The Google Photos tab is asleep; click on it to wake it.'],
+    ['a tab not responding', 'The Google Photos tab is not responding; reload it.'],
+    ['a signed-out tab', 'Google Photos is signed out in this tab.'],
+  ])('popup with %s says why, and offers to open Google Photos once it knows', async (_, problem) => {
+    account = problem === null ? () => new Promise(() => {}) : { account: null, problem, photosTabOpen: true };
+    const root = await open('popup');
+    if (problem === null) {
+      await shows(root, 'Looking for Google Photos…');
+      expect(root.querySelector('button')).toBeNull(); // over within seconds; a button would flash up on every opening
+      return;
+    }
+    await shows(root, problem);
+    await click(root, 'Open Google Photos');
+    expect(requests('app-open-photos')).toHaveLength(1);
+  });
+
+  it.each(['popup', 'panel'] as const)('%s: when the extension fails to say which account, it says why', async (page) => {
+    account = { error: 'Could not open the saved data.' };
+    const root = await open(page);
+    await shows(root, 'Could not open the saved data.');
+    expect(root.textContent).not.toContain('Photo Cleaner works inside Google Photos');
+    if (page === 'popup') await shows(root, 'Open Google Photos');
+  });
+
+  it('panel in a tab that is signed out says so', async () => {
+    account = { account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true };
+    const root = await open('panel');
+    await shows(root, 'Google Photos is signed out in this tab.');
+  });
+
+  it('popup: an answer that arrives late does not replace a newer one', async () => {
+    const answers: ((answer: AccountAnswer) => void)[] = [];
+    account = () => new Promise((resolve) => answers.push(resolve));
+    const root = await open('popup');
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    window.dispatchEvent(new Event('focus')); // asks again
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    answers[1](SIGNED_IN);
+    await shows(root, 'someone@example.com');
+    answers[0](NO_TAB);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(root.textContent).toContain('someone@example.com');
+    expect(root.textContent).not.toContain('Photo Cleaner works inside Google Photos');
   });
 
   it('popup without Google Photos: Open Google Photos asks for it', async () => {

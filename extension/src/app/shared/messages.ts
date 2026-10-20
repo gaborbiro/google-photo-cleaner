@@ -48,7 +48,20 @@ export interface AccountAnswer {
   account: { fingerprint: string; email: string | null } | null;
   /** Why there's no account, in plain words. */
   problem: string | null;
-  photosTabOpen: boolean;
+  /** Whether a Google Photos tab is open; null when unknown (the extension itself did not answer). */
+  photosTabOpen: boolean | null;
+}
+
+const EXTENSION_SILENT = 'The extension did not answer. Try again; if it keeps happening, reload the extension.';
+
+/**
+ * The background's reply to `app-account` as an answer. A failed request comes back as `{ error }`
+ * (and nothing at all if nobody answered): then there's no account, and the error says why.
+ */
+export function accountAnswer(reply: unknown): AccountAnswer {
+  if (typeof reply === 'object' && reply !== null && 'account' in reply && 'problem' in reply) return reply as AccountAnswer;
+  const error = typeof reply === 'object' && reply !== null ? (reply as { error?: unknown }).error : undefined;
+  return { account: null, problem: typeof error === 'string' ? error : EXTENSION_SILENT, photosTabOpen: null };
 }
 
 /** Service worker -> Photos tab content script. */

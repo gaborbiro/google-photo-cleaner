@@ -3,7 +3,7 @@ import { NO_ANALYSIS } from '../../src/app/ai/analysis';
 import { endJob, NO_PROGRESS, pauseJob, reportProgress, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 import type { ReportView } from '../../src/app/scan/report';
 import { accountLabel, checkedText, copyReportText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView, versionLine } from '../../src/app/shared/jobView';
-import { requestedReviewTab, reviewUrl } from '../../src/app/shared/messages';
+import { accountAnswer, requestedReviewTab, reviewUrl } from '../../src/app/shared/messages';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
 const NOW = new Date(2026, 9, 14, 21, 40).getTime();
@@ -260,11 +260,35 @@ describe('the review tab', () => {
 
 describe('the popup and the panel', () => {
   it("say where things stand: still looking, no Google Photos, a tab that can't say, or the account", () => {
-    expect(surfaceView(undefined)).toMatchObject({ state: 'looking', account: null });
-    expect(surfaceView({ account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false })).toMatchObject({ state: 'no-photos', problemText: 'No Google Photos tab is open.' });
-    expect(surfaceView({ account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true })).toMatchObject({ state: 'problem', problemText: 'Google Photos is signed out in this tab.' });
+    expect(surfaceView(undefined)).toMatchObject({ state: 'looking', account: null, offerPhotos: false });
+    expect(surfaceView({ account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false }))
+      .toMatchObject({ state: 'no-photos', problemText: 'No Google Photos tab is open.', offerPhotos: true });
+    expect(surfaceView({ account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true }))
+      .toMatchObject({ state: 'problem', problemText: 'Google Photos is signed out in this tab.', offerPhotos: true });
     expect(surfaceView({ account: { fingerprint: 'acc1', email: 'someone@example.com' }, problem: null, photosTabOpen: true }))
-      .toEqual({ state: 'account', problemText: null, account: 'acc1', accountName: 'someone@example.com' });
+      .toEqual({ state: 'account', problemText: null, account: 'acc1', accountName: 'someone@example.com', offerPhotos: false });
+  });
+
+  it('say why when the extension itself failed, not that no Google Photos tab is open', () => {
+    expect(surfaceView({ account: null, problem: 'The extension is restarting; try again in a moment.', photosTabOpen: null }))
+      .toMatchObject({ state: 'problem', problemText: 'The extension is restarting; try again in a moment.', offerPhotos: true });
+  });
+});
+
+describe("the background's answer to which account is signed in", () => {
+  it('is used as it is', () => {
+    const answer = { account: { fingerprint: 'acc1', email: null }, problem: null, photosTabOpen: true };
+    expect(accountAnswer(answer)).toBe(answer);
+  });
+
+  it('when the request failed, has no account and the error as its reason', () => {
+    expect(accountAnswer({ error: 'Could not open the saved data.' })).toEqual({ account: null, problem: 'Could not open the saved data.', photosTabOpen: null });
+  });
+
+  it('when nobody answered, has no account and says the extension did not answer', () => {
+    for (const reply of [undefined, null, true, {}]) {
+      expect(accountAnswer(reply)).toEqual({ account: null, problem: expect.stringContaining('The extension did not answer'), photosTabOpen: null });
+    }
   });
 });
 

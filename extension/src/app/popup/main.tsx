@@ -15,13 +15,9 @@ function Popup() {
       </header>
       <StorageProblem />
       {view.state === 'looking' && <p className="muted">Looking for Google Photos…</p>}
-      {view.state === 'no-photos' && (
-        <>
-          <p>Photo Cleaner works inside Google Photos. Open it to scan your library.</p>
-          <button className="primary" onClick={() => void send({ kind: 'app-open-photos' })}>Open Google Photos</button>
-        </>
-      )}
+      {view.state === 'no-photos' && <p>Photo Cleaner works inside Google Photos. Open it to scan your library.</p>}
       {view.state === 'problem' && <p className="warn">{view.problemText}</p>}
+      {view.offerPhotos && <button className="primary" onClick={() => void send({ kind: 'app-open-photos' })}>Open Google Photos</button>}
       {view.account && (
         <>
           {scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} surface="popup" />}

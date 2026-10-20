@@ -221,9 +221,9 @@ are ever wanted, they would be opt-in, and the privacy policy would say so.
 
 ## Also open from the same conversation
 
-- Popup: every state without an account except "no tab" ("Looking for Google Photos…", tab not
-  responding, signed out, tab asleep) is a line of text with no button. Proposed: show **Open Google
-  Photos** in all of them, and give the account check a time limit (about 5 s) so "Looking…" can't
-  stay up. "Looking…" staying up was seen once and couldn't be reproduced in a fresh Chromium profile
-  (no tab → the button appears as designed). To find out: the exact wording seen, and whether a
-  photos.google.com tab was open in any window (possibly restored by Chrome but not loaded).
+- [x] Popup: every state without an account except "no tab" (tab not responding, signed out, tab
+  asleep) was a line of text with no button; "Looking for Google Photos…" was seen staying up once.
+  Done (0.4.25): the account check has a time limit of 5 s and asks every open Photos tab, not only the
+  first; the popup shows **Open Google Photos** with the reason in every state without an account, and
+  a failure inside the extension says why instead of reading as "no account". "Looking…" itself has no
+  button: it now ends within seconds, and a button there would flash up each time the popup opens.

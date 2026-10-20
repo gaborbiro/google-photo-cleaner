@@ -1,9 +1,9 @@
 // State the surfaces watch. The saved jobs come straight from the browser database and are
 // re-read whenever any surface or the background page saves a change.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { jobId, type AnalysisJob, type Job, type JobKind, type ScanJob } from '../shared/job';
-import type { AccountAnswer, AppRequest } from '../shared/messages';
+import { accountAnswer, type AccountAnswer, type AppRequest } from '../shared/messages';
 import { openDatabase, storageProblemText } from '../shared/db';
 import { IndexedDbJobStore, onErased, onJobsChanged } from '../shared/store';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
@@ -236,14 +236,24 @@ const ACCOUNT_REFRESH_MS = 5_000;
 /**
  * Which Google account the Photos tab is signed in to: the panel's own tab, or for the popup
  * and review tab the most relevant Photos tab. Checked again every few seconds and on focus,
- * so switching accounts in Google Photos shows up by itself.
+ * so switching accounts in Google Photos shows up by itself. Answers can arrive out of order: one
+ * older than the answer shown is dropped (rather than all but the latest: when each check takes
+ * about as long as the gap between checks, every answer would be outrun by the next request).
  */
 export function useAccount(): { answer: AccountAnswer | undefined; refresh: () => void } {
   const [answer, setAnswer] = useState<AccountAnswer | undefined>(undefined);
+  const asked = useRef(0);
+  const shown = useRef(0);
   const refresh = useCallback(() => {
-    void (send({ kind: 'app-account' }) as Promise<AccountAnswer>).then(setAnswer, (error: unknown) => {
+    const request = ++asked.current;
+    const show = (latest: AccountAnswer) => {
+      if (request < shown.current) return;
+      shown.current = request;
+      setAnswer(latest);
+    };
+    send({ kind: 'app-account' }).then((reply) => show(accountAnswer(reply)), (error: unknown) => {
       console.warn('Photo Cleaner: the extension did not answer which account is signed in', error);
-      setAnswer({ account: null, problem: 'The extension is restarting; try again in a moment.', photosTabOpen: false });
+      show({ account: null, problem: 'The extension is restarting; try again in a moment.', photosTabOpen: null });
     });
   }, []);
   useEffect(() => {

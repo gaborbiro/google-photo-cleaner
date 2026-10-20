@@ -351,25 +351,32 @@ export function reviewPageView(input: {
 
 export interface SurfaceView {
   /**
-   * `looking`: still asking which account is signed in; `no-photos`: no Google Photos tab is open;
-   * `problem`: a tab is open but can't say; `account`: signed in to [account]. [problemText] says why
-   * there's no account.
+   * `looking`: still asking which account is signed in (at most a few seconds); `no-photos`: no Google
+   * Photos tab is open; `problem`: no account can be told (a tab is asleep, not responding or signed
+   * out, or the extension itself did not answer); `account`: signed in to [account]. [problemText]
+   * says why there's no account.
    */
   state: 'looking' | 'no-photos' | 'problem' | 'account';
   problemText: string | null;
   account: string | null;
   /** The account signed in to Google Photos, as shown: "someone@example.com". */
   accountName: string | null;
+  /**
+   * The popup offers Open Google Photos (which brings the Photos tab forward, or opens one): whenever
+   * the answer came without an account. Not while looking, which ends within seconds, so the button
+   * doesn't flash up each time the popup opens.
+   */
+  offerPhotos: boolean;
 }
 
 export function surfaceView(answer: AccountAnswer | undefined): SurfaceView {
   const none = { problemText: null, account: null, accountName: null };
-  if (answer === undefined) return { ...none, state: 'looking' };
+  if (answer === undefined) return { ...none, state: 'looking', offerPhotos: false };
   if (answer.account) {
     const { fingerprint, email } = answer.account;
-    return { state: 'account', problemText: null, account: fingerprint, accountName: accountLabel(fingerprint, email) };
+    return { state: 'account', problemText: null, account: fingerprint, accountName: accountLabel(fingerprint, email), offerPhotos: false };
   }
-  return { ...none, state: answer.photosTabOpen ? 'problem' : 'no-photos', problemText: answer.problem };
+  return { ...none, state: answer.photosTabOpen === false ? 'no-photos' : 'problem', problemText: answer.problem, offerPhotos: true };
 }
 
 /** The popup's and the panel's one button to the review tab: what it says, and which tab it opens there. */

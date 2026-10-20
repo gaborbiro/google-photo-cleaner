@@ -151,3 +151,89 @@ describe('opening the review tab', () => {
     expect(focusWindow).toHaveBeenCalledWith(3, { focused: true });
   });
 });
+describe('which account is signed in', () => {
+  const photos = (id: number, more: Partial<chrome.tabs.Tab> = {}) => ({ ...tab, id, ...more }) as chrome.tabs.Tab;
+  const signedIn = (fingerprint: string) => ({ ok: true, data: { accountFingerprint: fingerprint, accountEmail: `${fingerprint}@example.com` } });
+  const signedOut = { ok: false, error: { kind: 'SESSION', message: 'signed out' } };
+  const never = () => new Promise(() => {});
+  /** Each tab's answer to the account check, by its id. */
+  function tabsAnswer(answers: Record<number, () => unknown>) {
+    tabs.sendMessage.mockImplementation(async (tabId: number) => answers[tabId]());
+  }
+  function ask(sender: chrome.runtime.MessageSender = { id: 'photo-cleaner' }) {
+    return new Promise<unknown>((resolve) => {
+      expect(receive({ kind: 'app-account' }, sender, resolve)).toBe(true);
+    });
+  }
+  const notResponding = { account: null, problem: 'The Google Photos tab is not responding; reload it.', photosTabOpen: true };
+
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  it('says when no Google Photos tab is open', async () => {
+    tabs.query.mockResolvedValue([]);
+    expect(await ask()).toEqual({ account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false });
+  });
+
+  it('gives a tab that does not answer 5 seconds, then says it is not responding', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    tabsAnswer({ 42: never });
+    let answer: unknown;
+    void ask().then((a) => { answer = a; });
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(answer).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(answer).toEqual(notResponding);
+  });
+
+  it('asks the other Photos tabs when the first is asleep or does not answer', async () => {
+    tabs.query.mockResolvedValue([photos(1, { discarded: true }), photos(2), photos(3)]);
+    tabsAnswer({ 2: () => Promise.reject(new Error('No listener')), 3: () => signedIn('acc3') });
+    executeScript.mockImplementation(async ({ target }: { target: { tabId: number } }) => {
+      if (target.tabId === 2) throw new Error('Cannot access the tab');
+      return [];
+    });
+    expect(await ask()).toEqual({ account: { fingerprint: 'acc3', email: 'acc3@example.com' }, problem: null, photosTabOpen: true });
+    expect(tabs.sendMessage.mock.calls.map(([tabId]) => tabId)).not.toContain(1); // a sleeping tab is not woken for this
+  });
+
+  it('asks every tab at once, so a frozen first tab costs the time limit once', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    tabs.query.mockResolvedValue([photos(1), photos(2)]);
+    tabsAnswer({ 1: never, 2: () => signedIn('acc2') });
+    let answer: unknown;
+    void ask().then((a) => { answer = a; });
+    await vi.waitFor(() => expect(tabs.sendMessage).toHaveBeenCalledTimes(2));
+    await vi.advanceTimersByTimeAsync(5_000);
+    vi.useRealTimers(); // the saved jobs, read once an account is known, need real timers
+    await vi.waitFor(() => expect(answer).toMatchObject({ account: { fingerprint: 'acc2' } }));
+  });
+
+  it('without an account, gives the reason of a tab that answered before that of one asleep or not responding', async () => {
+    tabs.query.mockResolvedValue([photos(1, { discarded: true }), photos(2)]);
+    tabsAnswer({ 2: () => signedOut });
+    expect(await ask()).toEqual({ account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true });
+  });
+
+  it('without any answer, gives the first tab’s reason', async () => {
+    tabs.query.mockResolvedValue([photos(1, { discarded: true }), photos(2, { discarded: true })]);
+    expect(await ask()).toEqual({ account: null, problem: 'The Google Photos tab is asleep; click on it to wake it.', photosTabOpen: true });
+    expect(tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('for the panel, asks only its own tab', async () => {
+    tabs.query.mockResolvedValue([photos(1), photos(42)]);
+    tabsAnswer({ 1: () => signedIn('acc1'), 42: () => signedOut });
+    expect(await ask({ id: 'photo-cleaner', tab: photos(42) })).toEqual({ account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true });
+    expect(tabs.sendMessage.mock.calls.map(([tabId]) => tabId)).toEqual([42]);
+  });
+
+  it('for the panel, a frozen tab is not responding after 5 seconds', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    tabsAnswer({ 42: never });
+    const answer = ask({ id: 'photo-cleaner', tab: photos(42) });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await answer).toEqual(notResponding);
+  });
+});

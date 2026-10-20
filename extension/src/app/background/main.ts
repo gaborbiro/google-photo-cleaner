@@ -35,23 +35,55 @@ async function sendToTab<T>(tabId: number, message: TabCommand | TabRequest): Pr
   }
 }
 
-async function accountOf(tab: chrome.tabs.Tab | undefined): Promise<AccountAnswer> {
-  const tabs = await photosTabs();
-  const target = tab?.url?.startsWith(PHOTOS_URL) ? tab : tabs[0];
-  if (target?.id === undefined) return { account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false };
-  if (target.discarded) return { account: null, problem: 'The Google Photos tab is asleep; click on it to wake it.', photosTabOpen: true };
+/** How long a Photos tab has to say which account it is signed in to, so the popup and panel never wait on a frozen tab. */
+const ACCOUNT_CHECK_MS = 5_000;
+
+/** [work]'s result, or a failure once [ms] have passed without one. */
+function timeLimit<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer within ${ms} ms`)), ms);
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * The account [tab] is signed in to. [answered] tells a tab that answered but couldn't say (signed out,
+ * Google changed something) from one that is asleep or didn't answer in time.
+ */
+async function askAccount(tab: chrome.tabs.Tab): Promise<{ answer: AccountAnswer; answered: boolean }> {
+  if (tab.discarded) return { answer: { account: null, problem: 'The Google Photos tab is asleep; click on it to wake it.', photosTabOpen: true }, answered: false };
   let result: OpResult;
   try {
-    result = await sendToTab<OpResult>(target.id, { kind: 'pc-command', op: 'status', params: {} });
+    if (tab.id === undefined) throw new Error('the tab has no id');
+    result = await timeLimit(sendToTab<OpResult>(tab.id, { kind: 'pc-command', op: 'status', params: {} }), ACCOUNT_CHECK_MS);
   } catch (error) {
-    console.warn('Photo Cleaner: the Google Photos tab did not answer the account check', error);
-    return { account: null, problem: 'The Google Photos tab is not responding; reload it.', photosTabOpen: true };
+    console.warn('Photo Cleaner: a Google Photos tab did not answer the account check', error);
+    return { answer: { account: null, problem: 'The Google Photos tab is not responding; reload it.', photosTabOpen: true }, answered: false };
   }
-  if (!result.ok) {
-    return { account: null, problem: accountProblem(result.error), photosTabOpen: true };
-  }
+  if (!result.ok) return { answer: { account: null, problem: accountProblem(result.error), photosTabOpen: true }, answered: true };
   const data = result.data as { accountFingerprint: string; accountEmail?: string };
-  return { account: { fingerprint: data.accountFingerprint, email: data.accountEmail ?? null }, problem: null, photosTabOpen: true };
+  return { answer: { account: { fingerprint: data.accountFingerprint, email: data.accountEmail ?? null }, problem: null, photosTabOpen: true }, answered: true };
+}
+
+/**
+ * Which account is signed in: in the asking Photos tab (the panel's), else in the first open Photos tab
+ * that can say (active first, then most recently used). Every tab is asked at once, so one that doesn't
+ * answer costs the time limit once. Without an account, why: a tab that answered gives the reason
+ * (signed out…), before one that is asleep or not responding.
+ */
+async function accountOf(tab: chrome.tabs.Tab | undefined): Promise<AccountAnswer> {
+  const tabs = tab?.url?.startsWith(PHOTOS_URL) ? [tab] : await photosTabs();
+  if (tabs.length === 0) return { account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false };
+  const asked = tabs.map(askAccount);
+  let reason: { answer: AccountAnswer; answered: boolean } | null = null;
+  for (const pending of asked) {
+    const found = await pending;
+    if (found.answer.account) return found.answer;
+    if (reason === null || (found.answered && !reason.answered)) reason = found;
+  }
+  if (reason === null) throw new Error('No Photos tab was asked which account is signed in');
+  return reason.answer;
 }
 
 function accountProblem(error: OpError): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORIES, categoryList, categorySamples, countCategories, countLine, countSections, descriptionNorms, descriptionScores, leadOf, matchPhoto, photoBreakdown, photoCaption, scoreSpread, suggestions, type Category, type ClutterPhoto, type ScoredCategory } from '../../src/app/search/clutter';
+import { CATEGORIES, categoryList, categorySamples, countCategories, countLine, countSections, descriptionNorms, descriptionScores, kindTotals, leadOf, matchPhoto, photoBreakdown, photoCaption, scoreSpread, suggestions, type Category, type ClutterPhoto, type ScoredCategory } from '../../src/app/search/clutter';
 
 const v = (...xs: number[]) => Float32Array.from(xs);
 const parking: Category = { id: 'parking', label: 'Parking spots', kind: 'clutter', descriptions: ['a car park', 'a parking space number'] };
@@ -45,6 +45,7 @@ describe('clutter suggestions', () => {
     expect(byId.get('people')!.justMissed.map((p) => p.mediaKey)).toEqual(['family at the car']);
     expect(byId.get('receipts')!.trashable.map((p) => p.mediaKey)).toEqual(['receipt']);
     expect(counts.photos).toBe(5);
+    expect(kindTotals(counts)).toBe('Clutter 2 (40%) · counterweights 0 (0%) · close calls 3 (60%)');
   });
 
   it('never counts protected, unknown or queued photos as trashable, and sorts the rest by score', () => {
@@ -62,6 +63,8 @@ describe('clutter suggestions', () => {
     expect(parkingCount.protectedOrUnknown).toBe(2);
     expect(parkingCount.approved).toBe(1);
     expect(countLine(parkingCount)).toBe('Parking spots · 2 (2 protected or unknown, 1 already in the trash queue)');
+    // Protected, unknown and queued photos are counted too: every photo is somewhere.
+    expect(kindTotals(countCategories(matches, categories, photos, { minScore: 0, margin: 0 }, 'next'))).toBe('Clutter 5 (100%) · counterweights 0 (0%) · close calls 0 (0%)');
   });
 
   it('lead over the other kind: two kinds of clutter close together still count, a close counterweight does not', () => {
@@ -155,6 +158,7 @@ describe('clutter suggestions', () => {
     const photos = new Map(matches.map((m) => [m.mediaKey, trashable]));
     const counts = countCategories(matches, categories, photos, { minScore: 0, margin: 0 }, 'next');
     expect(counts.categories.map((c) => c.category.id)).toEqual(['people', 'parking', 'receipts']);
+    expect(kindTotals(counts)).toBe('Clutter 5 (56%) · counterweights 4 (44%) · close calls 0 (0%)');
     expect(suggestions(counts, 2).map((c) => c.category.id)).toEqual(['parking', 'receipts']);
     expect(suggestions(counts, 3).map((c) => c.category.id)).toEqual(['parking']);
   });

@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CATEGORIES, categoryList, categorySamples, countCategories, countLine, countSections, descriptionNorms, descriptionScores, matchPhoto, photoBreakdown, photoCaption, scoreSpread, STARTING_SETTINGS, type Breakdown, type LeadOver, type CategoryCount, type CategoryPhoto, type ClutterSettings, type DescriptionNorms, type ScoredCategory, type Scoring } from '../search/clutter';
+import { CATEGORIES, categoryList, categorySamples, countCategories, countLine, countSections, descriptionNorms, descriptionScores, kindTotals, matchPhoto, photoBreakdown, photoCaption, scoreSpread, STARTING_SETTINGS, type Breakdown, type LeadOver, type CategoryCount, type CategoryPhoto, type ClutterSettings, type DescriptionNorms, type ScoredCategory, type Scoring } from '../search/clutter';
 import type { LibraryPhoto } from '../search/searchModel';
 import { searchDeps } from '../search/session';
 import { accountLabel } from '../shared/jobView';
@@ -299,6 +299,7 @@ function Clutter() {
               : 'Clutter leads over the best counterweight, and a counterweight over the best clutter. Two kinds of clutter close together still count: the photo is clutter either way. With the same minimum lead this only adds photos.'}
           </p>
           <p className="mono">{counts.photos.toLocaleString()} photos matched</p>
+          <p className="mono">{kindTotals(counts)}</p>
           {spread.map((s) => (
             <p key={s.fraction} className="mono small">{Math.round(s.fraction * 100)}% of photos: best score up to {s.bestScore.toFixed(3)}, lead over {over === 'next' ? 'the next category' : 'the other kind'} up to {s.lead.toFixed(3)}</p>
           ))}

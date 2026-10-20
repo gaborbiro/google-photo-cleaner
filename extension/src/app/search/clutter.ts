@@ -6,6 +6,7 @@
 // Which photos may be counted at all comes from the shared protection rules (LibraryPhoto.eligible).
 
 import { dot } from '../ai/similar';
+import { n } from '../shared/format';
 
 export type CategoryKind = 'clutter' | 'counterweight';
 
@@ -370,6 +371,21 @@ export function categorySamples(count: CategoryCount, size: number): CategorySam
 export function photoCaption(photo: CategoryPhoto): string {
   const lead = Math.floor(photo.lead * 10_000 + 1e-9) / 10_000;
   return `${photo.score.toFixed(3)} · lead ${lead.toFixed(4)}`;
+}
+
+/**
+ * Where every photo went, by kind: counted as clutter, counted as a counterweight, or a close call
+ * (counted nowhere). Comparing it between scorings shows whether photos move from counterweights into
+ * clutter, or only between counterweights. Counted includes protected, unknown and queued photos.
+ */
+export function kindTotals(counts: ClutterCounts): string {
+  const counted = (kind: CategoryKind) =>
+    counts.categories.filter((c) => c.category.kind === kind).reduce((sum, c) => sum + c.trashable.length + c.protectedOrUnknown + c.approved, 0);
+  const closeCalls = counts.categories.reduce((sum, c) => sum + c.closeCalls, 0);
+  const [clutter, counterweights] = [counted('clutter'), counted('counterweight')];
+  if (clutter + counterweights + closeCalls !== counts.photos) throw new Error(`Counted photos (${clutter + counterweights + closeCalls}) don't add up to the photos matched (${counts.photos})`);
+  const share = (x: number) => (counts.photos === 0 ? '' : ` (${Math.round((x / counts.photos) * 100)}%)`);
+  return `Clutter ${n(clutter)}${share(clutter)} · counterweights ${n(counterweights)}${share(counterweights)} · close calls ${n(closeCalls)}${share(closeCalls)}`;
 }
 
 /** The best-match scores' and leads' spread, to choose the settings: at 10%, 50% and 90% of photos. */

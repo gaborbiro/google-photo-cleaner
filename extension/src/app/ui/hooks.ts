@@ -11,7 +11,7 @@ import { latestReport, reportKey, type ReportView } from '../scan/report';
 import { IndexedDbPreferences, type ProtectionChoices } from '../shared/preferences';
 import { launchButton, surfaceView, type LaunchButton, type SurfaceView } from '../shared/jobView';
 import { IndexedDbReviewStore, type ReviewSummary } from '../duplicates/reviewStore';
-import { IndexedDbProblemLog, keepProblemsHere, type ProblemEntry } from '../shared/problemLog';
+import { IndexedDbProblemLog, keepProblemsHere, type ProblemEntry, type RunEntry } from '../shared/problemLog';
 
 export const store = new IndexedDbJobStore();
 const inventory = new IndexedDbInventoryStore();
@@ -33,13 +33,13 @@ export function useClock(everyMs: number): number {
   return now;
 }
 
-/** The problem log, newest first, kept up to date; undefined while loading. */
-export function useProblems(): ProblemEntry[] | undefined {
-  const [entries, setEntries] = useState<ProblemEntry[] | undefined>(undefined);
+/** The problem log's problems and run summaries, newest first, kept up to date; undefined while loading. */
+export function useProblems(): { problems: ProblemEntry[]; runs: RunEntry[] } | undefined {
+  const [entries, setEntries] = useState<{ problems: ProblemEntry[]; runs: RunEntry[] } | undefined>(undefined);
   useEffect(() => {
     let alive = true;
-    const load = () => void problems.recent(Date.now()).then(
-      (recent) => alive && setEntries(recent),
+    const load = () => void Promise.all([problems.recent(Date.now()), problems.recentRuns(Date.now())]).then(
+      ([recent, runs]) => alive && setEntries({ problems: recent, runs }),
       (error: unknown) => console.warn('Photo Cleaner: could not read the problem log', error),
     );
     load();

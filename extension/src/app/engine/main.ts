@@ -14,8 +14,10 @@ import { runScan } from '../scan/session';
 import { OpPhotosSource } from '../scan/source';
 import { ENGINE_STARTED_KEY } from '../shared/constants';
 import { ALIVE_EVERY_MS, endJob, jobId, markAlive, reportProgress, startAnalysisJob, type AnalysisJob, type Job, type ScanJob } from '../shared/job';
-import { keepProblemsHere, problemsSaved, recordUnexpected } from '../shared/problemLog';
+import { IndexedDbProblemLog, keepProblemsHere, problemsSaved, recordUnexpected, type RunOutcome } from '../shared/problemLog';
+import { AnalysisStats, ScanStats, type RunStats } from '../shared/runStats';
 import { IndexedDbJobStore, onJobsChanged } from '../shared/store';
+import { BUILT_VERSION } from '../shared/version';
 
 keepProblemsHere();
 
@@ -23,7 +25,74 @@ const jobs = new IndexedDbJobStore();
 const inventory = new IndexedDbInventoryStore();
 const analysis = new IndexedDbAnalysisStore();
 const embedder = new TransformersEmbedder();
+const diagnostics = new IndexedDbProblemLog();
 const active = new Set<string>();
+
+// --- run summaries (Copy diagnostics) ---
+
+/** How often a running run's summary is saved, so a slow run shows before it ends (or if the page closes). */
+const SAVE_RUN_EVERY_MS = 5 * 60_000;
+
+/**
+ * Keeps the summary of this run of [job] in the problem log: now, every few minutes while it runs
+ * ([refresh] first brings what may have changed meanwhile up to date), and once with its outcome.
+ */
+function keepRun(job: Job, run: { stats: RunStats }, refresh: () => Promise<void> = async () => {}) {
+  const startedAtMs = Date.now();
+  const save = async (outcome: RunOutcome) => {
+    try {
+      await refresh();
+      await diagnostics.saveRun({ type: 'run', runKey: `${job.id}@${startedAtMs}`, version: BUILT_VERSION, startedAtMs, atMs: Date.now(), outcome, stats: structuredClone(run.stats) });
+    } catch (error) {
+      console.warn('Photo Cleaner: could not save the run summary', error);
+    }
+  };
+  const timer = setInterval(() => void save('running'), SAVE_RUN_EVERY_MS);
+  void save('running');
+  return {
+    async end(outcome: RunOutcome): Promise<void> {
+      clearInterval(timer);
+      await save(outcome);
+    },
+  };
+}
+
+/** Runs [work], keeping its run's summary to the end, also when it stops unexpectedly. */
+async function withRunSummary<O extends { kind: RunOutcome }>(kept: ReturnType<typeof keepRun>, work: () => Promise<O>): Promise<O> {
+  let outcome: O;
+  try {
+    outcome = await work();
+  } catch (error) {
+    await kept.end('stopped unexpectedly');
+    throw error;
+  }
+  await kept.end(outcome.kind);
+  return outcome;
+}
+
+/** "intel / gen-12lp": the graphics card the browser offers, as WebGPU names it; null when it can't say. */
+async function graphicsName(): Promise<string | null> {
+  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<{ info?: { vendor?: string; architecture?: string } } | null> } }).gpu;
+  if (!gpu) return null;
+  try {
+    const info = (await gpu.requestAdapter())?.info;
+    const clean = (part: string | undefined) => (part ?? '').toLowerCase().replace(/[^a-z0-9 ._-]/g, '').slice(0, 40);
+    return [clean(info?.vendor), clean(info?.architecture)].filter((part) => part !== '').join(' / ') || null;
+  } catch (error) {
+    console.warn('Photo Cleaner: could not ask which graphics card there is', error);
+    return null;
+  }
+}
+
+/** Whether the AI model's files are on this computer already (the embedder's own check). */
+async function modelCached(): Promise<boolean | null> {
+  try {
+    return await caches.has('transformers-cache');
+  } catch (error) {
+    console.warn('Photo Cleaner: could not check for the AI model files', error);
+    return null;
+  }
+}
 
 function sourceFor(account: string) {
   return new OpPhotosSource((op: ReadOp, params: Record<string, unknown>) =>
@@ -44,13 +113,15 @@ async function finish(job: Job, outcome: { kind: string; reason?: string; untilP
 }
 
 async function runScanJob(job: ScanJob): Promise<void> {
-  const outcome = await runScan({
+  const stats = new ScanStats();
+  const outcome = await withRunSummary(keepRun(job, stats), () => runScan({
     account: job.account,
     source: sourceFor(job.account),
     store: inventory,
+    stats,
     shouldStop: async () => !(await isRunning(job.id)),
     onProgress: async (progress) => void (await jobs.update(job.id, (j) => (j?.kind === 'library-scan' ? reportProgress(j, progress, Date.now()) : j))),
-  });
+  }));
   await finish(job, outcome);
   // One Scan does both: a finished library scan starts (or continues) the analysis.
   if (outcome.kind === 'completed') {
@@ -96,7 +167,13 @@ async function pace(jobKey: string, lastPhotoMs: number, show: (waiting: string 
 }
 
 async function runAnalysisJob(job: AnalysisJob): Promise<void> {
-  const outcome = await runAnalysis({
+  const stats = new AnalysisStats();
+  Object.assign(stats.stats, { fullSpeedAtStart: job.fullSpeed, fullSpeedNow: job.fullSpeed, graphics: await graphicsName(), modelCached: await modelCached() });
+  const fullSpeedNow = async () => {
+    const now = await jobs.get(job.id);
+    stats.stats.fullSpeedNow = now?.kind === 'analysis' ? now.fullSpeed : null;
+  };
+  const outcome = await withRunSummary(keepRun(job, stats, fullSpeedNow), () => runAnalysis({
     account: job.account,
     source: sourceFor(job.account),
     inventory,
@@ -107,8 +184,9 @@ async function runAnalysisJob(job: AnalysisJob): Promise<void> {
     newPhotosThisJob: job.progress.newPhotos,
     shouldStop: async () => !(await isRunning(job.id)),
     pace: (lastPhotoMs, show) => pace(job.id, lastPhotoMs, show),
+    stats,
     onProgress: async (progress) => void (await jobs.update(job.id, (j) => (j?.kind === 'analysis' ? reportProgress(j, progress, Date.now()) : j))),
-  });
+  }));
   await finish(job, outcome);
   // The popup can then say how many groups are waiting, before the review tab is ever opened.
   if (outcome.kind === 'completed') {

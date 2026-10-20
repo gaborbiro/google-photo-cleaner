@@ -91,6 +91,11 @@ describe('the background page', () => {
     expect(await new IndexedDbProblemLog(indexedDB).recent(Date.now())).toMatchObject([{
       where: 'scan: library', kind: 'PROTOCOL', version: '0.0.0-test', request: { op: 'listLibraryPage', sent: [] }, answer: { rpcId: 'lcxiM', answer: { k1: 's:6' } },
     }]);
+    // And the run's numbers, with how it ended.
+    await vi.waitFor(async () => expect(await new IndexedDbProblemLog(indexedDB).recentRuns(Date.now())).toMatchObject([{
+      type: 'run', outcome: 'failed', version: '0.0.0-test',
+      stats: { stage: 'library read', listings: { 'session check': { pages: 1 }, library: { pages: 0 } } },
+    }]));
     expect(warn).toHaveBeenCalled();
   }, 10_000);
 

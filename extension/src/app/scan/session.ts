@@ -6,6 +6,7 @@
 import type { IndexedDbInventoryStore } from './inventoryStore';
 import type { AlbumStatus, ScanPhase, ScanRun } from './model';
 import { INCOMPATIBLE_TEXT, logGoogleProblem, refusedText, type GoogleProblem } from '../shared/googleProblems';
+import { ScanStats } from '../shared/runStats';
 import { SourceError, waitingForPhotosText, waitsForPhotos, type PhotosSource } from './source';
 
 export interface ScanPolicy {
@@ -63,6 +64,8 @@ export interface ScanDeps {
   policy?: ScanPolicy;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+  /** Where this run's numbers go (see shared/runStats.ts); kept by the background page. */
+  stats?: ScanStats;
   /** Asked before every request: true once the user has paused the scan. */
   shouldStop: () => Promise<boolean>;
   onProgress: (progress: ScanProgress) => Promise<void>;
@@ -97,11 +100,13 @@ class ScanSession {
   private notice: string | null = null;
   private googleProblem: GoogleProblem | null = null;
   private libraryReachedMs: number | null = null;
+  private readonly stats: ScanStats;
 
   constructor(private readonly deps: ScanDeps) {
     this.policy = deps.policy ?? DEFAULT_POLICY;
     this.now = deps.now ?? Date.now;
     this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.stats = deps.stats ?? new ScanStats();
   }
 
   async execute(): Promise<ScanOutcome> {
@@ -313,9 +318,11 @@ class ScanSession {
     let rpcFailures = 0;
     for (;;) {
       if (await this.deps.shouldStop()) throw new UserStop();
-      await this.sleep(this.policy.pacingMs);
+      await this.wait(label, this.policy.pacingMs);
+      const start = this.now();
       try {
         const result = await block();
+        this.stats.page(label, this.now() - start);
         if (transientFailures > 0 || rateLimits > 0) this.notice = null;
         return result;
       } catch (e) {
@@ -328,7 +335,8 @@ class ScanSession {
             }
             this.notice = `Network problem while reading the ${label}; retrying (${transientFailures}/${this.policy.maxTransientRetries}).`;
             await this.emitProgressIfStarted();
-            await this.sleep(this.policy.transientBaseDelayMs * 2 ** (transientFailures - 1));
+            this.stats.retry(label, 'network');
+            await this.wait(label, this.policy.transientBaseDelayMs * 2 ** (transientFailures - 1));
             break;
           }
           case 'RATE_LIMIT': {
@@ -336,13 +344,15 @@ class ScanSession {
             if (rateLimits > this.policy.maxRateLimitRetries) throw new ScanStop('paused', 'Google is limiting requests. Resume the scan later.', e);
             this.notice = `Google is limiting requests; waiting before retrying (${rateLimits}/${this.policy.maxRateLimitRetries}).`;
             await this.emitProgressIfStarted();
-            await this.sleep(this.policy.rateLimitBaseDelayMs * 2 ** (rateLimits - 1));
+            this.stats.retry(label, 'rate limit');
+            await this.wait(label, this.policy.rateLimitBaseDelayMs * 2 ** (rateLimits - 1));
             break;
           }
           case 'RPC_ERROR':
             rpcFailures++;
+            this.stats.retry(label, 'refused');
             if (rpcFailures > this.policy.maxRpcRetries) throw new RpcFailed(e);
-            await this.sleep(this.policy.transientBaseDelayMs);
+            await this.wait(label, this.policy.transientBaseDelayMs);
             break;
           case 'SESSION':
           case 'NO_PHOTOS_TAB':
@@ -355,6 +365,13 @@ class ScanSession {
         }
       }
     }
+  }
+
+  /** Waits [ms] between or before requests for [label], counted in the run's numbers. */
+  private async wait(label: string, ms: number): Promise<void> {
+    const start = this.now();
+    await this.sleep(ms);
+    this.stats.waited(label, this.now() - start);
   }
 
   private async sessionStillValid(): Promise<boolean> {

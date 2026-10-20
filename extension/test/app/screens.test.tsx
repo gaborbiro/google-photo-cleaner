@@ -21,7 +21,7 @@ import { ALL_PROTECTED, IndexedDbPreferences } from '../../src/app/shared/prefer
 import { IndexedDbProblemLog } from '../../src/app/shared/problemLog';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
 import type { PageOp } from '../../src/shared/protocol';
-import { fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fakes';
+import { fakeAlbum, fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fakes';
 
 /** Every root a page creates, so each test can take its page down again. */
 const roots = vi.hoisted(() => [] as Root[]);
@@ -647,6 +647,30 @@ describe('clicks and keys reach what they should', () => {
     expect((await jobs.get(jobId('library-scan', 'account-a')))!.aliveAtMs).toBeGreaterThanOrEqual(NOW);
     await vi.waitFor(async () => expect(await new IndexedDbProblemLog(indexedDB).recent(NOW)).toMatchObject([{ where: 'scan: background page not responding', kind: 'UNEXPECTED' }]));
     await shows(document.getElementById('root')!, 'Scanning');
+  });
+
+  it('a finished scan whose report lets nothing be trashed names why, and Copy diagnostics explains it without album titles', async () => {
+    const source = new FakePhotos(Array.from({ length: 4 }, (_, i) => fakeItem(i)), [fakeAlbum('Wedding in Rome', [1]), fakeAlbum('Family secret', [2])]);
+    source.inaccessibleAlbums.add('Family secret');
+    await scan(source, new IndexedDbInventoryStore(indexedDB));
+    const jobs = new IndexedDbJobStore(indexedDB);
+    await jobs.update(jobId('library-scan', 'account-a'), () => endJob(startScanJob('account-a', NOW), 'completed', null, NOW));
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      const root = await open('review', '?account=account-a');
+      await shows(root, "No photo can be trashed: 1 album couldn't be read");
+      const library = root.querySelector<HTMLElement>('.scan-step')!;
+      (await ready(library, 'Copy diagnostics')).click();
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalled());
+      const copied = writeText.mock.calls[0]![0];
+      expect(copied).toContain("Blocking trashing: 1 album couldn't be read");
+      expect(copied).toContain('Album issue 1 (blocks): could not be read');
+      expect(copied).toContain('Photos: 3 unknown for scan incomplete');
+      expect(copied).not.toMatch(/Wedding|Rome|Family|secret/);
+    } finally {
+      delete (navigator as { clipboard?: unknown }).clipboard;
+    }
   });
 
   it('popup and panel: a stopped scan offers Copy diagnostics too', async () => {

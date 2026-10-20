@@ -6,6 +6,7 @@
 
 import type { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { plainMessage } from '../shared/errors';
+import { AnalysisStats } from '../shared/runStats';
 import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, PREVIEWS_STOPPED_TEXT, refusedText, type GoogleProblem } from '../shared/googleProblems';
 import { SourceError, waitingForPhotosText, waitsForPhotos, type AnalysisSource, type LibraryPhoto, type Preview } from '../scan/source';
 import type { IndexedDbAnalysisStore } from './analysisStore';
@@ -79,6 +80,8 @@ export interface AnalysisDeps {
   onProgress: (progress: AnalysisProgress) => Promise<void>;
   /** Previews fetched ahead while the model works. */
   prefetch?: number;
+  /** Where this run's numbers go (see shared/runStats.ts); kept by the background page. */
+  stats?: AnalysisStats;
   /**
    * How many new photos this job set out to analyse, when it was paused (or the browser closed) and
    * is now resumed: it goes on counting ("4,300 of 17,202": that total, less what is left now)
@@ -119,10 +122,12 @@ class AnalysisSession {
   private analysed = new Set<string>();
   private speed: SpeedMeter | null = null;
   private lastEmitMs = 0;
+  private readonly stats: AnalysisStats;
 
   constructor(private readonly deps: AnalysisDeps) {
     this.now = deps.now ?? Date.now;
     this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.stats = deps.stats ?? new AnalysisStats();
   }
 
   async execute(): Promise<AnalysisOutcome> {
@@ -144,6 +149,7 @@ class AnalysisSession {
         this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey, this.deps.account), this.photoKeys);
         // Nothing new since the last run: no model to start, no library to read again.
         if (this.analysed.size === this.photoKeys.size) {
+          this.stats.begin(this.photoKeys.size, this.analysed.size, settings.detail, settings.measuredPhotosPerSecond);
           this.progress = { ...this.progress, detail: settings.detail, newPhotos: 0 };
           await this.emit(true);
           return { kind: 'completed' };
@@ -151,9 +157,12 @@ class AnalysisSession {
         await this.loadModel();
       } else {
         await this.loadModel();
+        const checking = this.now();
         settings = await this.speedCheck();
+        this.stats.add('speedCheckMs', this.now() - checking);
       }
       this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey, this.deps.account), this.photoKeys);
+      this.stats.begin(this.photoKeys.size, this.analysed.size, settings.detail, settings.measuredPhotosPerSecond);
       // (New photos found since the job started can make what is left larger than its total: then that counts.)
       const left = this.photoKeys.size - this.analysed.size;
       const total = Math.max(this.deps.newPhotosThisJob ?? 0, left);
@@ -178,6 +187,7 @@ class AnalysisSession {
   private async loadModel(): Promise<void> {
     this.progress = { ...this.progress, stage: 'model', modelPercent: 0 };
     await this.emit(true);
+    const loading = this.now();
     try {
       await this.deps.embedder.load((fraction) => {
         this.progress = { ...this.progress, modelPercent: Math.floor(fraction * 100) };
@@ -186,6 +196,8 @@ class AnalysisSession {
     } catch (e) {
       // No graphics card access, no disk space, no network for the download: say why, resumable.
       throw new Pause(plainMessage(e, MODEL_FAILED_TEXT));
+    } finally {
+      this.stats.add('modelMs', this.now() - loading);
     }
     this.progress = { ...this.progress, modelPercent: null };
   }
@@ -274,6 +286,7 @@ class AnalysisSession {
         const image = await fetches[i]!;
         pending.delete(todo[i]!.mediaKey);
         if (image === null) {
+          this.stats.previewFailed();
           this.progress = { ...this.progress, failed: this.progress.failed + 1 };
           if (++failedInARow >= MAX_FAILED_IN_A_ROW) throw new Pause(PREVIEWS_STOPPED_TEXT);
           lastEnd = this.now();
@@ -287,7 +300,9 @@ class AnalysisSession {
         const end = this.now();
         lastPhotoMs = saveStart - aiStart;
         this.progress = { ...this.progress, newAnalysed: this.progress.newAnalysed + 1 };
-        this.speed!.record(end, { other: paceStart - lastEnd, pace: previewStart - paceStart, preview: aiStart - previewStart, ai: saveStart - aiStart, save: end - saveStart });
+        const timing = { other: paceStart - lastEnd, pace: previewStart - paceStart, preview: aiStart - previewStart, ai: saveStart - aiStart, save: end - saveStart };
+        this.speed!.record(end, timing);
+        this.stats.photo(timing);
         await this.emit(false);
         lastEnd = end;
       }
@@ -320,6 +335,7 @@ class AnalysisSession {
         switch (e.kind) {
           case 'RATE_LIMIT':
             if (++rateLimits > MAX_RATE_LIMITS) throw new Pause('Google is limiting preview downloads. Resume the analysis later.');
+            this.stats.rateLimited(RATE_LIMIT_WAIT_MS * rateLimits);
             await this.sleep(RATE_LIMIT_WAIT_MS * rateLimits);
             break;
           case 'SESSION':
@@ -344,8 +360,10 @@ class AnalysisSession {
 
   private async readPage(token: string | null) {
     for (let attempt = 1; ; attempt++) {
+      const start = this.now();
       try {
         const page = await this.deps.source.libraryPhotos(token);
+        this.stats.add('pagesMs', this.now() - start);
         if (page.accountFingerprint !== this.deps.account) {
           throw new Pause('The Google Photos tab is signed in to a different account. Switch it back, then resume.');
         }

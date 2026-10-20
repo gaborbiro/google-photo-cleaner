@@ -8,6 +8,8 @@ import { latestReport, reportKey, reportView } from '../../src/app/scan/report';
 import { endJob, startScanJob } from '../../src/app/shared/job';
 import { OpPhotosSource, SourceError } from '../../src/app/scan/source';
 import { INCOMPATIBLE_TEXT, refusedText } from '../../src/app/shared/googleProblems';
+import { ScanStats } from '../../src/app/shared/runStats';
+import { runScan } from '../../src/app/scan/session';
 import {
   classifyLatest,
   eligibilityOf,
@@ -19,6 +21,7 @@ import {
   NOW,
   scan,
   standardAccount,
+  TEST_POLICY,
 } from './fakes';
 
 const photos = (c: Awaited<ReturnType<typeof classifyLatest>>) => c.report.counts.find((t) => t.mediaType === 'PHOTO')!;
@@ -472,5 +475,30 @@ describe('the shared protection rules from JavaScript', () => {
     const noAnswer = new OpPhotosSource(async () => undefined as never);
     await expect(noAnswer.status()).rejects.toMatchObject({ kind: 'TRANSIENT' });
     warn.mockRestore();
+  });
+});
+
+describe("the library read's numbers (for Copy diagnostics)", () => {
+  it('counts pages, time in requests, retries and waits per listing', async () => {
+    const store = newStore();
+    const source = standardAccount();
+    let failedOnce = false;
+    source.failure = (op) => (op === 'favourites' && !failedOnce && (failedOnce = true) ? new SourceError('TRANSIENT', 'blip') : null);
+    let clock = NOW;
+    const stats = new ScanStats();
+    const outcome = await runScan({
+      account: 'account-a', source, store, stats,
+      policy: { ...TEST_POLICY, pacingMs: 300 },
+      now: () => (clock += 10), sleep: async () => {}, shouldStop: async () => false, onProgress: async () => {},
+    });
+    expect(outcome).toEqual({ kind: 'completed' });
+    const l = stats.stats.listings;
+    expect(Object.keys(l).sort()).toEqual(['album contents', 'album list', 'archive', 'favourites', 'library', 'session check'].sort());
+    expect(l['library']).toMatchObject({ pages: 4, networkRetries: 0, rateLimits: 0, refusals: 0 });
+    expect(l['favourites']).toMatchObject({ pages: 1, networkRetries: 1 });
+    // Each request and each wait reads the clock twice here, 10 ms apart.
+    expect(l['library']!.requestMs).toBe(40);
+    expect(l['library']!.slowestMs).toBe(10);
+    expect(l['favourites']!.waitedMs).toBe(30); // two pacing waits and one before the retry
   });
 });

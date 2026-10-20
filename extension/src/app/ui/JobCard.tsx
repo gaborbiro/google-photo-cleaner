@@ -99,10 +99,10 @@ function ProtectionDetails({ report, detailText, versionText, supportLines, copy
  * looked at first. Never photos, album names or account details (see diagnostics.ts).
  */
 function Diagnostics({ scan, analysis, report }: { scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null }) {
-  const problems = useProblems();
+  const log = useProblems();
   const [copied, setCopied] = useState(false);
   const [unfolded, setUnfolded] = useState(false);
-  const text = problems === undefined ? null : diagnosticsText({ version: extensionVersion(), nowMs: Date.now(), scan, analysis, problems, report });
+  const text = log === undefined ? null : diagnosticsText({ version: extensionVersion(), nowMs: Date.now(), scan, analysis, problems: log.problems, runs: log.runs, report });
   const copy = () => {
     if (text !== null) void navigator.clipboard.writeText(text).then(() => setCopied(true), logFailure('copying the diagnostics'));
   };

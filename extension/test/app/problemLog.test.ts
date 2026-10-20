@@ -18,6 +18,7 @@ import {
   IndexedDbProblemLog,
   keepProblems,
   MAX_PROBLEMS,
+  MAX_RUNS,
   PROBLEM_MAX_AGE_MS,
   problemsSaved,
   recordProblem,
@@ -26,6 +27,7 @@ import {
   type Problem,
   type ProblemEntry,
   type ProblemSink,
+  type RunEntry,
 } from '../../src/app/shared/problemLog';
 import type { ReadOp } from '../../src/shared/protocol';
 import { albumKey, albumsPayload, dedupKey, envelope, genericPayload, marker, mediaKey, rawAlbum, rawArchiveItem, rawLibraryItem, timelinePayload } from '../fixtures';
@@ -188,7 +190,7 @@ describe('from a real-looking answer to the copied diagnostics', () => {
     });
 
     const job = endJob(reportProgress(startScanJob(FINGERPRINT, NOW), progress.at(-1)!, NOW), 'failed', INCOMPATIBLE_TEXT, NOW);
-    const text = diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: job, analysis: null, problems: [entry!], report: await latestReport(inventory, FINGERPRINT, ALL_PROTECTED, NOW) });
+    const text = diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: job, analysis: null, problems: [entry!], runs: [], report: await latestReport(inventory, FINGERPRINT, ALL_PROTECTED, NOW) });
     expect(text).toContain('scan: album list');
     expect(text).toContain('Request: listAlbumsPage (Z5xsfc) · sent with nothing');
     expect(text).toContain('Gave up at: [0][1]');
@@ -200,5 +202,33 @@ describe('from a real-looking answer to the copied diagnostics', () => {
     }
     // The console gets the short version only.
     expect(JSON.stringify(warn.mock.calls)).not.toMatch(/AF1Qip|Holiday|photos\.fife/);
+  });
+});
+
+describe('run summaries in the log', () => {
+  const run = (key: string, startedAtMs: number, atMs: number, outcome: RunEntry['outcome'] = 'running'): RunEntry => ({
+    type: 'run', runKey: key, version: '1.0.0', startedAtMs, atMs, outcome, stats: { stage: 'library read', listings: {} },
+  });
+
+  it('a run saved again replaces its earlier summary; problems and runs are read apart', async () => {
+    const log = new IndexedDbProblemLog(new IDBFactory());
+    await log.saveRun(run('library-scan:a@1', NOW - 5_000, NOW - 4_000));
+    await log.add({ ...problem('scan: library'), atMs: NOW - 3_000, version: '1.0.0' });
+    await log.saveRun(run('library-scan:a@1', NOW - 5_000, NOW, 'completed'));
+    await log.saveRun(run('analysis:a@2', NOW - 1_000, NOW));
+    expect((await log.recentRuns(NOW)).map((r) => [r.runKey, r.outcome])).toEqual([['analysis:a@2', 'running'], ['library-scan:a@1', 'completed']]);
+    expect((await log.recent(NOW)).map((p) => p.where)).toEqual(['scan: library']);
+  });
+
+  it(`keeps the newest ${MAX_RUNS} runs without pushing out problems, and the other way round`, async () => {
+    const log = new IndexedDbProblemLog(new IDBFactory());
+    await log.add({ ...problem('kept'), atMs: NOW, version: '1' });
+    for (let i = 0; i < MAX_RUNS + 3; i++) await log.saveRun(run(`r${i}`, NOW + i, NOW + i));
+    for (let i = 0; i < MAX_PROBLEMS - 1; i++) await log.add({ ...problem(`p${i}`), atMs: NOW + i, version: '1' });
+    expect(await log.recentRuns(NOW)).toHaveLength(MAX_RUNS);
+    expect((await log.recentRuns(NOW))[0]!.runKey).toBe(`r${MAX_RUNS + 2}`);
+    const problems = await log.recent(NOW);
+    expect(problems).toHaveLength(MAX_PROBLEMS);
+    expect(problems.at(-1)!.where).toBe('kept');
   });
 });

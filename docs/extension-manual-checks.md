@@ -65,6 +65,13 @@ and copy the console (right-click the page → Inspect → Console).
 7. **Check for new photos**: it reads the photo list again but only analyses photos that are new;
    with none new it finishes quickly.
 8. Note the speed (photos per second) and how long the full library took.
+9. Copy diagnostics (review tab, Scan tab, the card above Erase): under **Recent runs** there is one
+   entry for the library read (pages and time per listing) and one for the analysis (photos done,
+   where the time went, detail, full speed, the graphics card). The times roughly match what you
+   noted above. An analysis still running shows "running" and is updated every 5 minutes.
+10. With an album that doesn't match Google's count (or can't be read), the warning names it ("No
+   photo can be trashed: 1 album doesn't match Google's count"), step 1 offers Copy diagnostics,
+   and its Protection section has an "Album issue" line with the numbers but no album name.
 
 ## 3. Protection choices
 

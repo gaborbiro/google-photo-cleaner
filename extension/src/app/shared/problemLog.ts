@@ -3,16 +3,20 @@
 // to do, and its console with it; this log stays in the browser database (until erased), so the
 // user can copy it into a problem report ("Copy diagnostics"). Each entry says where it happened and
 // how Google's answer was built, never what it held: no photo or album keys, titles, addresses,
-// tokens or account details.
+// tokens or account details. Beside the problems it keeps a summary of each recent library read and
+// analysis (runStats.ts), so a slow run can be told apart from a fast one afterwards.
 
 import type { AnswerDiagnostic, ErrorKind } from '../../shared/protocol';
 import { scrubbed } from '../../shared/scrub';
 import { CHANGES_CHANNEL } from './constants';
 import { committed, openDatabase, request, STORES } from './db';
+import type { RunStats } from './runStats';
 import { BUILT_VERSION } from './version';
 
-/** At most this many entries are kept, the newest. */
+/** At most this many problems are kept, the newest. */
 export const MAX_PROBLEMS = 50;
+/** At most this many run summaries are kept, the newest. */
+export const MAX_RUNS = 20;
 /** Entries older than this are dropped. */
 export const PROBLEM_MAX_AGE_MS = 30 * 86_400_000;
 
@@ -42,10 +46,32 @@ export interface Problem {
 
 export interface ProblemEntry extends Problem {
   id?: number;
+  /** Absent in entries saved before run summaries existed. */
+  type?: 'problem';
   atMs: number;
   /** The extension's version that met it. */
   version: string;
 }
+
+/** How a run ended; "running" while it goes, or when the background page closed before it could say. */
+export type RunOutcome = 'running' | 'completed' | 'paused' | 'stopped' | 'failed' | 'not-started' | 'stopped unexpectedly';
+
+/** One library read's or analysis's numbers, saved while it runs and when it ends. */
+export interface RunEntry {
+  id?: number;
+  type: 'run';
+  /** The same run's summary is saved over again: its job and when this run of it began. */
+  runKey: string;
+  version: string;
+  startedAtMs: number;
+  /** When it was last saved. */
+  atMs: number;
+  outcome: RunOutcome;
+  stats: RunStats;
+}
+
+type Entry = ProblemEntry | RunEntry;
+const isRun = (e: Entry): e is RunEntry => e.type === 'run';
 
 export interface ProblemSink {
   add(entry: ProblemEntry): Promise<void>;
@@ -67,25 +93,48 @@ export class IndexedDbProblemLog implements ProblemSink {
 
   /** Saves [entry], and drops what is too old or beyond the newest [MAX_PROBLEMS]. */
   async add(entry: ProblemEntry): Promise<void> {
+    await this.write(entry.atMs, (entries) => entries.add({ ...entry, type: 'problem' }));
+  }
+
+  /** Saves [run]'s summary, over the one saved before for the same run; drops what is too old or beyond the newest [MAX_RUNS]. */
+  async saveRun(run: RunEntry): Promise<void> {
+    await this.write(run.atMs, async (entries) => {
+      const before = (await request(entries.getAll() as IDBRequest<Entry[]>)).find((e) => isRun(e) && e.runKey === run.runKey);
+      entries.put(before ? { ...run, id: before.id } : run);
+    });
+  }
+
+  /** One change in one transaction, then the trimming: per kind, the newest kept, none older than 30 days. */
+  private async write(nowMs: number, change: (entries: IDBObjectStore) => unknown): Promise<void> {
     const db = await this.database();
     const tx = db.transaction(STORES.problems, 'readwrite');
-    const problems = tx.objectStore(STORES.problems);
-    problems.add(entry);
-    const all = await request(problems.getAll() as IDBRequest<ProblemEntry[]>);
-    const newestFirst = all.sort((a, b) => b.id! - a.id!);
-    newestFirst.forEach((p, i) => {
-      if (i >= MAX_PROBLEMS || p.atMs < entry.atMs - PROBLEM_MAX_AGE_MS) problems.delete(p.id!);
+    const entries = tx.objectStore(STORES.problems);
+    await change(entries);
+    const all = await request(entries.getAll() as IDBRequest<Entry[]>);
+    const trim = (kept: Entry[], max: number) => kept.sort((a, b) => b.id! - a.id!).forEach((e, i) => {
+      if (i >= max || e.atMs < nowMs - PROBLEM_MAX_AGE_MS) entries.delete(e.id!);
     });
+    trim(all.filter((e) => !isRun(e)), MAX_PROBLEMS);
+    trim(all.filter(isRun), MAX_RUNS);
     await committed(tx);
     this.changes ??= new BroadcastChannel(CHANGES_CHANNEL);
     this.changes.postMessage({ kind: 'problems-changed' });
   }
 
-  /** What is kept, newest first, without what has grown too old by [nowMs]. */
-  async recent(nowMs: number): Promise<ProblemEntry[]> {
+  private async all(nowMs: number): Promise<Entry[]> {
     const db = await this.database();
-    const all = await request(db.transaction(STORES.problems, 'readonly').objectStore(STORES.problems).getAll() as IDBRequest<ProblemEntry[]>);
-    return all.filter((p) => p.atMs >= nowMs - PROBLEM_MAX_AGE_MS).sort((a, b) => b.id! - a.id!);
+    const all = await request(db.transaction(STORES.problems, 'readonly').objectStore(STORES.problems).getAll() as IDBRequest<Entry[]>);
+    return all.filter((e) => e.atMs >= nowMs - PROBLEM_MAX_AGE_MS).sort((a, b) => b.id! - a.id!);
+  }
+
+  /** The problems kept, newest first, without what has grown too old by [nowMs]. */
+  async recent(nowMs: number): Promise<ProblemEntry[]> {
+    return (await this.all(nowMs)).filter((e): e is ProblemEntry => !isRun(e));
+  }
+
+  /** The run summaries kept, the latest-started first. */
+  async recentRuns(nowMs: number): Promise<RunEntry[]> {
+    return (await this.all(nowMs)).filter(isRun).sort((a, b) => b.startedAtMs - a.startedAtMs);
   }
 }
 

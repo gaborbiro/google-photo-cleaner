@@ -11,6 +11,7 @@ import type { RgbaImage } from '../../src/app/ai/quality';
 import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
 import { SourceError } from '../../src/app/scan/source';
 import { INCOMPATIBLE_TEXT, PREVIEWS_STOPPED_TEXT } from '../../src/app/shared/googleProblems';
+import { AnalysisStats } from '../../src/app/shared/runStats';
 import { fakeItem, FakePhotos, scan } from './fakes';
 
 /** A fake model: each photo's fingerprint points in its own direction; every call takes [msPerPhoto]. */
@@ -48,7 +49,7 @@ async function analyse(
   env: Awaited<ReturnType<typeof setup>>,
   embedder: Embedder,
   clock: { now: number },
-  opts: { shouldStop?: () => Promise<boolean>; waiting?: string | null; account?: string; decode?: typeof decode; newPhotosThisJob?: number | null } = {},
+  opts: { shouldStop?: () => Promise<boolean>; waiting?: string | null; account?: string; decode?: typeof decode; newPhotosThisJob?: number | null; stats?: AnalysisStats } = {},
 ) {
   const progress: AnalysisProgress[] = [];
   const outcome = await runAnalysis({
@@ -65,6 +66,7 @@ async function analyse(
     onProgress: async (p) => void progress.push(p),
     prefetch: 2,
     newPhotosThisJob: opts.newPhotosThisJob,
+    stats: opts.stats,
   });
   return { outcome, progress };
 }
@@ -329,5 +331,28 @@ describe('AI analysis', () => {
     const clock = { now: 0 };
     const { progress } = await analyse(env, new FakeEmbedder(clock, 100), clock, { waiting: 'Going gently while you use the computer.' });
     expect(progress.some((p) => p.waiting === 'Going gently while you use the computer.')).toBe(true);
+  });
+});
+
+describe("the analysis run's numbers (for Copy diagnostics)", () => {
+  it('counts the photos it did and where their time went; a run with nothing new says so', async () => {
+    const env = await setup(Array.from({ length: 40 }, (_, i) => fakeItem(i)));
+    env.source.unavailablePreviews.add(39);
+    const clock = { now: 1_000 };
+    const first = new AnalysisStats();
+    await analyse(env, new FakeEmbedder(clock, 100), clock, { stats: first });
+    const s = first.stats;
+    expect(s).toMatchObject({ stage: 'analysis', photos: 40, previewsFailed: 1, detail: expect.any(Number), measuredPhotosPerSecond: expect.any(Number) });
+    // What the speed check kept counts as analysed before; the rest was done here, at 100 ms of AI each.
+    expect(s.alreadyAnalysed + s.photosDone + s.previewsFailed).toBe(40);
+    expect(s.photosDone).toBeGreaterThan(0);
+    expect(s.aiMs).toBe(s.photosDone * 100);
+    expect(s.speedCheckMs).toBeGreaterThan(0);
+
+    env.source.unavailablePreviews.clear();
+    await analyse(env, new FakeEmbedder(clock, 100), clock); // the photo that failed
+    const nothingNew = new AnalysisStats();
+    await analyse(env, new FakeEmbedder(clock, 100), clock, { stats: nothingNew });
+    expect(nothingNew.stats).toMatchObject({ photos: 40, alreadyAnalysed: 40, photosDone: 0, previewsFailed: 0, modelMs: 0 });
   });
 });

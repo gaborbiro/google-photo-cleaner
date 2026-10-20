@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CATEGORIES, categoryList, categorySamples, countCategories, countLine, countSections, descriptionNorms, descriptionScores, kindTotals, matchPhoto, photoBreakdown, photoCaption, scoreSpread, STARTING_SETTINGS, type Breakdown, type LeadOver, type CategoryCount, type CategoryPhoto, type ClutterSettings, type DescriptionNorms, type ScoredCategory, type Scoring } from '../search/clutter';
+import { CATEGORIES, categoryList, categorySamples, countCategories, countLine, countSections, descriptionNorms, descriptionScores, evenSample, kindTotals, matchCaption, matchPhoto, moveCaption, movesLine, photoBreakdown, photoCaption, scoreSpread, scoringMoves, STARTING_SETTINGS, weakestMatches, type Breakdown, type CaptionPart, type LeadOver, type CategoryCount, type CategoryPhoto, type ClutterSettings, type DescriptionNorms, type ScoredCategory, type Scoring } from '../search/clutter';
 import type { LibraryPhoto } from '../search/searchModel';
 import { searchDeps } from '../search/session';
 import { accountLabel } from '../shared/jobView';
@@ -24,6 +24,12 @@ const ANSWER = 'clutter-all-answer';
 const BREAKDOWN_ROWS = 6;
 /** The hover card's width (as in app.css), to open it on the side where it fits. */
 const CARD_WIDTH = 380;
+/** Photos in the sample of what evening out moves, and in the photos nothing matches well. */
+const MOVED_SAMPLE = 60;
+const WEAKEST_SAMPLE = 60;
+/** Preview sizes: a tile, and a photo opened large (as the review tab's viewer). */
+const THUMB_PX = 160;
+const ZOOM_PX = 1024;
 
 const LIST = categoryList(CATEGORIES);
 
@@ -35,40 +41,137 @@ interface Worked {
   norms: DescriptionNorms;
 }
 
-/** Everything a tab showing all of one category's finds needs, handed over by the page that opened it. */
+/** One scoring a photo's hover card shows: raw or evened out ([norms]), named when there is more than one. */
+interface HoverScoring {
+  title: string | null;
+  norms: DescriptionNorms | null;
+}
+
+/** Everything a tab showing a list of photos needs, handed over by the clutter page that opened it. */
 interface AllFinds {
   account: string;
-  /** The category's count line, as on the page that opened it. */
+  /** What the photos are, e.g. the category's count line. */
   title: string;
-  /** The scoring and settings the finds were counted with. */
+  /** The scoring and settings they were counted with. */
   settings: string;
-  /** Best score first, each with its score for every description. */
-  photos: (CategoryPhoto & { thumbUrl: string | null; row: Float32Array })[];
+  /** In the order shown, each with its caption and its score for every description. */
+  photos: { mediaKey: string; thumbUrl: string | null; caption: CaptionPart[]; row: Float32Array }[];
   scored: ScoredCategory[];
-  norms: DescriptionNorms | null;
+  scorings: HoverScoring[];
   over: LeadOver;
 }
 
-function BreakdownCard({ breakdown, side }: { breakdown: Breakdown; side: 'right' | 'left' }) {
+interface TitledBreakdown {
+  title: string | null;
+  breakdown: Breakdown;
+}
+
+function BreakdownCard({ breakdowns, side }: { breakdowns: TitledBreakdown[]; side: 'right' | 'left' }) {
   return (
     <div className={`clutter-card ${side}`} role="tooltip">
-      <p className="clutter-card-heading">{breakdown.heading}</p>
-      <table>
-        <tbody>
-          {breakdown.rows.map((r) => (
-            <tr key={r.label} className={r.kind}>
-              <td className="mono">{r.score}</td>
-              <td>{r.label}<span className="muted"> · {r.description}</span></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="muted">{breakdown.more ? `${breakdown.more}. ` : ''}Green: counterweights.</p>
+      {breakdowns.map(({ title, breakdown }) => (
+        <div key={title ?? ''} className="clutter-card-scoring">
+          {title && <p className="muted">{title}</p>}
+          <p className="clutter-card-heading">{breakdown.heading}</p>
+          <table>
+            <tbody>
+              {breakdown.rows.map((r) => (
+                <tr key={r.label} className={r.kind}>
+                  <td className="mono">{r.score}</td>
+                  <td>{r.label}<span className="muted"> · {r.description}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {breakdown.more && <p className="muted">{breakdown.more}.</p>}
+        </div>
+      ))}
+      <p className="muted">Green: counterweights.</p>
     </div>
   );
 }
 
-function Thumb({ photo, preview, breakdown }: { photo: CategoryPhoto & { thumbUrl: string | null }; preview: (thumbUrl: string) => Promise<string>; breakdown: () => Breakdown }) {
+/** A preview of [thumbUrl] at [sizePx], through the Google Photos tab. */
+type Preview = (thumbUrl: string, sizePx: number) => Promise<string>;
+
+/** One photo in a grid: what it shows under it, and how it scored for the hover card. */
+interface Tile {
+  mediaKey: string;
+  thumbUrl: string | null;
+  caption: CaptionPart[];
+  breakdowns: () => TitledBreakdown[];
+}
+
+/** Photos numbered from 1, so they can be referred to; clicking one opens it large and uncropped. */
+function PhotoGrid({ tiles, preview }: { tiles: Tile[]; preview: Preview }) {
+  const [zoomed, setZoomed] = useState<number | null>(null);
+  return (
+    <>
+      <div className="search-grid">
+        {tiles.map((tile, i) => <Thumb key={tile.mediaKey} number={i + 1} photo={tile} preview={preview} breakdowns={tile.breakdowns} onZoom={() => setZoomed(i)} />)}
+      </div>
+      {zoomed !== null && <Zoom tiles={tiles} index={zoomed} preview={preview} onMove={setZoomed} onClose={() => setZoomed(null)} />}
+    </>
+  );
+}
+
+/** One photo large and uncropped, as Google Photos gives it; ← and → move through the grid, Esc closes. */
+function Zoom({ tiles, index, preview, onMove, onClose }: { tiles: Tile[]; index: number; preview: Preview; onMove: (index: number) => void; onClose: () => void }) {
+  const tile = tiles[index]!;
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setUrl(null);
+    setFailed(false);
+    if (!tile.thumbUrl) {
+      setFailed(true);
+      return;
+    }
+    let alive = true;
+    preview(tile.thumbUrl, ZOOM_PX).then((u) => alive && setUrl(u), () => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [tile, preview]);
+  const previous = () => onMove(Math.max(0, index - 1));
+  const next = () => onMove(Math.min(tiles.length - 1, index + 1));
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') previous();
+      else if (e.key === 'ArrowRight') next();
+    };
+    window.addEventListener('keydown', key);
+    return () => {
+      window.removeEventListener('keydown', key);
+    };
+  });
+  return (
+    <div className="viewer" role="dialog" aria-modal="true" aria-label="Photo">
+      <div className="viewer-photo">{url ? <img src={url} alt="" /> : <span className="muted">{failed ? 'No preview' : 'Loading…'}</span>}</div>
+      <div className="viewer-info">
+        <span className="mono">#{index + 1} of {tiles.length}</span>
+        <strong><Caption parts={tile.caption} /></strong>
+      </div>
+      <div className="viewer-buttons">
+        <button disabled={index === 0} onClick={previous}>← Previous</button>
+        <button disabled={index === tiles.length - 1} onClick={next}>Next →</button>
+        <a href={`https://photos.google.com/photo/${tile.mediaKey}`} target="_blank" rel="noreferrer"><button tabIndex={-1}>Open in Google Photos <span aria-hidden="true">↗</span></button></a>
+        <button onClick={onClose}><kbd>Esc</kbd> · Close</button>
+      </div>
+    </div>
+  );
+}
+
+/** A caption that names no category. */
+const plain = (text: string): CaptionPart[] => [{ text, kind: null }];
+
+/** A caption with the categories it names coloured by kind, counterweights green as in the hover card. */
+function Caption({ parts }: { parts: CaptionPart[] }) {
+  return <>{parts.map((p, i) => (p.kind ? <span key={i} className={`clutter-kind-${p.kind}`}>{p.text}</span> : p.text))}</>;
+}
+
+function Thumb({ number, photo, preview, breakdowns, onZoom }: { number: number; photo: { mediaKey: string; thumbUrl: string | null; caption: CaptionPart[] }; preview: Preview; breakdowns: () => TitledBreakdown[]; onZoom: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [card, setCard] = useState<'right' | 'left' | null>(null);
@@ -96,7 +199,7 @@ function Thumb({ photo, preview, breakdown }: { photo: CategoryPhoto & { thumbUr
       return;
     }
     let alive = true;
-    preview(photo.thumbUrl).then((u) => alive && setUrl(u), () => alive && setFailed(true));
+    preview(photo.thumbUrl, THUMB_PX).then((u) => alive && setUrl(u), () => alive && setFailed(true));
     return () => {
       alive = false;
     };
@@ -104,27 +207,28 @@ function Thumb({ photo, preview, breakdown }: { photo: CategoryPhoto & { thumbUr
   const open = (e: { currentTarget: HTMLElement }) => setCard(e.currentTarget.getBoundingClientRect().right + CARD_WIDTH + 16 > window.innerWidth ? 'left' : 'right');
   return (
     <figure ref={figure} className="search-tile clutter-tile" onMouseEnter={open} onMouseLeave={() => setCard(null)} onFocus={open} onBlur={() => setCard(null)}>
-      <div className="search-tile-image">{url ? <img src={url} alt="" draggable={false} /> : <span className="muted small">{failed ? 'No preview' : '…'}</span>}</div>
-      <figcaption className="small"><a href={`https://photos.google.com/photo/${photo.mediaKey}`} target="_blank" rel="noreferrer">{photoCaption(photo)}</a></figcaption>
-      {card && <BreakdownCard breakdown={breakdown()} side={card} />}
+      <div className="search-tile-image" title="View large" onClick={onZoom}>
+        {url ? <img src={url} alt="" draggable={false} /> : <span className="muted small">{failed ? 'No preview' : '…'}</span>}
+        <button className="expand" title="View large" aria-label="View large" onClick={(e) => { e.stopPropagation(); onZoom(); }}>⤢</button>
+      </div>
+      <figcaption className="small"><span className="clutter-number">#{number}</span> <a href={`https://photos.google.com/photo/${photo.mediaKey}`} target="_blank" rel="noreferrer"><Caption parts={photo.caption} /></a></figcaption>
+      {card && <BreakdownCard breakdowns={breakdowns()} side={card} />}
     </figure>
   );
 }
 
-function CategoryCard({ count, worked, norms, over, preview, openAll }: { count: CategoryCount; worked: Worked; norms: DescriptionNorms | null; over: LeadOver; preview: (thumbUrl: string) => Promise<string>; openAll: () => void }) {
+function CategoryCard({ count, worked, norms, over, preview, openAll }: { count: CategoryCount; worked: Worked; norms: DescriptionNorms | null; over: LeadOver; preview: Preview; openAll: () => void }) {
   const [open, setOpen] = useState(false);
   const samples = useMemo(() => (open ? categorySamples(count, SAMPLE) : null), [open, count]);
-  const thumb = (p: CategoryPhoto) => {
-    const photo = worked.photos.get(p.mediaKey);
-    const row = worked.rows.get(p.mediaKey);
-    if (!photo || !row) throw new Error('A counted photo is missing from the library it was counted in');
-    return <Thumb key={p.mediaKey} photo={{ ...p, thumbUrl: photo.thumbUrl }} preview={preview} breakdown={() => photoBreakdown(row, worked.scored, norms, over, BREAKDOWN_ROWS)} />;
+  const tile = (p: CategoryPhoto): Tile => {
+    const { thumbUrl, row } = shown(worked, p.mediaKey);
+    return { mediaKey: p.mediaKey, thumbUrl, caption: plain(photoCaption(p)), breakdowns: () => [{ title: null, breakdown: photoBreakdown(row, worked.scored, norms, over, BREAKDOWN_ROWS) }] };
   };
   const grid = (title: string, photos: CategoryPhoto[]) =>
     photos.length > 0 && (
       <>
         <p className="clutter-sample-title">{title}</p>
-        <div className="search-grid">{photos.map(thumb)}</div>
+        <PhotoGrid tiles={photos.map(tile)} preview={preview} />
       </>
     );
   return (
@@ -214,11 +318,18 @@ function Clutter() {
   };
 
   const norms = worked && scoring === 'evened' ? worked.norms : null;
-  const matches = useMemo(() => (worked ? [...worked.rows].map(([key, row]) => matchPhoto(key, row, worked.scored, norms)) : null), [worked, norms]);
+  // Both scorings are matched, so what evening out moves can be compared; the page shows the chosen one.
+  const rawMatches = useMemo(() => (worked ? [...worked.rows].map(([key, row]) => matchPhoto(key, row, worked.scored, null)) : null), [worked]);
+  const evenedMatches = useMemo(() => (worked ? [...worked.rows].map(([key, row]) => matchPhoto(key, row, worked.scored, worked.norms)) : null), [worked]);
+  const matches = scoring === 'raw' ? rawMatches : evenedMatches;
+  const moves = useMemo(
+    () => (worked && rawMatches && evenedMatches ? scoringMoves(rawMatches, evenedMatches, [...CATEGORIES], worked.photos, settings, over) : null),
+    [worked, rawMatches, evenedMatches, settings, over],
+  );
   const counts = useMemo(() => (worked && matches ? countCategories(matches, [...CATEGORIES], worked.photos, settings[scoring], over) : null), [worked, matches, settings, scoring, over]);
   const spread = useMemo(() => (matches ? scoreSpread(matches, over) : []), [matches, over]);
   const sections = counts ? countSections(counts, minPhotos) : null;
-  const preview = useCallback((thumbUrl: string) => deps!.preview(thumbUrl, 160), [deps]);
+  const preview: Preview = useCallback((thumbUrl: string, sizePx: number) => deps!.preview(thumbUrl, sizePx), [deps]);
 
   // Tabs opened to show all of a category's finds ask this page for them, by the id in their address.
   const handovers = useRef(new Map<string, AllFinds>());
@@ -235,23 +346,44 @@ function Clutter() {
   }, []);
   const openAll = (count: CategoryCount) => {
     if (!worked || account === null) throw new Error('Finds can only be opened once they are worked out for an account');
-    const photos = count.trashable.map((p) => {
-      const photo = worked.photos.get(p.mediaKey);
-      const row = worked.rows.get(p.mediaKey);
-      if (!photo || !row) throw new Error('A counted photo is missing from the library it was counted in');
-      return { ...p, thumbUrl: photo.thumbUrl, row };
-    });
-    const { minScore, margin } = settings[scoring];
-    const id = crypto.randomUUID();
-    handovers.current.set(id, {
-      account,
+    const photos = count.trashable.map((p) => ({ ...shown(worked, p.mediaKey), caption: plain(photoCaption(p)) }));
+    hand(account, {
       title: countLine(count),
-      settings: `${scoring === 'raw' ? 'Raw scores' : 'Evened out'}, minimum score ${minScore}, minimum lead ${margin} over ${over === 'next' ? 'the next category' : 'the other kind'}`,
+      settings: `${settingsText(scoring)}, lead over ${over === 'next' ? 'the next category' : 'the other kind'}`,
       photos,
       scored: worked.scored,
-      norms,
+      scorings: [{ title: null, norms }],
       over,
     });
+  };
+  const openMoved = () => {
+    if (!worked || !moves || account === null) throw new Error('Moves can only be opened once suggestions are worked out for an account');
+    const sample = evenSample(moves.toClutter, MOVED_SAMPLE);
+    hand(account, {
+      title: `Moved by evening out: ${sample.length} of the ${moves.toClutter.length.toLocaleString()} photos counted as counterweights with raw scores and as clutter evened out`,
+      settings: `Raw: ${settingsText('raw')}. Evened out: ${settingsText('evened')}. Lead over ${over === 'next' ? 'the next category' : 'the other kind'}. Spread evenly from the highest evened-out score to the lowest; each caption says where the photo went, raw → evened out, counterweights in green`,
+      photos: sample.map((m) => ({ ...shown(worked, m.mediaKey), caption: moveCaption(m, [...CATEGORIES]) })),
+      scored: worked.scored,
+      scorings: [{ title: 'Raw scores', norms: null }, { title: 'Evened out', norms: worked.norms }],
+      over,
+    });
+  };
+  const openWeakest = () => {
+    if (!worked || !rawMatches || account === null) throw new Error('The weakest matches can only be opened once suggestions are worked out for an account');
+    const weakest = weakestMatches(rawMatches, WEAKEST_SAMPLE);
+    hand(account, {
+      title: `Nothing matches well: the ${weakest.length} photos whose best category scores lowest, with raw scores`,
+      settings: 'Raw scores, every analysed photo, protected ones too. Lowest best score first; each caption gives that score and the category and description it came from, counterweights in green. What these photos show is what the list of descriptions may be missing',
+      photos: weakest.map((m) => ({ ...shown(worked, m.mediaKey), caption: matchCaption(m, [...CATEGORIES]) })),
+      scored: worked.scored,
+      scorings: [{ title: null, norms: null }],
+      over,
+    });
+  };
+  const settingsText = (s: Scoring) => `${s === 'raw' ? 'raw scores' : 'evened out'}, minimum score ${settings[s].minScore}, minimum lead ${settings[s].margin}`;
+  const hand = (forAccount: string, finds: Omit<AllFinds, 'account'>) => {
+    const id = crypto.randomUUID();
+    handovers.current.set(id, { account: forAccount, ...finds });
     window.open(`dev-clutter.html?all=${id}`, '_blank');
   };
 
@@ -300,6 +432,16 @@ function Clutter() {
           </p>
           <p className="mono">{counts.photos.toLocaleString()} photos matched</p>
           <p className="mono">{kindTotals(counts)}</p>
+          {moves && (
+            <div className="row">
+              <p className="small">{movesLine(moves)}</p>
+              <button disabled={moves.toClutter.length === 0} onClick={openMoved}>Open a sample of what evening out moves</button>
+            </div>
+          )}
+          <div className="row">
+            <p className="small">The photos no description fits well show what the list is missing.</p>
+            <button onClick={openWeakest}>Open the {WEAKEST_SAMPLE} photos nothing matches well</button>
+          </div>
           {spread.map((s) => (
             <p key={s.fraction} className="mono small">{Math.round(s.fraction * 100)}% of photos: best score up to {s.bestScore.toFixed(3)}, lead over {over === 'next' ? 'the next category' : 'the other kind'} up to {s.lead.toFixed(3)}</p>
           ))}
@@ -329,7 +471,15 @@ function Clutter() {
   );
 }
 
-/** A tab with every photo counted for one category, handed over by the clutter page that opened it. */
+/** A photo as a tab of photos shows it: its preview address and its scores, which must be in the library worked out. */
+function shown(worked: Worked, mediaKey: string): { mediaKey: string; thumbUrl: string | null; row: Float32Array } {
+  const photo = worked.photos.get(mediaKey);
+  const row = worked.rows.get(mediaKey);
+  if (!photo || !row) throw new Error('A counted photo is missing from the library it was counted in');
+  return { mediaKey, thumbUrl: photo.thumbUrl, row };
+}
+
+/** A tab with a list of photos (a category's finds, or what evening out moves), handed over by the clutter page that opened it. */
 function AllFindsPage({ id }: { id: string }) {
   const [finds, setFinds] = useState<AllFinds | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -360,7 +510,17 @@ function AllFindsPage({ id }: { id: string }) {
     if (finds) document.title = `${finds.title} · Photo Cleaner`;
   }, [finds]);
   const deps = useMemo(() => (finds ? searchDeps(finds.account) : null), [finds]);
-  const preview = useCallback((thumbUrl: string) => deps!.preview(thumbUrl, 160), [deps]);
+  const tiles = useMemo(
+    () =>
+      finds
+        ? finds.photos.map((p): Tile => ({
+            ...p,
+            breakdowns: () => finds.scorings.map((s) => ({ title: s.title, breakdown: photoBreakdown(p.row, finds.scored, s.norms, finds.over, BREAKDOWN_ROWS) })),
+          }))
+        : [],
+    [finds],
+  );
+  const preview: Preview = useCallback((thumbUrl: string, sizePx: number) => deps!.preview(thumbUrl, sizePx), [deps]);
   return (
     <main className="review calibration">
       <header>
@@ -372,11 +532,7 @@ function AllFindsPage({ id }: { id: string }) {
       {!finds && !problem && <section className="card"><p className="working" role="status"><span className="spinner-inline" />Getting the finds from the clutter page…</p></section>}
       {finds && (
         <section className="card">
-          <div className="search-grid">
-            {finds.photos.map((p) => (
-              <Thumb key={p.mediaKey} photo={p} preview={preview} breakdown={() => photoBreakdown(p.row, finds.scored, finds.norms, finds.over, BREAKDOWN_ROWS)} />
-            ))}
-          </div>
+          <PhotoGrid tiles={tiles} preview={preview} />
         </section>
       )}
     </main>

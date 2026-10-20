@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORIES, categoryList, categorySamples, countCategories, countLine, countSections, descriptionNorms, descriptionScores, kindTotals, leadOf, matchPhoto, photoBreakdown, photoCaption, scoreSpread, suggestions, type Category, type ClutterPhoto, type ScoredCategory } from '../../src/app/search/clutter';
+import { CATEGORIES, categoryList, categorySamples, countCategories, countLine, countSections, descriptionNorms, descriptionScores, evenSample, isCounted, kindTotals, leadOf, matchCaption, matchPhoto, moveCaption, movesLine, photoBreakdown, photoCaption, scoreSpread, scoringMoves, suggestions, weakestMatches, type Category, type ClutterPhoto, type ScoredCategory } from '../../src/app/search/clutter';
 
 const v = (...xs: number[]) => Float32Array.from(xs);
 const parking: Category = { id: 'parking', label: 'Parking spots', kind: 'clutter', descriptions: ['a car park', 'a parking space number'] };
@@ -18,7 +18,7 @@ const match = (mediaKey: string, vector: Float32Array) => matchPhoto(mediaKey, d
 
 describe('clutter suggestions', () => {
   it('scores a category as its best description, and keeps the runner-up category', () => {
-    expect(match('p', v(0.5, 0.5, 0))).toEqual({ mediaKey: 'p', best: 0, bestScore: expect.closeTo(0.6, 5), secondScore: expect.closeTo(0.5, 5), otherKindScore: expect.closeTo(0, 5) });
+    expect(match('p', v(0.5, 0.5, 0))).toEqual({ mediaKey: 'p', best: 0, description: 1, bestScore: expect.closeTo(0.6, 5), secondScore: expect.closeTo(0.5, 5), otherKindScore: expect.closeTo(0, 5) });
     expect(match('q', v(0.1, 0.2, 0.9))).toMatchObject({ best: 2, bestScore: expect.closeTo(0.9, 5), secondScore: expect.closeTo(0.2, 5) });
   });
 
@@ -41,7 +41,7 @@ describe('clutter suggestions', () => {
     expect(byId.get('people')!.closeCalls).toBe(1);
     expect(byId.get('people')!.trashable).toEqual([]);
     // Only close calls that cleared the minimum score are just missed; 'faint' missed the score.
-    expect(byId.get('parking')!.justMissed).toEqual([{ mediaKey: 'kerb', score: expect.closeTo(0.468, 5), lead: expect.closeTo(0.088, 5) }]);
+    expect(byId.get('parking')!.justMissed).toEqual([{ mediaKey: 'kerb', description: 'a parking space number', score: expect.closeTo(0.468, 5), lead: expect.closeTo(0.088, 5) }]);
     expect(byId.get('people')!.justMissed.map((p) => p.mediaKey)).toEqual(['family at the car']);
     expect(byId.get('receipts')!.trashable.map((p) => p.mediaKey)).toEqual(['receipt']);
     expect(counts.photos).toBe(5);
@@ -76,7 +76,7 @@ describe('clutter suggestions', () => {
       // People, measured against the best clutter.
       match('party', v(0.2, 0.1, 0.9)),
     ];
-    expect(matches[0]).toMatchObject({ best: 0, bestScore: expect.closeTo(0.63, 5), secondScore: expect.closeTo(0.55, 5), otherKindScore: expect.closeTo(0.1, 5) });
+    expect(matches[0]).toMatchObject({ best: 0, description: 1, bestScore: expect.closeTo(0.63, 5), secondScore: expect.closeTo(0.55, 5), otherKindScore: expect.closeTo(0.1, 5) });
     expect(leadOf(matches[0]!, 'next')).toBeCloseTo(0.08, 5);
     expect(leadOf(matches[0]!, 'otherKind')).toBeCloseTo(0.53, 5);
     expect(leadOf(matches[2]!, 'otherKind')).toBeCloseTo(0.7, 5);
@@ -84,7 +84,7 @@ describe('clutter suggestions', () => {
     const byId = (over: 'next' | 'otherKind') => new Map(countCategories(matches, categories, photos, { minScore: 0, margin: 0.1 }, over).categories.map((c) => [c.category.id, c]));
     expect(byId('next').get('parking')!.trashable).toEqual([]);
     expect(byId('next').get('parking')!.closeCalls).toBe(2);
-    expect(byId('otherKind').get('parking')!.trashable).toEqual([{ mediaKey: 'ticket', score: expect.closeTo(0.63, 5), lead: expect.closeTo(0.53, 5) }]);
+    expect(byId('otherKind').get('parking')!.trashable).toEqual([{ mediaKey: 'ticket', description: 'a parking space number', score: expect.closeTo(0.63, 5), lead: expect.closeTo(0.53, 5) }]);
     expect(byId('otherKind').get('parking')!.justMissed.map((p) => p.mediaKey)).toEqual(['selfie']);
     expect(byId('otherKind').get('people')!.trashable.map((p) => p.mediaKey)).toEqual(['party']);
     expect(scoreSpread(matches, 'otherKind').map((s) => s.lead)).toEqual([0.02, 0.53, 0.7].map((x) => expect.closeTo(x, 5)));
@@ -104,10 +104,71 @@ describe('clutter suggestions', () => {
     expect(() => matchPhoto('p', descriptionScores(v(1, 0, 0), clutterOnly), clutterOnly, null)).toThrow('both clutter categories and counterweights');
   });
 
+  describe('what evening out moves', () => {
+    /** A match whose lead over the next category and over the other kind is [lead]. */
+    const m = (mediaKey: string, best: number, score: number, lead: number) => ({ mediaKey, best, description: 0, bestScore: score, secondScore: score - lead, otherKindScore: score - lead });
+    const settings = { raw: { minScore: 0, margin: 0.02 }, evened: { minScore: 0, margin: 0.2 } };
+    const raw = [m('a', 2, 0.7, 0.1), m('b', 2, 0.7, 0.1), m('c', 0, 0.7, 0.1), m('d', 2, 0.7, 0.1), m('e', 2, 0.7, 0.1), m('f', 0, 0.7, 0.1)];
+    const evened = [
+      m('a', 0, 3, 1), // people → parking
+      m('b', 0, 3, 0.05), // people → parking, but a close call evened out: not counted, so not moved
+      m('c', 2, 2, 1), // parking → people
+      m('d', 1, 4, 1), // people → receipts
+      m('e', 0, 3, 1), // people → parking, but protected
+      m('f', 1, 3, 1), // parking → receipts: clutter either way
+    ];
+    const photos = new Map<string, ClutterPhoto>(raw.map((r) => [r.mediaKey, r.mediaKey === 'e' ? { eligible: false, approved: false } : trashable]));
+
+    it('lists photos counted as one kind with raw scores and the other evened out, each with its own settings', () => {
+      const moves = scoringMoves(raw, evened, categories, photos, settings, 'next');
+      expect(moves.toClutter.map((p) => p.mediaKey)).toEqual(['d', 'a']);
+      expect(moves.toCounterweights.map((p) => p.mediaKey)).toEqual(['c']);
+      expect(moveCaption(moves.toClutter[0]!, categories)).toEqual([
+        { text: 'People', kind: 'counterweight' },
+        { text: ' “a group of people” → ', kind: null },
+        { text: 'Receipts', kind: 'clutter' },
+        { text: ' “a receipt”', kind: null },
+      ]);
+      expect(movesLine(moves)).toBe('Evening out moves 2 photos from counterweights to clutter, and 1 the other way (only photos that may be trashed).');
+    });
+
+    it('refuses scorings that matched different photos', () => {
+      expect(() => scoringMoves(raw, evened.slice(1), categories, photos, settings, 'next')).toThrow('same photos');
+      expect(() => scoringMoves(raw, [...evened].reverse(), categories, photos, settings, 'next')).toThrow('same order');
+    });
+
+    it('counts a photo exactly as the counts do', () => {
+      expect(isCounted(m('p', 0, 0.7, 0.02), settings.raw, 'next')).toBe(true);
+      expect(isCounted(m('p', 0, 0.7, 0.019), settings.raw, 'next')).toBe(false);
+      expect(isCounted(m('p', 0, 0.7, 0.5), { minScore: 0.8, margin: 0 }, 'next')).toBe(false);
+      const counts = countCategories(raw, categories, photos, settings.raw, 'next');
+      const counted = counts.categories.reduce((sum, c) => sum + c.trashable.length + c.protectedOrUnknown + c.approved, 0);
+      expect(counted).toBe(raw.filter((r) => isCounted(r, settings.raw, 'next')).length);
+    });
+
+    it('samples evenly from first to last, the same each time', () => {
+      expect(evenSample([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 4)).toEqual([0, 2, 5, 7]);
+      expect(evenSample([1, 2], 5)).toEqual([1, 2]);
+    });
+  });
+
+  it('finds the photos nothing matches well: lowest best score first, captioned with where they went', () => {
+    const matches = [match('strong', v(1, 0, 0)), match('weak', v(0.2, 0.1, 0)), match('weakest', v(0, 0, 0.1)), match('middle', v(0.5, 0.5, 0))];
+    expect(weakestMatches(matches, 2).map((m) => m.mediaKey)).toEqual(['weakest', 'weak']);
+    expect(weakestMatches(matches, 10)).toHaveLength(4);
+    expect(matches.map((m) => m.mediaKey)).toEqual(['strong', 'weak', 'weakest', 'middle']);
+    expect(matchCaption(matches[2]!, categories)).toEqual([
+      { text: '0.100 · ', kind: null },
+      { text: 'People', kind: 'counterweight' },
+      { text: ' “a group of people”', kind: null },
+    ]);
+    expect(() => matchCaption({ ...matches[0]!, best: 9 }, categories)).toThrow("wasn't matched against");
+  });
+
   it('just missed: trashable close calls only, largest lead first', () => {
     // Parking leads receipts by 0.10, 0.05, 0.07, 0.02 and 0.01.
     const leads = [0.1, 0.05, 0.07, 0.02, 0.01];
-    const matches = leads.map((lead, i) => ({ mediaKey: `m${i}`, best: 0, bestScore: 0.7, secondScore: 0.7 - lead, otherKindScore: 0 }));
+    const matches = leads.map((lead, i) => ({ mediaKey: `m${i}`, best: 0, description: 0, bestScore: 0.7, secondScore: 0.7 - lead, otherKindScore: 0 }));
     const photos = new Map<string, ClutterPhoto>([
       ['m0', trashable],
       ['m1', trashable],
@@ -123,7 +184,7 @@ describe('clutter suggestions', () => {
   });
 
   it('samples a category from both ends of its scores and both sides of the minimum lead', () => {
-    const photo = (mediaKey: string, score: number, lead: number) => ({ mediaKey, score, lead });
+    const photo = (mediaKey: string, score: number, lead: number) => ({ mediaKey, description: 'a car park', score, lead });
     const count = {
       category: parking,
       // Best score first, as counted.
@@ -142,11 +203,11 @@ describe('clutter suggestions', () => {
     expect(count.trashable.map((p) => p.mediaKey)).toEqual(['a', 'b', 'c', 'd', 'e']);
     // Too few for both ends: the weakest don't repeat the strongest.
     expect(categorySamples(count, 3).weakest.map((p) => p.mediaKey)).toEqual(['d', 'e']);
-    expect(photoCaption(photo('a', 6.3491, 1.2))).toBe('6.349 · lead 1.2000');
+    expect(photoCaption(photo('a', 6.3491, 1.2))).toBe('6.349 · lead 1.2000 · “a car park”');
     // Just under a minimum lead of 0.02: shown as under it, never rounded up to it.
-    expect(photoCaption(photo('b', 0.663, 0.019996))).toBe('0.663 · lead 0.0199');
-    expect(photoCaption(photo('b', 0.663, 0.02))).toBe('0.663 · lead 0.0200');
-    expect(photoCaption(photo('b', 0.663, 0.0123))).toBe('0.663 · lead 0.0123');
+    expect(photoCaption(photo('b', 0.663, 0.019996))).toBe('0.663 · lead 0.0199 · “a car park”');
+    expect(photoCaption(photo('b', 0.663, 0.02))).toBe('0.663 · lead 0.0200 · “a car park”');
+    expect(photoCaption(photo('b', 0.663, 0.0123))).toBe('0.663 · lead 0.0123 · “a car park”');
   });
 
   it('suggests only clutter categories with enough photos, largest first', () => {
@@ -164,7 +225,7 @@ describe('clutter suggestions', () => {
   });
 
   it('reports the spread of scores and leads, to choose the settings', () => {
-    const matches = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map((s, i) => ({ mediaKey: `${i}`, best: 0, bestScore: s, secondScore: s / 2, otherKindScore: 0 }));
+    const matches = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map((s, i) => ({ mediaKey: `${i}`, best: 0, description: 0, bestScore: s, secondScore: s / 2, otherKindScore: 0 }));
     expect(scoreSpread(matches, 'next')).toEqual([
       { fraction: 0.1, bestScore: 0.2, lead: 0.1 },
       { fraction: 0.5, bestScore: 0.6, lead: 0.3 },

@@ -72,7 +72,7 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
 - 16 **clutter** categories (screenshots, photos of screens, receipts, documents, whiteboards, notes,
   parking, signs, menus, tickets, products, barcodes and QR codes, meter readings, things to fix or
   sell, memes, accidental shots), each described in several ways.
-- 7 **counterweights** (people, children, celebrations, pets, travel and nature, ordinary scenes,
+- 8 **counterweights** (people, children, celebrations, pets, nature, travel, ordinary scenes,
   old photos and keepsakes): never shown, they only compete, taking photos away from clutter.
 - Each photo goes to its **one best category** (a category scores as its best description) and counts
   only when that score is at least the **minimum score** and at least the **minimum lead** above the
@@ -86,6 +86,12 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
   the best clutter), so a photo close between two kinds of clutter (a receipt or a document?) still
   counts: it is clutter either way. The other kind never scores above the next category, so with the
   same minimum lead this only adds photos.
+- Totals per kind (clutter, counterweights, close calls) and **what evening out moves**: the photos
+  counted as counterweights with raw scores and as clutter evened out, each scoring with its own
+  settings, with a sample of 60 in a new tab captioned with both categories.
+- **The photos nothing matches well**: the 60 lowest best raw scores, in a new tab, to find what the
+  list of descriptions is missing. Photos in every grid are numbered and open large and uncropped;
+  captions name the description each photo scored as.
 - Developer page `dev-clutter.html` (`extension/src/app/dev/clutter.tsx`): counts per category with
   adjustable settings; per category, 12 photos each: strongest, weakest still counted, **just counted**
   (smallest leads that made it) and **just missed** (close calls with the largest leads), each captioned
@@ -102,6 +108,44 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
   "a selfie"). A photo's fingerprint is the whole picture, and shelves fill most of it. Descriptions of
   places (an aisle, a car park) pull in people photos taken there; descriptions of objects (a price tag,
   a receipt) are safer.
+- 2026-10-20, raw against evened-out scores, both with the lead over the next category and settings
+  leaving 12% close calls (raw minimum lead 0.0042, evened 0.117): raw counts 3,990 as clutter and
+  10,219 as counterweights; evened out 5,311 and 8,883. Evening out moves about 1,300 photos from
+  counterweights to clutter: it boosts rare, distinctive descriptions (price tags at 5–6 spreads) and
+  dilutes common ones (a selfie in a supermarket: Products 5.4 against People 1.7). Its top matches look
+  as good or better (Celebrations: 29 of the top 36 right, against 20 raw). Whether the moved photos are
+  clutter decides it: "Open a sample of what evening out moves" on the developer page shows 60 of them.
+- 2026-10-20, the first 16 of a sample of what evening out moves into clutter (minimum leads 0.02 raw,
+  0.2 evened out): 4 right (screenshots, memes), 10 wrong, 2 unclear. Most wrong ones were travel photos
+  (selfies on trains and planes, views from windows, a meal on a plane) going to Tickets and passes: Travel
+  and nature only described scenery, so "a boarding pass" and "a train ticket" were the nearest
+  descriptions to being on the move. Travel and nature got descriptions of trains, planes, airports and hotel
+  rooms; Tickets now describes the ticket itself. Evening out stays for now, to see whether what is usual
+  for a user can be of use; raw scores are the default. Raw scores miss memes and forwarded images that
+  evening out catches: their descriptions may need work.
+- Travel and nature split in two: Nature (scenery) and Travel (landmarks, trains, planes, airports, hotel
+  rooms). "A city view" moved to Ordinary scenes: a room with the city through its window went to
+  Travel and nature, raw, on "a city view" alone.
+- 2026-10-20, the whole sample of what evening out moves: most moved photos are ones to keep, and the new
+  category is often far off (a selfie to dashboard warning lights, a street to parking, a dining room to
+  things to sell). The exceptions are spot on: memes, forwarded images, screenshots, pictures not taken
+  by the user. Evening out answers "what is surprising about this photo, for this library", per
+  description, which is right for kinds of image unlike camera photos (memes, screenshots, maybe codes
+  and documents) and wrong for subjects (parking, products, furniture). Decided: raw scores; evening out
+  stays on the developer page as a measuring stick (the photos it moves into Memes are roughly the memes
+  raw scores miss).
+- Raw scores miss memes because a fingerprint is mostly what a picture shows (a meme of a couple goes to
+  People), so Memes got descriptions of what memes look like (a cartoon image with a caption, text
+  written over a picture...). An ice cream in hand matched nothing (best: "a city view", 0.651): Ordinary
+  scenes got food (an ice cream cone, a dessert, street food, a snack). Incidental words ("held in a
+  hand", "on a table") match every photo with a hand or a table, so they were taken out.
+- If evening out is ever tried for memes or screenshots, the cases where it would fail: memes are common
+  (heavy WhatsApp or Telegram users, older relatives receiving greeting images, teenagers), where it
+  stops helping; and kept pictures that are not camera photos (own drawings and digital art,
+  invitations, cards, collages, photos with stickers or text added, unusual photography), which it
+  would flag. Safeguards: it may only add photos to those categories when very sure, never decide;
+  switch it off when raw scores already find many memes; a minimum library size; counterweights for
+  personal pictures that are not camera photos; judge it on a library unlike mine.
 - Decided: no counterweights that mix people and places ("a selfie in a shop"); the list shouldn't try to
   cover every case. Later, the user protects what the suggestions get wrong with their own tool: e.g.
   search "selfies", put them in an album (protected), dissolve it later. Album edits are a new write,

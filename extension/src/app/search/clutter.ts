@@ -25,27 +25,41 @@ const counterweight = (id: string, label: string, descriptions: string[]): Categ
 export const CATEGORIES: readonly Category[] = [
   clutter('screenshots', 'Screenshots', ['a screenshot of a phone screen', 'a screenshot of a chat conversation', 'a screenshot of a web page', 'a screenshot of an app', 'a screenshot of a map']),
   clutter('screens', 'Photos of screens', ['a photo of a computer screen', 'a photo of a TV screen', 'a photo of a laptop showing an error message']),
-  clutter('receipts', 'Receipts and invoices', ['a receipt', 'a till receipt on a table', 'an invoice', 'a bill']),
+  // No incidental words ("on a table", "held in a hand"): they match every photo with a table or a hand in it.
+  clutter('receipts', 'Receipts and invoices', ['a receipt', 'a long till receipt', 'an invoice', 'a bill']),
   clutter('documents', 'Documents and forms', ['a photo of a document', 'a printed letter', 'a form', 'a contract', 'a page of printed text']),
   clutter('whiteboards', 'Whiteboards and slides', ['a whiteboard with writing', 'a presentation slide on a projector screen', 'a flip chart']),
   clutter('notes', 'Notes', ['handwritten notes', 'a sticky note', 'a to-do list']),
   clutter('parking', 'Parking spots', ['a parked car in a car park', 'a car park level sign', 'a parking space number', 'a parking ticket machine']),
   clutter('signs', 'Signs and timetables', ['an information sign', 'a bus timetable', 'opening hours on a door', 'a map on a board', 'a notice on a wall']),
   clutter('menus', 'Menus', ['a restaurant menu', 'a menu board in a cafe']),
-  clutter('tickets', 'Tickets and passes', ['a ticket', 'a boarding pass', 'a train ticket']),
+  // The ticket itself, not travelling: "a boarding pass" alone stood in for anything on a plane or train.
+  clutter('tickets', 'Tickets and passes', ['a paper ticket', 'a printed boarding pass', 'a boarding pass on a phone screen', 'a paper train ticket', 'an event ticket']),
   clutter('products', 'Products and shopping', ['a product on a shop shelf', 'a price tag', 'a product label', 'product packaging', 'a supermarket aisle']),
   clutter('codes', 'Labels, barcodes and QR codes', ['a barcode', 'a QR code', 'a serial number sticker', 'an appliance model plate']),
   clutter('readings', 'Meters and warning lights', ['a meter reading', 'a car dashboard warning light', 'a thermostat display']),
   clutter('repairs', 'Things to fix or sell', ['a broken item', 'a damaged wall', 'a leaking pipe', 'an item photographed to sell online', 'furniture for sale']),
-  clutter('memes', 'Memes and forwarded images', ['a meme with text', 'a cartoon', 'a motivational quote image', 'a greeting image with text', 'a funny picture from the internet']),
+  // What memes look like as well as what they are: a fingerprint is mostly what a picture shows, so a
+  // meme of a couple otherwise goes to People.
+  clutter('memes', 'Memes and forwarded images', [
+    'a meme with text', 'a cartoon', 'a motivational quote image', 'a greeting image with text', 'a funny picture from the internet',
+    'a cartoon image with a caption', 'a screenshot of a social media post', 'text written over a picture', 'a greeting card image with flowers and text',
+    'a joke picture with a punchline',
+  ]),
   clutter('accidental', 'Accidental shots', ['a blurry photo taken by accident', 'a dark photo with nothing visible', 'the inside of a pocket', 'a photo of the floor', 'a photo of a ceiling', 'a finger covering the camera lens']),
 
   counterweight('people', 'People', ['a portrait of a person', 'a group of people smiling', 'a selfie', 'people at a party', 'a couple together', 'a family photo', 'friends together']),
   counterweight('children', 'Children', ['a baby', 'a child playing', 'a toddler', 'children at a birthday party', "a child's drawing"]),
   counterweight('celebrations', 'Celebrations', ['a birthday cake with candles', 'a wedding', 'a Christmas celebration', 'a family dinner', 'a graduation']),
   counterweight('animals', 'Pets and animals', ['a dog', 'a cat', 'a pet', 'an animal in nature', 'a bird']),
-  counterweight('travel', 'Travel and nature', ['a landscape', 'a beach', 'mountains', 'a city view', 'a famous landmark', 'a sunset', 'a forest', 'a lake']),
-  counterweight('ordinary', 'Ordinary scenes', ['a street', 'a building', 'a meal on a plate', 'a drink', 'flowers', 'a garden', 'a room in a house', 'a car on the road', 'a sports game', 'a concert', 'art in a museum']),
+  counterweight('nature', 'Nature', ['a landscape', 'a beach', 'mountains', 'a sunset', 'a forest', 'a lake']),
+  // Being on the move: without it, photos taken on trains and planes went to tickets.
+  counterweight('travel', 'Travel', [
+    'a famous landmark', 'a view from a train window', 'a view from an airplane window', 'inside a train', 'inside an airplane cabin', 'an airport terminal',
+    'a meal on a tray table on a plane or train', 'a hotel room',
+  ]),
+  // A city view is ordinary: a window onto the city doesn't make a room a travel photo.
+  counterweight('ordinary', 'Ordinary scenes', ['a street', 'a building', 'a city view', 'a meal on a plate', 'a drink', 'an ice cream cone', 'a dessert', 'street food', 'a snack', 'flowers', 'a garden', 'a room in a house', 'a car on the road', 'a sports game', 'a concert', 'art in a museum']),
   counterweight('memories', 'Old photos and keepsakes', ['a scanned old photograph', 'an old printed photo', 'a handwritten letter from family', 'a certificate']),
 ];
 
@@ -60,6 +74,8 @@ export interface PhotoMatch {
   mediaKey: string;
   /** Index into the categories matched against. */
   best: number;
+  /** Index into [best]'s descriptions: the one the photo scored as. */
+  description: number;
   bestScore: number;
   /** The next category's score, of either kind. */
   secondScore: number;
@@ -143,23 +159,25 @@ const otherKind = (kind: CategoryKind): CategoryKind => (kind === 'clutter' ? 'c
 export function matchPhoto(mediaKey: string, row: Float32Array, categories: ScoredCategory[], norms: DescriptionNorms | null): PhotoMatch {
   if (categories.length < 2) throw new Error('Matching needs at least two categories to compare');
   let best = -1;
+  let bestDescription = -1;
   let bestScore = -Infinity;
   let secondScore = -Infinity;
   const bestOfKind: Record<CategoryKind, number> = { clutter: -Infinity, counterweight: -Infinity };
-  categoryScores(row, categories, norms).forEach(({ score }, i) => {
+  categoryScores(row, categories, norms).forEach(({ score, description }, i) => {
     const kind = categories[i]!.category.kind;
     bestOfKind[kind] = Math.max(bestOfKind[kind], score);
     if (score > bestScore) {
       secondScore = bestScore;
       bestScore = score;
       best = i;
+      bestDescription = description;
     } else if (score > secondScore) {
       secondScore = score;
     }
   });
   const otherKindScore = bestOfKind[otherKind(categories[best]!.category.kind)];
   if (otherKindScore === -Infinity) throw new Error('Matching needs both clutter categories and counterweights');
-  return { mediaKey, best, bestScore, secondScore, otherKindScore };
+  return { mediaKey, best, description: bestDescription, bestScore, secondScore, otherKindScore };
 }
 
 /** One category's line in a photo's breakdown. */
@@ -260,6 +278,8 @@ export interface ClutterPhoto {
 
 export interface CategoryPhoto {
   mediaKey: string;
+  /** The category's description the photo scored as. */
+  description: string;
   score: number;
   /** How far ahead of the runner-up category. */
   lead: number;
@@ -289,6 +309,13 @@ export interface ClutterCounts {
   photos: number;
 }
 
+/** Description [index] of [category]: the phrase a match scored as, which must be one of its descriptions. */
+function phrase(category: Category | undefined, index: number): string {
+  const text = category?.descriptions[index];
+  if (text === undefined) throw new Error(`A match names a description that isn't in its category (${category?.id ?? 'no category'}, ${index})`);
+  return text;
+}
+
 /** Each photo counted for at most one category: its best, when that one is clearly ahead ([leadOf] [over]). */
 export function countCategories(matches: PhotoMatch[], categories: Category[], photos: Map<string, ClutterPhoto>, settings: ClutterSettings, over: LeadOver): ClutterCounts {
   const counts = categories.map((category): CategoryCount => ({ category, trashable: [], protectedOrUnknown: 0, approved: 0, closeCalls: 0, justMissed: [] }));
@@ -296,7 +323,7 @@ export function countCategories(matches: PhotoMatch[], categories: Category[], p
     const count = counts[m.best]!;
     const photo = photos.get(m.mediaKey);
     const trashable = photo !== undefined && photo.eligible && !photo.approved;
-    const entry = { mediaKey: m.mediaKey, score: m.bestScore, lead: leadOf(m, over) };
+    const entry = { mediaKey: m.mediaKey, description: phrase(categories[m.best], m.description), score: m.bestScore, lead: leadOf(m, over) };
     if (m.bestScore < settings.minScore) {
       count.closeCalls++;
     } else if (entry.lead < settings.margin) {
@@ -370,7 +397,7 @@ export function categorySamples(count: CategoryCount, size: number): CategorySam
  */
 export function photoCaption(photo: CategoryPhoto): string {
   const lead = Math.floor(photo.lead * 10_000 + 1e-9) / 10_000;
-  return `${photo.score.toFixed(3)} · lead ${lead.toFixed(4)}`;
+  return `${photo.score.toFixed(3)} · lead ${lead.toFixed(4)} · “${photo.description}”`;
 }
 
 /**
@@ -386,6 +413,109 @@ export function kindTotals(counts: ClutterCounts): string {
   if (clutter + counterweights + closeCalls !== counts.photos) throw new Error(`Counted photos (${clutter + counterweights + closeCalls}) don't add up to the photos matched (${counts.photos})`);
   const share = (x: number) => (counts.photos === 0 ? '' : ` (${Math.round((x / counts.photos) * 100)}%)`);
   return `Clutter ${n(clutter)}${share(clutter)} · counterweights ${n(counterweights)}${share(counterweights)} · close calls ${n(closeCalls)}${share(closeCalls)}`;
+}
+
+/** Whether a photo counts for its best category with these settings, as [countCategories] decides it. */
+export function isCounted(match: PhotoMatch, settings: ClutterSettings, over: LeadOver): boolean {
+  return match.bestScore >= settings.minScore && leadOf(match, over) >= settings.margin;
+}
+
+/** A photo counted for a category of one kind with raw scores and of the other kind evened out. */
+export interface MovedPhoto {
+  mediaKey: string;
+  /** Indexes into the categories: where it was counted with raw scores, and evened out. */
+  raw: number;
+  evened: number;
+  /** The description it scored as in each. */
+  rawDescription: string;
+  evenedDescription: string;
+  /** Its evened-out score, which the list is ordered by. */
+  evenedScore: number;
+}
+
+export interface ScoringMoves {
+  /** Counterweights with raw scores, clutter evened out: what evening out would add to the suggestions. Highest evened-out score first. */
+  toClutter: MovedPhoto[];
+  /** Clutter with raw scores, counterweights evened out. Highest evened-out score first. */
+  toCounterweights: MovedPhoto[];
+}
+
+/**
+ * The photos that change kind between raw and evened-out scores, each scoring with its own settings.
+ * Only photos that may be trashed and aren't queued: the ones a suggestion would offer. [raw] and
+ * [evened] are the same photos in the same order, matched once each way.
+ */
+export function scoringMoves(raw: PhotoMatch[], evened: PhotoMatch[], categories: Category[], photos: Map<string, ClutterPhoto>, settings: Record<Scoring, ClutterSettings>, over: LeadOver): ScoringMoves {
+  if (raw.length !== evened.length) throw new Error(`Both scorings must match the same photos (${raw.length} and ${evened.length})`);
+  const moves: ScoringMoves = { toClutter: [], toCounterweights: [] };
+  raw.forEach((r, i) => {
+    const e = evened[i]!;
+    if (r.mediaKey !== e.mediaKey) throw new Error('Both scorings must match the same photos in the same order');
+    if (!isCounted(r, settings.raw, over) || !isCounted(e, settings.evened, over)) return;
+    const [from, to] = [categories[r.best]!.kind, categories[e.best]!.kind];
+    if (from === to) return;
+    const photo = photos.get(r.mediaKey);
+    if (!photo || !photo.eligible || photo.approved) return;
+    (to === 'clutter' ? moves.toClutter : moves.toCounterweights).push({
+      mediaKey: r.mediaKey,
+      raw: r.best,
+      evened: e.best,
+      rawDescription: phrase(categories[r.best], r.description),
+      evenedDescription: phrase(categories[e.best], e.description),
+      evenedScore: e.bestScore,
+    });
+  });
+  moves.toClutter.sort((a, b) => b.evenedScore - a.evenedScore);
+  moves.toCounterweights.sort((a, b) => b.evenedScore - a.evenedScore);
+  return moves;
+}
+
+/** "Evening out moves 1,336 photos from counterweights to clutter, and 15 the other way." */
+export function movesLine(moves: ScoringMoves): string {
+  return `Evening out moves ${n(moves.toClutter.length)} ${moves.toClutter.length === 1 ? 'photo' : 'photos'} from counterweights to clutter, and ${n(moves.toCounterweights.length)} the other way (only photos that may be trashed).`;
+}
+
+/** A piece of a caption, with the kind of category it names (null when it names none), so the page can colour counterweights. */
+export interface CaptionPart {
+  text: string;
+  kind: CategoryKind | null;
+}
+
+/** Where a moved photo was counted in each scoring, and as which description: 'People “a selfie” → Products and shopping “a supermarket aisle”'. */
+export function moveCaption(move: MovedPhoto, categories: Category[]): CaptionPart[] {
+  const [raw, evened] = [categories[move.raw]!, categories[move.evened]!];
+  return [
+    { text: raw.label, kind: raw.kind },
+    { text: ` “${move.rawDescription}” → `, kind: null },
+    { text: evened.label, kind: evened.kind },
+    { text: ` “${move.evenedDescription}”`, kind: null },
+  ];
+}
+
+/**
+ * The [count] photos whose best category scores lowest, lowest first: nothing in the list describes
+ * them well, so they show what it may be missing (an ice cream matched "a city view" best, at 0.651).
+ * Meant for raw scores; evened out, a low score means unremarkable, not undescribed.
+ */
+export function weakestMatches(matches: PhotoMatch[], count: number): PhotoMatch[] {
+  return [...matches].sort((a, b) => a.bestScore - b.bestScore).slice(0, count);
+}
+
+/** A photo's best score and where it went: '0.590 · Ordinary scenes “a drink”'. */
+export function matchCaption(match: PhotoMatch, categories: Category[]): CaptionPart[] {
+  const category = categories[match.best];
+  if (!category) throw new Error(`A match names a category that wasn't matched against (${match.best})`);
+  return [
+    { text: `${match.bestScore.toFixed(3)} · `, kind: null },
+    { text: category.label, kind: category.kind },
+    { text: ` “${phrase(category, match.description)}”`, kind: null },
+  ];
+}
+
+/** [size] items spread evenly from the first to the last, so a sample covers the whole list, the same each time. */
+export function evenSample<T>(items: T[], size: number): T[] {
+  if (items.length <= size) return [...items];
+  return Array.from({ length: size }, (_, i) => items[Math.floor((i * items.length) / size)]!);
 }
 
 /** The best-match scores' and leads' spread, to choose the settings: at 10%, 50% and 90% of photos. */

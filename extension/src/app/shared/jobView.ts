@@ -314,6 +314,11 @@ export function versionLine(version: string): string {
   return `Photo Cleaner ${version}`;
 }
 
+/** Whether [step] offers Copy diagnostics: it stopped because of a problem, or its report says nothing can be trashed. */
+export function offersDiagnostics(step: ScanStepView, report: ReportView | null | undefined): boolean {
+  return step.diagnostics || (step.protectionKnown && report?.tone === 'bad');
+}
+
 /** What Copy report copies: the protection report, the version, then Google's details behind a stop, if any. */
 export function copyReportText(report: ReportView, step: ScanStepView, version: string): string {
   return [report.copyText, versionLine(version), ...step.supportLines].join('\n');

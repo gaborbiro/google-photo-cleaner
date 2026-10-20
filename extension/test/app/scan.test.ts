@@ -366,7 +366,28 @@ describe('library scan', () => {
     expect(reportView(await classifyLatest(store)).warningText).toBeNull();
     let checks = 0;
     await scan(standardAccount(), store, { shouldStop: async () => ++checks > 2 });
-    expect(reportView(await classifyLatest(store)).warningText).toBe('Protection coverage incomplete: no photo can be trashed');
+    // It names what blocks (it said "Protection coverage incomplete" until 0.4.38).
+    expect(reportView(await classifyLatest(store)).warningText).toBe("No photo can be trashed: the last scan didn't finish");
+  });
+
+  it('what blocks trashing is named, and the diagnostic lines say it as numbers, without album titles or keys', async () => {
+    const store = newStore();
+    const source = new FakePhotos(
+      Array.from({ length: 6 }, (_, i) => fakeItem(i)),
+      [fakeAlbum('wedding-in-rome', [1, 2], { reportedCount: 5, shared: true }), fakeAlbum('holiday-with-anna', [3]), fakeAlbum('family-secret', [4])],
+    );
+    source.inaccessibleAlbums.add('family-secret');
+    await scan(source, store);
+    const view = reportView(await classifyLatest(store, NOW + 3 * 24 * 60 * 60 * 1000));
+    expect(view.warningText).toBe("No photo can be trashed: 1 album couldn't be read");
+    expect(view.diagnosticLines).toEqual([
+      "Blocking trashing: 1 album couldn't be read; the scan is also more than a day old",
+      'Album issue 1 (blocks): could not be read · shared unknown · kind 1 · Google reports 1, 0 read (1 short) · not read a second time',
+      'Album note 1 (doesn\'t block): count mismatch, not blocking · shared · kind 4 · Google reports 5, 2 read (3 short) · read twice, the same entries both times',
+      'Photos: 3 unknown for scan incomplete + scan out of date',
+    ]);
+    const shared = [view.copyText, ...view.diagnosticLines].join('\n');
+    for (const secret of ['wedding', 'rome', 'holiday', 'anna', 'family', 'secret', 'Album wedding']) expect(shared.toLowerCase(), secret).not.toContain(secret);
   });
 
   it('the report is worked out again when a scan settles or the choices change, not while it runs', async () => {

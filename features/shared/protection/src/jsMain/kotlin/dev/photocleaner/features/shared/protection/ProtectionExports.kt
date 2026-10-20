@@ -78,7 +78,18 @@ private fun toJs(result: InventoryClassification): dynamic {
     )
 }
 
-private fun albumIssue(i: AlbumIssue): dynamic = obj("albumTitle" to i.albumTitle, "kind" to i.kind.name, "detail" to i.detail)
+private fun albumIssue(i: AlbumIssue): dynamic = obj(
+    "albumTitle" to i.albumTitle,
+    "kind" to i.kind.name,
+    "detail" to i.detail,
+    "facts" to obj(
+        "reportedCount" to i.facts.reportedCount,
+        "entriesRead" to i.facts.entriesRead,
+        "reread" to i.facts.reread?.name,
+        "isShared" to i.facts.isShared,
+        "kindCode" to i.facts.kindCode,
+    ),
+)
 
 private fun agreement(a: SourceAgreement): dynamic =
     JsJson.obj("listed" to a.listed, "flagged" to a.flagged, "flaggedButNotListed" to a.flaggedButNotListed, "listedButNotFlagged" to a.listedButNotFlagged)

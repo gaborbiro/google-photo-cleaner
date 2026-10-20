@@ -1,5 +1,6 @@
 package dev.photocleaner.features.shared.protection.model
 
+import dev.photocleaner.repositories.inventory.domain.AlbumReread
 import dev.photocleaner.repositories.inventory.domain.InventoryItem
 import dev.photocleaner.repositories.inventory.domain.RunStatus
 import dev.photocleaner.repositories.inventory.domain.StoredMediaType
@@ -47,6 +48,19 @@ data class AlbumIssue(
     val albumTitle: String?,
     val kind: AlbumIssueKind,
     val detail: String,
+    /**
+     * The album as numbers and flags, without its title: for diagnosing an issue in a problem
+     * report (Google's count, the entries read, the second read's outcome, shared, kind).
+     */
+    val facts: AlbumFacts,
+)
+
+data class AlbumFacts(
+    val reportedCount: Int?,
+    val entriesRead: Int,
+    val reread: AlbumReread?,
+    val isShared: Boolean?,
+    val kindCode: Int?,
 )
 
 data class PhaseEvidence(

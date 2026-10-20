@@ -2,6 +2,7 @@
 // wrong lately (the problem log), as plain text for a problem report. Only counts, steps and the
 // structure of Google's answers: never photos, album names or account details.
 
+import type { ReportView } from '../scan/report';
 import { n } from './format';
 import type { AnalysisJob, ScanJob } from './job';
 import { MAX_PROBLEMS, PROBLEM_MAX_AGE_MS, type ProblemEntry } from './problemLog';
@@ -14,6 +15,8 @@ export interface DiagnosticsInput {
   analysis: AnalysisJob | null;
   /** The problem log, newest first. */
   problems: ProblemEntry[];
+  /** The protection report of the account's latest scan; null without one (or while it is worked out). */
+  report: ReportView | null;
 }
 
 const when = (ms: number) => new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -76,6 +79,9 @@ export function diagnosticsText(input: DiagnosticsInput): string {
     'Scan',
     ...scanLines(input.scan),
     ...analysisLines(input.analysis),
+    '',
+    'Protection',
+    ...(input.report === null ? ['No protection report (no finished scan, or still being worked out).'] : [...input.report.copyText.split('\n'), ...input.report.diagnosticLines]),
     '',
     input.problems.length === 0
       ? `Problems: none in the last ${days} days.`

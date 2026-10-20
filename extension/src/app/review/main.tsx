@@ -150,7 +150,7 @@ function Review() {
         <div className="scan-tab">
           <p className="muted">No account yet: open Google Photos and start a scan from the panel.</p>
           {/* Diagnostics and erasing cover every account, so they are here even when none is signed in. */}
-          <DiagnosticsCard scan={null} analysis={null} />
+          <DiagnosticsCard scan={null} analysis={null} report={null} />
           <EraseCard />
         </div>
       ) : (
@@ -163,7 +163,7 @@ function Review() {
             <div className="scan-tab" hidden={tab !== 'scan'}>
               {job !== undefined && analysis !== undefined && <ScanCard account={selected} scan={job} analysis={analysis} report={report} surface="tab" />}
               {choices !== undefined && <ProtectionCard account={selected} choices={choices} />}
-              {job !== undefined && analysis !== undefined && <DiagnosticsCard scan={job} analysis={analysis} />}
+              {job !== undefined && analysis !== undefined && <DiagnosticsCard scan={job} analysis={analysis} report={report ?? null} />}
               <EraseCard />
             </div>
           )}

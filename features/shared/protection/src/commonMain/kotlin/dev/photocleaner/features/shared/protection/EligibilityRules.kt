@@ -1,5 +1,6 @@
 package dev.photocleaner.features.shared.protection
 
+import dev.photocleaner.features.shared.protection.model.AlbumFacts
 import dev.photocleaner.features.shared.protection.model.AlbumIssue
 import dev.photocleaner.features.shared.protection.model.AlbumIssueKind
 import dev.photocleaner.features.shared.protection.model.ClassifiedItem
@@ -107,19 +108,24 @@ internal object EligibilityRules {
     }
 
     private fun albumIssue(status: AlbumStatus): AlbumIssue? {
-        val title = status.album.title
         val reported = status.album.reportedItemCount
         val failure = status.failureReason
+        val issue = { kind: AlbumIssueKind, detail: String ->
+            AlbumIssue(
+                status.album.title, kind, detail,
+                AlbumFacts(reported, status.membersSeen, status.reread, status.album.isShared, status.album.kindCode),
+            )
+        }
         return when {
-            failure != null -> AlbumIssue(title, AlbumIssueKind.FAILED, failure)
-            !status.membersComplete -> AlbumIssue(title, AlbumIssueKind.NOT_FINISHED, "${status.membersSeen} entries read so far")
-            reported == null -> AlbumIssue(title, AlbumIssueKind.COUNT_MISSING, "Google reported no item count; ${status.membersSeen} entries read")
+            failure != null -> issue(AlbumIssueKind.FAILED, failure)
+            !status.membersComplete -> issue(AlbumIssueKind.NOT_FINISHED, "${status.membersSeen} entries read so far")
+            reported == null -> issue(AlbumIssueKind.COUNT_MISSING, "Google reported no item count; ${status.membersSeen} entries read")
             reported == status.membersSeen -> null
             status.reread == AlbumReread.SAME_ENTRIES ->
-                AlbumIssue(title, AlbumIssueKind.COUNT_MISMATCH_READ_TWICE, "Google reports $reported entries; ${status.membersSeen} read, the same ones on a second read")
+                issue(AlbumIssueKind.COUNT_MISMATCH_READ_TWICE, "Google reports $reported entries; ${status.membersSeen} read, the same ones on a second read")
             status.reread == AlbumReread.DIFFERENT_ENTRIES ->
-                AlbumIssue(title, AlbumIssueKind.COUNT_MISMATCH, "Google reports $reported entries; ${status.membersSeen} read, and a second read found different ones")
-            else -> AlbumIssue(title, AlbumIssueKind.COUNT_MISMATCH, "Google reports $reported entries; ${status.membersSeen} read")
+                issue(AlbumIssueKind.COUNT_MISMATCH, "Google reports $reported entries; ${status.membersSeen} read, and a second read found different ones")
+            else -> issue(AlbumIssueKind.COUNT_MISMATCH, "Google reports $reported entries; ${status.membersSeen} read")
         }
     }
 }

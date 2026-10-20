@@ -24,7 +24,7 @@ const albumListProblem: ProblemEntry = {
 
 describe('the diagnostics text', () => {
   it("says the version, the Scan's state, then each problem: where, how, which request, where it gave up and the answer's structure", () => {
-    expect(diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: stopped, analysis: null, problems: [albumListProblem] })).toBe([
+    expect(diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: stopped, analysis: null, problems: [albumListProblem], report: null })).toBe([
       'Photo Cleaner 0.4.13 · diagnostics copied 20 Oct 2026, 14:02:05',
       'Without photos, album names or account details. Answers from Google are described by their structure only: "key:44" is an ID of 44 characters, "s:12" a text of 12, "n" a large number.',
       '',
@@ -32,6 +32,9 @@ describe('the diagnostics text', () => {
       'Step 1, read your library: failed at ALBUM_LIST · library 18,432 · favourites 15 · archive 0 · albums 0 of 0 read, 0 could not be read',
       `  ${INCOMPATIBLE_TEXT}`,
       'Step 2, analyse photos: not started',
+      '',
+      'Protection',
+      'No protection report (no finished scan, or still being worked out).',
       '',
       'Problems, newest first (1; the last 50 of 30 days are kept):',
       '1. 20 Oct 2026, 14:01:22 · version 0.4.13 · scan: album list',
@@ -50,7 +53,7 @@ describe('the diagnostics text', () => {
       answer: { rpcId: 'Z5xsfc', at: null, answer: null, focus: null, envelope: ['3 lines, 80 characters', 'wrb.fr Z5xsfc ["s:6","id:6",null,null,null,[3],"id:7"]'], cause: null },
     };
     const unexpected: ProblemEntry = { ...albumListProblem, id: 9, kind: 'UNEXPECTED', where: 'analysis: stopped unexpectedly', message: 'TypeError: x is undefined', request: null, answer: null, stack: 'at a (engine.js:1:2)\nat b (engine.js:3:4)' };
-    const text = diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: stopped, analysis, problems: [unexpected, refused] });
+    const text = diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: stopped, analysis, problems: [unexpected, refused], report: null });
     expect(text).toContain('Step 2, analyse photos: paused at analysing · 4 of 10 photos analysed · this run 0 of 6 · 0 could not be fetched · detail 140\n  Stopped.');
     expect(text).toContain([
       '1. 20 Oct 2026, 14:01:22 · version 0.4.13 · analysis: stopped unexpectedly',
@@ -68,8 +71,8 @@ describe('the diagnostics text', () => {
   });
 
   it('with nothing logged and nothing scanned, says so', () => {
-    const text = diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: null, analysis: null, problems: [] });
-    expect(text.split('\n').slice(3)).toEqual(['Scan', 'Step 1, read your library: not started', 'Step 2, analyse photos: not started', '', 'Problems: none in the last 30 days.']);
+    const text = diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: null, analysis: null, problems: [], report: null });
+    expect(text.split('\n').slice(3)).toEqual(['Scan', 'Step 1, read your library: not started', 'Step 2, analyse photos: not started', '', 'Protection', 'No protection report (no finished scan, or still being worked out).', '', 'Problems: none in the last 30 days.']);
   });
 
   it('writes a path into an answer as code would', () => {

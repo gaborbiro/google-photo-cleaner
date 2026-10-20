@@ -5,7 +5,7 @@ import type { AppRequest } from '../shared/messages';
 import { scanButton, setAnalysisFullSpeed } from '../shared/actions';
 import { ALIVE_EVERY_MS, type AnalysisJob, type ScanJob } from '../shared/job';
 import { diagnosticsText } from '../shared/diagnostics';
-import { copyReportText, scanView, versionLine, type ScanSurface } from '../shared/jobView';
+import { copyReportText, offersDiagnostics, scanView, versionLine, type ScanSurface } from '../shared/jobView';
 import type { ReportView } from '../scan/report';
 import type { ProtectionChoices } from '../shared/preferences';
 import { extensionVersion, logFailure, send, setProtectionChoices, store, useClock, useProblems, useStorageProblem } from './hooks';
@@ -38,7 +38,7 @@ export function ScanCard({ account, scan, analysis, report, surface }: { account
               {step.waiting && <p className="muted">{step.waiting}</p>}
               {step.notice && <p className="warn">{step.notice}</p>}
               {step.problemLines.map((line) => <p key={line} className="mono muted support-line">{line}</p>)}
-              {step.diagnostics && <Diagnostics scan={scan} analysis={analysis} />}
+              {offersDiagnostics(step, report) && <Diagnostics scan={scan} analysis={analysis} report={report ?? null} />}
               {step.timesText && <p className="muted mono">{step.timesText}</p>}
               {step.fullSpeed !== null && (
                 <label className="setting">
@@ -98,11 +98,11 @@ function ProtectionDetails({ report, detailText, versionText, supportLines, copy
  * What went wrong lately, for a problem report: one button copies it, and what it copies can be
  * looked at first. Never photos, album names or account details (see diagnostics.ts).
  */
-function Diagnostics({ scan, analysis }: { scan: ScanJob | null; analysis: AnalysisJob | null }) {
+function Diagnostics({ scan, analysis, report }: { scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null }) {
   const problems = useProblems();
   const [copied, setCopied] = useState(false);
   const [unfolded, setUnfolded] = useState(false);
-  const text = problems === undefined ? null : diagnosticsText({ version: extensionVersion(), nowMs: Date.now(), scan, analysis, problems });
+  const text = problems === undefined ? null : diagnosticsText({ version: extensionVersion(), nowMs: Date.now(), scan, analysis, problems, report });
   const copy = () => {
     if (text !== null) void navigator.clipboard.writeText(text).then(() => setCopied(true), logFailure('copying the diagnostics'));
   };
@@ -120,11 +120,11 @@ function Diagnostics({ scan, analysis }: { scan: ScanJob | null; analysis: Analy
 }
 
 /** Always in the review tab's Scan tab: Copy diagnostics, also for a problem the Scan card doesn't show. */
-export function DiagnosticsCard({ scan, analysis }: { scan: ScanJob | null; analysis: AnalysisJob | null }) {
+export function DiagnosticsCard({ scan, analysis, report }: { scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null }) {
   return (
     <section className="card utility diagnostics-card">
       <p className="muted">Something not working? Copy what went wrong lately into your problem report. It holds no photos, album names or account details.</p>
-      <Diagnostics scan={scan} analysis={analysis} />
+      <Diagnostics scan={scan} analysis={analysis} report={report} />
     </section>
   );
 }

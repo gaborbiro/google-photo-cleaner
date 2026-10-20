@@ -1,6 +1,7 @@
 package dev.photocleaner.features.shared.duplicates
 
 import dev.photocleaner.features.shared.protection.InventoryClassifier
+import dev.photocleaner.features.shared.protection.model.AlbumFacts
 import dev.photocleaner.features.shared.protection.model.AlbumIssueKind
 import dev.photocleaner.features.shared.protection.model.Eligibility
 import dev.photocleaner.features.shared.protection.model.UnknownReason
@@ -97,6 +98,14 @@ class AlbumCountTest {
         val coverage = classify(snapshot(reported = 0, seen = 1, reread = AlbumReread.SAME_ENTRIES)).report.coverage
         assertTrue(coverage.isComplete)
         assertEquals(AlbumIssueKind.COUNT_MISMATCH_READ_TWICE, coverage.albumWarnings.single().kind)
+    }
+
+    @Test
+    fun an_issue_carries_the_album_as_numbers_and_flags_for_a_problem_report() {
+        val blocking = classify(snapshot(reported = 40, reread = AlbumReread.DIFFERENT_ENTRIES)).report.coverage.albumIssues.single()
+        assertEquals(AlbumFacts(reportedCount = 40, entriesRead = 1, reread = AlbumReread.DIFFERENT_ENTRIES, isShared = true, kindCode = 4), blocking.facts)
+        val unread = classify(snapshot(reported = null)).report.coverage.albumIssues.single()
+        assertEquals(AlbumFacts(reportedCount = null, entriesRead = 1, reread = null, isShared = true, kindCode = 4), unread.facts)
     }
 
     @Test

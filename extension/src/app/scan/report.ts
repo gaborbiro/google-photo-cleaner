@@ -15,7 +15,9 @@ export type UnknownReason = 'INVENTORY_INCOMPLETE' | 'INVENTORY_STALE' | 'FAVOUR
 interface Agreement { listed: number; flagged: number; flaggedButNotListed: number; listedButNotFlagged: number }
 
 type AlbumIssueKind = 'FAILED' | 'NOT_FINISHED' | 'COUNT_MISMATCH' | 'COUNT_MISSING' | 'COUNT_MISMATCH_READ_TWICE';
-interface AlbumIssue { albumTitle: string | null; kind: AlbumIssueKind; detail: string }
+/** An album as numbers and flags, without its title (for problem reports). */
+interface AlbumFacts { reportedCount: number | null; entriesRead: number; reread: 'SAME_ENTRIES' | 'DIFFERENT_ENTRIES' | null; isShared: boolean | null; kindCode: number | null }
+interface AlbumIssue { albumTitle: string | null; kind: AlbumIssueKind; detail: string; facts: AlbumFacts }
 
 export interface TypeCounts {
   mediaType: 'PHOTO' | 'VIDEO' | null;
@@ -84,6 +86,11 @@ export interface ReportView {
   tables: { title: string; rows: { label: string; value: string; indent: boolean }[] }[];
   /** Counts only, no album titles: safe to copy and share. */
   copyText: string;
+  /**
+   * For Copy diagnostics, also without titles: what blocks trashing, each album issue as numbers
+   * and flags, and how many photos are unknown for which reasons together.
+   */
+  diagnosticLines: string[];
 }
 
 const time = (ms: number) => new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -124,10 +131,67 @@ function table(c: TypeCounts) {
   };
 }
 
+type Coverage = Classification['report']['coverage'];
+
+/** "a", "a and b", "a, b and c". */
+function listed(parts: string[]): string {
+  return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`;
+}
+
+/** "1 album doesn't match…" / "4 albums don't match…". */
+function albums(howMany: number, one: string, many: string): string {
+  return `${n(howMany)} ${howMany === 1 ? `album ${one}` : `albums ${many}`}`;
+}
+
+/** What keeps the scan from proving anything, in plain words: "4 albums don't match Google's count". */
+export function blockers(coverage: Coverage): string[] {
+  const out: string[] = [];
+  if (coverage.runStatus !== 'COMPLETED' || coverage.phases.some((p) => !p.completed)) out.push("the last scan didn't finish");
+  const of = (kind: AlbumIssueKind) => coverage.albumIssues.filter((i) => i.kind === kind).length;
+  if (of('FAILED') > 0) out.push(albums(of('FAILED'), "couldn't be read", "couldn't be read"));
+  if (of('NOT_FINISHED') > 0) out.push(albums(of('NOT_FINISHED'), "wasn't read to the end", "weren't read to the end"));
+  if (of('COUNT_MISMATCH') > 0) out.push(albums(of('COUNT_MISMATCH'), "doesn't match Google's count", "don't match Google's count"));
+  if (of('COUNT_MISSING') > 0) out.push(albums(of('COUNT_MISSING'), 'had no count from Google', 'had no count from Google'));
+  return out;
+}
+
+const REREAD_TEXT = { SAME_ENTRIES: 'read twice, the same entries both times', DIFFERENT_ENTRIES: 'read twice, different entries the second time' };
+
+/** "count mismatch · shared · kind 4 · Google reports 229, 189 read (40 short) · not read a second time". */
+function albumFactsLine(i: AlbumIssue, kinds: Record<AlbumIssueKind, string>): string {
+  const f = i.facts;
+  const short = f.reportedCount !== null && f.reportedCount !== f.entriesRead
+    ? ` (${n(Math.abs(f.reportedCount - f.entriesRead))} ${f.reportedCount > f.entriesRead ? 'short' : 'more'})` : '';
+  return [
+    kinds[i.kind],
+    f.isShared === null ? 'shared unknown' : f.isShared ? 'shared' : 'not shared',
+    `kind ${f.kindCode ?? '?'}`,
+    `Google reports ${f.reportedCount === null ? 'no count' : n(f.reportedCount)}, ${n(f.entriesRead)} read${short}`,
+    f.reread === null ? 'not read a second time' : REREAD_TEXT[f.reread],
+  ].join(' · ');
+}
+
+/** "Photos: 10,573 unknown for scan incomplete + scan out of date": the reasons as they come together. */
+function reasonLines(classification: Classification): string[] {
+  const groups = new Map<string, { what: string; reasons: string; howMany: number }>();
+  for (const item of classification.items) {
+    if (item.eligibility !== 'UNKNOWN') continue;
+    const what = item.mediaType === 'PHOTO' ? 'Photos' : item.mediaType === 'VIDEO' ? 'Videos' : 'Items of unknown type';
+    const reasons = [...item.unknownReasons].sort().map((r) => REASON_LABELS[r]).join(' + ');
+    const group = groups.get(`${what}/${reasons}`) ?? { what, reasons, howMany: 0 };
+    group.howMany++;
+    groups.set(`${what}/${reasons}`, group);
+  }
+  return [...groups.values()]
+    .sort((a, b) => a.what.localeCompare(b.what) || b.howMany - a.howMany)
+    .map((g) => `${g.what}: ${n(g.howMany)} unknown for ${g.reasons}`);
+}
+
 export function reportView(classification: Classification): ReportView {
   const { coverage, counts } = classification.report;
+  const blocking = blockers(coverage);
   const [title, tone]: [string, Tone] = !coverage.isComplete
-    ? ['Protection coverage incomplete: no photo can be trashed', 'bad']
+    ? [`No photo can be trashed: ${listed(blocking)}`, 'bad']
     : coverage.isStale
       ? ['The last scan is more than a day old: no photo can be trashed until you check for new photos', 'warn']
       : ['Protection coverage complete', 'good'];
@@ -150,6 +214,12 @@ export function reportView(classification: Classification): ReportView {
     COUNT_MISMATCH_READ_TWICE: 'count mismatch, not blocking',
   };
   const albumLine = (i: AlbumIssue) => `Album “${i.albumTitle ?? 'untitled'}” ${issueKinds[i.kind]}: ${i.detail}`;
+  const diagnosticLines = [
+    `Blocking trashing: ${blocking.length > 0 ? listed(blocking) : 'nothing'}${coverage.isStale ? '; the scan is also more than a day old' : ''}`,
+    ...coverage.albumIssues.map((i, index) => `Album issue ${index + 1} (blocks): ${albumFactsLine(i, issueKinds)}`),
+    ...coverage.albumWarnings.map((i, index) => `Album note ${index + 1} (doesn't block): ${albumFactsLine(i, issueKinds)}`),
+    ...reasonLines(classification),
+  ];
   const issueLines = coverage.albumIssues.map(albumLine);
   const noteLines = coverage.albumWarnings.map(albumLine);
   const tables = counts.filter((c) => c.total > 0).map(table);
@@ -164,7 +234,7 @@ export function reportView(classification: Classification): ReportView {
     ...(noteLines.length > 0 ? [`${noteLines.length} album(s) not matching Google's count, the same on a second read`] : []),
     ...tables.flatMap((t) => [t.title, ...t.rows.map((r) => `${r.indent ? '    ' : '  '}${r.label}: ${r.value}`)]),
   ].join('\n');
-  return { title, tone, warningText: tone === 'bad' ? title : null, summary, timesLine: coverageLines[0]!, coverageLines, issueLines, noteLines, tables, copyText };
+  return { title, tone, warningText: tone === 'bad' ? title : null, summary, timesLine: coverageLines[0]!, coverageLines, issueLines, noteLines, tables, copyText, diagnosticLines };
 }
 
 /**

@@ -6,7 +6,9 @@ import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runOp, type PageEnvironment } from '../../src/page/ops';
 import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
+import { latestReport } from '../../src/app/scan/report';
 import { runScan } from '../../src/app/scan/session';
+import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 import { OpPhotosSource } from '../../src/app/scan/source';
 import { diagnosticsText } from '../../src/app/shared/diagnostics';
 import { INCOMPATIBLE_TEXT } from '../../src/app/shared/googleProblems';
@@ -167,10 +169,11 @@ describe('from a real-looking answer to the copied diagnostics', () => {
     const log = new IndexedDbProblemLog(new IDBFactory());
     keptIn(log, '0.4.13');
     const env = page();
+    const inventory = new IndexedDbInventoryStore(new IDBFactory());
     const source = new OpPhotosSource((op: ReadOp, params) => runOp(env, op, params));
     const progress: Parameters<Parameters<typeof runScan>[0]['onProgress']>[0][] = [];
     const outcome = await runScan({
-      account: FINGERPRINT, source, store: new IndexedDbInventoryStore(new IDBFactory()), policy: TEST_POLICY,
+      account: FINGERPRINT, source, store: inventory, policy: TEST_POLICY,
       now: () => NOW, sleep: async () => {}, shouldStop: async () => false, onProgress: async (p) => void progress.push(p),
     });
     await problemsSaved();
@@ -185,7 +188,7 @@ describe('from a real-looking answer to the copied diagnostics', () => {
     });
 
     const job = endJob(reportProgress(startScanJob(FINGERPRINT, NOW), progress.at(-1)!, NOW), 'failed', INCOMPATIBLE_TEXT, NOW);
-    const text = diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: job, analysis: null, problems: [entry!] });
+    const text = diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: job, analysis: null, problems: [entry!], report: await latestReport(inventory, FINGERPRINT, ALL_PROTECTED, NOW) });
     expect(text).toContain('scan: album list');
     expect(text).toContain('Request: listAlbumsPage (Z5xsfc) · sent with nothing');
     expect(text).toContain('Gave up at: [0][1]');

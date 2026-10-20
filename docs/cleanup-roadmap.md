@@ -72,27 +72,54 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
 - 16 **clutter** categories (screenshots, photos of screens, receipts, documents, whiteboards, notes,
   parking, signs, menus, tickets, products, barcodes and QR codes, meter readings, things to fix or
   sell, memes, accidental shots), each described in several ways.
-- 7 **keep** categories (people, children, celebrations, pets, travel and nature, ordinary scenes,
+- 7 **counterweights** (people, children, celebrations, pets, travel and nature, ordinary scenes,
   old photos and keepsakes): never shown, they only compete, taking photos away from clutter.
 - Each photo goes to its **one best category** (a category scores as its best description) and counts
   only when that score is at least the **minimum score** and at least the **minimum lead** above the
   next category. Counts never overlap; a family photo in a car park goes to "people", not "parking".
+- **Raw or evened-out scores**, switchable on the developer page. Some descriptions score higher than
+  others on every photo, so raw scores favour them. Evened out, a photo scores as how far above a
+  description's average over the whole library it is, counted in that description's usual spread
+  (standard deviation): 0 is average, 2 is far above it. Each scoring keeps its own settings.
+- **Lead over the next category or over the other kind**, switchable on the developer page. Over the
+  other kind, clutter's lead is measured against the best counterweight (and a counterweight's against
+  the best clutter), so a photo close between two kinds of clutter (a receipt or a document?) still
+  counts: it is clutter either way. The other kind never scores above the next category, so with the
+  same minimum lead this only adds photos.
 - Developer page `dev-clutter.html` (`extension/src/app/dev/clutter.tsx`): counts per category with
-  adjustable settings; the 12 strongest and 12 weakest photos still counted; protected, queued and
-  close-call counts; "Kept apart" shows where the keep categories' photos went.
+  adjustable settings; per category, 12 photos each: strongest, weakest still counted, **just counted**
+  (smallest leads that made it) and **just missed** (close calls with the largest leads), each captioned
+  with its score and lead; **Open all in a new tab** shows every counted photo; protected, queued and
+  close-call counts; "Counterweights" shows where their photos went. A collapsible list shows every
+  category and its descriptions; hovering over a photo shows how it scored: its best categories, each
+  with the description it scored as, and its lead over the runner-up.
 
 ### Findings so far
 
 - 2026-10-19, first test on my library: a good start. *(Add notes: which categories are right, which
   are noise, what clutter is missed, which settings looked best.)*
+- A selfie in a supermarket went to Products (0.732, "a supermarket aisle") ahead of People (0.649,
+  "a selfie"). A photo's fingerprint is the whole picture, and shelves fill most of it. Descriptions of
+  places (an aisle, a car park) pull in people photos taken there; descriptions of objects (a price tag,
+  a receipt) are safer.
+- Decided: no counterweights that mix people and places ("a selfie in a shop"); the list shouldn't try to
+  cover every case. Later, the user protects what the suggestions get wrong with their own tool: e.g.
+  search "selfies", put them in an album (protected), dissolve it later. Album edits are a new write,
+  which `AGENTS.md` allows only when asked for, so that is its own change.
 
 ### Judge and tune (developer page)
 
 - [ ] Go through every suggestion at a few settings; check its weakest counted photos (where mistakes
       show)
-- [ ] Check "Kept apart": people and holiday photos there, not in clutter; note clutter found there
-- [ ] Refine the list: reword or split noisy categories, drop useless ones, add missing kinds and keep
-      categories where needed
+- [ ] Check "Counterweights": people and holiday photos there, not in clutter; note clutter found there
+- [ ] Compare the lead over the next category with the lead over the other kind: are the photos it
+      adds real clutter? Keep the better one, and drop the switch
+- [ ] Several counterweights close behind one clutter category (People, Children and Celebrations all
+      just under Products): count how often it happens before deciding whether it needs a rule
+- [ ] Compare raw and evened-out scores: does evening out move photos like the supermarket selfie to
+      People without losing real clutter? Keep the better one, and drop the switch
+- [ ] Refine the list: reword or split noisy categories, drop useless ones (descriptions of places
+      first), add missing kinds and counterweights where needed
 - [ ] Choose the default minimum score and lead (the lowest setting where the weakest counted photos
       are still right); per-category settings only if one setting can't serve all
 - [ ] If judging by eye isn't enough: a labelling mode to measure precision per category, as
@@ -123,7 +150,7 @@ Pocket shots, black frames, heavy blur, floors and ceilings.
 - [ ] On the developer page: a suggestion combining the numbers (very dark, very blurry) with
       milestone 1's "Accidental shots" category. The AI alone confuses moody or night photos; the
       numbers alone flag artistic blur. Together they should agree on real failures
-- [ ] Keep categories still win: a dark photo of people isn't a failed shot
+- [ ] Counterweights still win: a dark photo of people isn't a failed shot
 - [ ] In the product: one more suggestion chip, same mechanism as 1
 
 ## 3. Thinning events `[ ]`

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORIES, countCategories, countLine, matchPhoto, scoreSpread, suggestions, type Category, type ClutterPhoto, type ScoredCategory } from '../../src/app/search/clutter';
+import { CATEGORIES, categoryList, categorySamples, countCategories, countLine, countSections, descriptionNorms, descriptionScores, leadOf, matchPhoto, photoBreakdown, photoCaption, scoreSpread, suggestions, type Category, type ClutterPhoto, type ScoredCategory } from '../../src/app/search/clutter';
 
 const v = (...xs: number[]) => Float32Array.from(xs);
 const parking: Category = { id: 'parking', label: 'Parking spots', kind: 'clutter', descriptions: ['a car park', 'a parking space number'] };
 const receipts: Category = { id: 'receipts', label: 'Receipts', kind: 'clutter', descriptions: ['a receipt'] };
-const people: Category = { id: 'people', label: 'People', kind: 'keep', descriptions: ['a group of people'] };
+const people: Category = { id: 'people', label: 'People', kind: 'counterweight', descriptions: ['a group of people'] };
 const categories = [parking, receipts, people];
 // One direction per category; parking's second description leans towards receipts (both have text).
 const scored: ScoredCategory[] = [
@@ -13,37 +13,42 @@ const scored: ScoredCategory[] = [
   { category: people, vectors: [v(0, 0, 1)] },
 ];
 const trashable: ClutterPhoto = { eligible: true, approved: false };
+/** Matched on raw scores. */
+const match = (mediaKey: string, vector: Float32Array) => matchPhoto(mediaKey, descriptionScores(vector, scored), scored, null);
 
 describe('clutter suggestions', () => {
   it('scores a category as its best description, and keeps the runner-up category', () => {
-    expect(matchPhoto('p', v(0.5, 0.5, 0), scored)).toEqual({ mediaKey: 'p', best: 0, bestScore: expect.closeTo(0.6, 5), secondScore: expect.closeTo(0.5, 5) });
-    expect(matchPhoto('q', v(0.1, 0.2, 0.9), scored)).toMatchObject({ best: 2, bestScore: expect.closeTo(0.9, 5), secondScore: expect.closeTo(0.2, 5) });
+    expect(match('p', v(0.5, 0.5, 0))).toEqual({ mediaKey: 'p', best: 0, bestScore: expect.closeTo(0.6, 5), secondScore: expect.closeTo(0.5, 5), otherKindScore: expect.closeTo(0, 5) });
+    expect(match('q', v(0.1, 0.2, 0.9))).toMatchObject({ best: 2, bestScore: expect.closeTo(0.9, 5), secondScore: expect.closeTo(0.2, 5) });
   });
 
   it('counts a photo only for its best category, and only when that is clearly ahead', () => {
     const matches = [
-      matchPhoto('car park', v(0.9, 0.1, 0), scored),
+      match('car park', v(0.9, 0.1, 0)),
       // A family in a car park: people is just ahead, so it is never counted as parking.
-      matchPhoto('family at the car', v(0.5, 0, 0.52), scored),
+      match('family at the car', v(0.5, 0, 0.52)),
       // Parking by a whisker: a close call, not counted.
-      matchPhoto('kerb', v(0.4, 0.38, 0), scored),
+      match('kerb', v(0.4, 0.38, 0)),
       // Clearly parking, but weak: below the minimum score.
-      matchPhoto('faint', v(0.15, 0, 0), scored),
-      matchPhoto('receipt', v(0, 1, 0), scored),
+      match('faint', v(0.15, 0, 0)),
+      match('receipt', v(0, 1, 0)),
     ];
     const photos = new Map(matches.map((m) => [m.mediaKey, trashable]));
-    const counts = countCategories(matches, categories, photos, { minScore: 0.2, margin: 0.1 });
+    const counts = countCategories(matches, categories, photos, { minScore: 0.2, margin: 0.1 }, 'next');
     const byId = new Map(counts.categories.map((c) => [c.category.id, c]));
     expect(byId.get('parking')!.trashable.map((p) => p.mediaKey)).toEqual(['car park']);
     expect(byId.get('parking')!.closeCalls).toBe(2);
     expect(byId.get('people')!.closeCalls).toBe(1);
     expect(byId.get('people')!.trashable).toEqual([]);
+    // Only close calls that cleared the minimum score are just missed; 'faint' missed the score.
+    expect(byId.get('parking')!.justMissed).toEqual([{ mediaKey: 'kerb', score: expect.closeTo(0.468, 5), lead: expect.closeTo(0.088, 5) }]);
+    expect(byId.get('people')!.justMissed.map((p) => p.mediaKey)).toEqual(['family at the car']);
     expect(byId.get('receipts')!.trashable.map((p) => p.mediaKey)).toEqual(['receipt']);
     expect(counts.photos).toBe(5);
   });
 
   it('never counts protected, unknown or queued photos as trashable, and sorts the rest by score', () => {
-    const matches = ['a', 'b', 'c', 'd', 'e'].map((k, i) => matchPhoto(k, v(1 - i * 0.05, 0, 0), scored));
+    const matches = ['a', 'b', 'c', 'd', 'e'].map((k, i) => match(k, v(1 - i * 0.05, 0, 0)));
     const photos = new Map<string, ClutterPhoto>([
       ['a', { eligible: false, approved: false }],
       ['b', { eligible: true, approved: true }],
@@ -51,7 +56,7 @@ describe('clutter suggestions', () => {
       ['e', trashable],
       // 'd' is missing from the scan: unknown, never trashable.
     ]);
-    const parkingCount = countCategories(matches, categories, photos, { minScore: 0, margin: 0 }).categories[0]!;
+    const parkingCount = countCategories(matches, categories, photos, { minScore: 0, margin: 0 }, 'next').categories[0]!;
     expect(parkingCount.category.id).toBe('parking');
     expect(parkingCount.trashable.map((p) => p.mediaKey)).toEqual(['c', 'e']);
     expect(parkingCount.protectedOrUnknown).toBe(2);
@@ -59,35 +64,206 @@ describe('clutter suggestions', () => {
     expect(countLine(parkingCount)).toBe('Parking spots · 2 (2 protected or unknown, 1 already in the trash queue)');
   });
 
+  it('lead over the other kind: two kinds of clutter close together still count, a close counterweight does not', () => {
+    const matches = [
+      // Parking or a receipt? Clutter either way, with people far behind.
+      match('ticket', v(0.5, 0.55, 0.1)),
+      // Parking only just ahead of people.
+      match('selfie', v(0.6, 0, 0.58)),
+      // People, measured against the best clutter.
+      match('party', v(0.2, 0.1, 0.9)),
+    ];
+    expect(matches[0]).toMatchObject({ best: 0, bestScore: expect.closeTo(0.63, 5), secondScore: expect.closeTo(0.55, 5), otherKindScore: expect.closeTo(0.1, 5) });
+    expect(leadOf(matches[0]!, 'next')).toBeCloseTo(0.08, 5);
+    expect(leadOf(matches[0]!, 'otherKind')).toBeCloseTo(0.53, 5);
+    expect(leadOf(matches[2]!, 'otherKind')).toBeCloseTo(0.7, 5);
+    const photos = new Map(matches.map((m) => [m.mediaKey, trashable]));
+    const byId = (over: 'next' | 'otherKind') => new Map(countCategories(matches, categories, photos, { minScore: 0, margin: 0.1 }, over).categories.map((c) => [c.category.id, c]));
+    expect(byId('next').get('parking')!.trashable).toEqual([]);
+    expect(byId('next').get('parking')!.closeCalls).toBe(2);
+    expect(byId('otherKind').get('parking')!.trashable).toEqual([{ mediaKey: 'ticket', score: expect.closeTo(0.63, 5), lead: expect.closeTo(0.53, 5) }]);
+    expect(byId('otherKind').get('parking')!.justMissed.map((p) => p.mediaKey)).toEqual(['selfie']);
+    expect(byId('otherKind').get('people')!.trashable.map((p) => p.mediaKey)).toEqual(['party']);
+    expect(scoreSpread(matches, 'otherKind').map((s) => s.lead)).toEqual([0.02, 0.53, 0.7].map((x) => expect.closeTo(x, 5)));
+    expect(photoBreakdown(descriptionScores(v(0.5, 0.55, 0.1), scored), scored, null, 'otherKind', 1).heading).toBe('Parking spots, 0.530 ahead of People');
+    expect(photoBreakdown(descriptionScores(v(0.2, 0.1, 0.9), scored), scored, null, 'otherKind', 1).heading).toBe('People, 0.700 ahead of Parking spots');
+  });
+
+  it('the lead over the other kind is never smaller, so it only adds photos', () => {
+    for (const vector of [v(0.5, 0.55, 0.1), v(0.6, 0, 0.58), v(0.2, 0.1, 0.9), v(0.3, 0.3, 0.3), v(0, 1, 0), v(0.1, 0.9, 0.85)]) {
+      const m = match('p', vector);
+      expect(leadOf(m, 'otherKind')).toBeGreaterThanOrEqual(leadOf(m, 'next'));
+    }
+  });
+
+  it('refuses to match without both kinds of category', () => {
+    const clutterOnly = scored.slice(0, 2);
+    expect(() => matchPhoto('p', descriptionScores(v(1, 0, 0), clutterOnly), clutterOnly, null)).toThrow('both clutter categories and counterweights');
+  });
+
+  it('just missed: trashable close calls only, largest lead first', () => {
+    // Parking leads receipts by 0.10, 0.05, 0.07, 0.02 and 0.01.
+    const leads = [0.1, 0.05, 0.07, 0.02, 0.01];
+    const matches = leads.map((lead, i) => ({ mediaKey: `m${i}`, best: 0, bestScore: 0.7, secondScore: 0.7 - lead, otherKindScore: 0 }));
+    const photos = new Map<string, ClutterPhoto>([
+      ['m0', trashable],
+      ['m1', trashable],
+      ['m2', { eligible: false, approved: false }],
+      ['m3', { eligible: true, approved: true }],
+      ['m4', trashable],
+    ]);
+    const parkingCount = countCategories(matches, categories, photos, { minScore: 0, margin: 0.08 }, 'next').categories.find((c) => c.category.id === 'parking')!;
+    expect(parkingCount.trashable.map((p) => p.mediaKey)).toEqual(['m0']);
+    expect(parkingCount.closeCalls).toBe(4);
+    // m2 is protected and m3 already queued: never shown as just missed.
+    expect(parkingCount.justMissed.map((p) => p.mediaKey)).toEqual(['m1', 'm4']);
+  });
+
+  it('samples a category from both ends of its scores and both sides of the minimum lead', () => {
+    const photo = (mediaKey: string, score: number, lead: number) => ({ mediaKey, score, lead });
+    const count = {
+      category: parking,
+      // Best score first, as counted.
+      trashable: [photo('a', 0.9, 0.3), photo('b', 0.8, 0.05), photo('c', 0.7, 0.2), photo('d', 0.6, 0.1), photo('e', 0.5, 0.04)],
+      protectedOrUnknown: 0,
+      approved: 0,
+      closeCalls: 3,
+      justMissed: [photo('x', 0.7, 0.03), photo('y', 0.6, 0.02), photo('z', 0.9, 0.01)],
+    };
+    const samples = categorySamples(count, 2);
+    expect(samples.strongest.map((p) => p.mediaKey)).toEqual(['a', 'b']);
+    expect(samples.weakest.map((p) => p.mediaKey)).toEqual(['d', 'e']);
+    expect(samples.justCounted.map((p) => p.mediaKey)).toEqual(['e', 'b']);
+    expect(samples.justMissed.map((p) => p.mediaKey)).toEqual(['x', 'y']);
+    // Counted order is left alone.
+    expect(count.trashable.map((p) => p.mediaKey)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    // Too few for both ends: the weakest don't repeat the strongest.
+    expect(categorySamples(count, 3).weakest.map((p) => p.mediaKey)).toEqual(['d', 'e']);
+    expect(photoCaption(photo('a', 6.3491, 1.2))).toBe('6.349 · lead 1.2000');
+    // Just under a minimum lead of 0.02: shown as under it, never rounded up to it.
+    expect(photoCaption(photo('b', 0.663, 0.019996))).toBe('0.663 · lead 0.0199');
+    expect(photoCaption(photo('b', 0.663, 0.02))).toBe('0.663 · lead 0.0200');
+    expect(photoCaption(photo('b', 0.663, 0.0123))).toBe('0.663 · lead 0.0123');
+  });
+
   it('suggests only clutter categories with enough photos, largest first', () => {
     const matches = [
-      ...['p1', 'p2', 'p3'].map((k) => matchPhoto(k, v(1, 0, 0), scored)),
-      ...['r1', 'r2'].map((k) => matchPhoto(k, v(0, 1, 0), scored)),
-      ...['f1', 'f2', 'f3', 'f4'].map((k) => matchPhoto(k, v(0, 0, 1), scored)),
+      ...['p1', 'p2', 'p3'].map((k) => match(k, v(1, 0, 0))),
+      ...['r1', 'r2'].map((k) => match(k, v(0, 1, 0))),
+      ...['f1', 'f2', 'f3', 'f4'].map((k) => match(k, v(0, 0, 1))),
     ];
     const photos = new Map(matches.map((m) => [m.mediaKey, trashable]));
-    const counts = countCategories(matches, categories, photos, { minScore: 0, margin: 0 });
+    const counts = countCategories(matches, categories, photos, { minScore: 0, margin: 0 }, 'next');
     expect(counts.categories.map((c) => c.category.id)).toEqual(['people', 'parking', 'receipts']);
     expect(suggestions(counts, 2).map((c) => c.category.id)).toEqual(['parking', 'receipts']);
     expect(suggestions(counts, 3).map((c) => c.category.id)).toEqual(['parking']);
   });
 
   it('reports the spread of scores and leads, to choose the settings', () => {
-    const matches = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map((s, i) => ({ mediaKey: `${i}`, best: 0, bestScore: s, secondScore: s / 2 }));
-    expect(scoreSpread(matches)).toEqual([
+    const matches = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map((s, i) => ({ mediaKey: `${i}`, best: 0, bestScore: s, secondScore: s / 2, otherKindScore: 0 }));
+    expect(scoreSpread(matches, 'next')).toEqual([
       { fraction: 0.1, bestScore: 0.2, lead: 0.1 },
       { fraction: 0.5, bestScore: 0.6, lead: 0.3 },
       { fraction: 0.9, bestScore: 1.0, lead: 0.5 },
     ]);
-    expect(scoreSpread([])).toEqual([]);
+    expect(scoreSpread([], 'next')).toEqual([]);
+  });
+
+  it('breaks a photo down by category, best first, with the description each scored as', () => {
+    expect(photoBreakdown(descriptionScores(v(0.5, 0.5, 0), scored), scored, null, 'next', 2)).toEqual({
+      heading: 'Parking spots, 0.100 ahead of Receipts',
+      rows: [
+        { label: 'Parking spots', kind: 'clutter', score: '0.600', description: 'a parking space number' },
+        { label: 'Receipts', kind: 'clutter', score: '0.500', description: 'a receipt' },
+      ],
+      more: '1 more category scored lower',
+    });
+    expect(photoBreakdown(descriptionScores(v(0.1, 0.2, 0.9), scored), scored, null, 'next', 3)).toMatchObject({ heading: 'People, 0.700 ahead of Receipts', more: null });
+  });
+
+  it('puts first the category the photo was matched to, ties included', () => {
+    for (const vector of [v(0.5, 0.5, 0), v(0.1, 0.2, 0.9), v(0, 1, 0), v(0, 0, 0), v(0.3, 0.3, 0.3)]) {
+      const best = scored[match('p', vector).best]!.category.label;
+      expect(photoBreakdown(descriptionScores(vector, scored), scored, null, 'next', 1).rows[0]!.label).toBe(best);
+    }
+  });
+
+  // Scores per description, in the order parking (2), receipts, people. Parking's first description
+  // scores about 0.70 on every photo; people's scores vary much more.
+  const library = [
+    v(0.70, 0.1, 0.3, 0.40),
+    v(0.68, 0.2, 0.1, 0.50),
+    v(0.70, 0.1, 0.2, 0.45),
+    // A selfie in a car park: raw, parking's always-high description wins; evened out, people does.
+    v(0.72, 0.2, 0.2, 0.65),
+  ];
+
+  it("measures each description's average and spread over the library", () => {
+    const norms = descriptionNorms(library);
+    expect([...norms.mean]).toEqual([0.7, 0.15, 0.2, 0.5].map((x) => expect.closeTo(x, 5)));
+    expect([...norms.spread]).toEqual([Math.sqrt(0.0002), 0.05, Math.sqrt(0.005), Math.sqrt(0.00875)].map((x) => expect.closeTo(x, 5)));
+  });
+
+  it('evened out, a description that scores high on every photo no longer wins by default', () => {
+    const selfie = library[3]!;
+    expect(matchPhoto('selfie', selfie, scored, null)).toMatchObject({ best: 0, bestScore: expect.closeTo(0.72, 5), secondScore: expect.closeTo(0.65, 5) });
+    const norms = descriptionNorms(library);
+    // People: 0.15 above its average of 0.5, 1.60 spreads; parking: 0.02 above 0.70, 1.41 spreads.
+    expect(matchPhoto('selfie', selfie, scored, norms)).toMatchObject({ best: 2, bestScore: expect.closeTo(0.15 / Math.sqrt(0.00875), 4), secondScore: expect.closeTo(Math.SQRT2, 4) });
+    expect(photoBreakdown(selfie, scored, norms, 'next', 2)).toMatchObject({
+      heading: 'People, 0.189 ahead of Parking spots',
+      rows: [
+        { label: 'People', score: '1.604', description: 'a group of people' },
+        { label: 'Parking spots', score: '1.414', description: 'a car park' },
+      ],
+    });
+    for (const [i, row] of library.entries()) {
+      const best = scored[matchPhoto(`${i}`, row, scored, norms).best]!.category.label;
+      expect(photoBreakdown(row, scored, norms, 'next', 1).rows[0]!.label).toBe(best);
+    }
+  });
+
+  it('refuses to even out what it cannot, and scores that do not fit the categories', () => {
+    expect(() => descriptionNorms([library[0]!])).toThrow('at least two photos');
+    expect(() => descriptionNorms([library[0]!, v(0.7, 0.1, 0.3)])).toThrow('different descriptions');
+    expect(() => descriptionNorms([v(0.7, 0.1, 0.3, 0.4), v(0.7, 0.2, 0.1, 0.5)])).toThrow('Description 0 scores every photo the same');
+    expect(() => matchPhoto('p', v(0.7, 0.1, 0.3), scored, null)).toThrow("don't fit");
+    expect(() => matchPhoto('p', library[0]!, scored, descriptionNorms([v(1, 2), v(2, 1)]))).toThrow("don't fit");
+  });
+
+  it('lists every category once, clutter first, with a summary', () => {
+    const list = categoryList(categories);
+    expect(list.summary).toBe('2 clutter categories and 1 counterweight');
+    expect(list.groups.map((g) => [g.title, g.count, g.categories.map((c) => c.id)])).toEqual([
+      ['Clutter', 2, ['parking', 'receipts']],
+      ['Counterweights', 1, ['people']],
+    ]);
+    const shipped = categoryList(CATEGORIES).groups.flatMap((g) => g.categories);
+    expect(shipped).toHaveLength(CATEGORIES.length);
+    expect(new Set(shipped)).toEqual(new Set(CATEGORIES));
+  });
+
+  it('splits the counts into suggestions, too few to suggest, and counterweights', () => {
+    const matches = [
+      ...['p1', 'p2', 'p3'].map((k) => match(k, v(1, 0, 0))),
+      ...['r1'].map((k) => match(k, v(0, 1, 0))),
+      ...['f1', 'f2', 'f3', 'f4'].map((k) => match(k, v(0, 0, 1))),
+    ];
+    const photos = new Map(matches.map((m) => [m.mediaKey, trashable]));
+    const sections = countSections(countCategories(matches, categories, photos, { minScore: 0, margin: 0 }, 'next'), 2);
+    expect(sections.suggested.map((c) => c.category.id)).toEqual(['parking']);
+    expect(sections.tooFew).toBe('Too few to suggest: Receipts · 1');
+    // Counterweights are never suggested, however many photos they hold.
+    expect(sections.counterweights.map((c) => c.category.id)).toEqual(['people']);
+    expect(countSections(countCategories(matches, categories, photos, { minScore: 0, margin: 0 }, 'next'), 1).tooFew).toBeNull();
   });
 
   it('ships both kinds, with unique ids and descriptions', () => {
     expect(new Set(CATEGORIES.map((c) => c.id)).size).toBe(CATEGORIES.length);
     expect(CATEGORIES.some((c) => c.kind === 'clutter')).toBe(true);
-    expect(CATEGORIES.some((c) => c.kind === 'keep')).toBe(true);
+    expect(CATEGORIES.some((c) => c.kind === 'counterweight')).toBe(true);
     // People are always a counterweight, never clutter.
-    expect(CATEGORIES.find((c) => c.id === 'people')?.kind).toBe('keep');
+    expect(CATEGORIES.find((c) => c.id === 'people')?.kind).toBe('counterweight');
     const descriptions = CATEGORIES.flatMap((c) => c.descriptions);
     expect(descriptions.every((d) => d.trim().length > 0)).toBe(true);
     expect(new Set(descriptions).size).toBe(descriptions.length);

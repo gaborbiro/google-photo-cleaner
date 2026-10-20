@@ -108,13 +108,11 @@ function Diagnostics({ scan, analysis }: { scan: ScanJob | null; analysis: Analy
   };
   return (
     <div className="diagnostics">
-      <div className="report-actions">
-        <button className="small" disabled={text === null} onClick={copy} title="For a problem report: no photos, album names or account details">{copied ? 'Copied' : 'Copy diagnostics'}</button>
-      </div>
+      <button className="small" disabled={text === null} onClick={copy} title="For a problem report: no photos, album names or account details">{copied ? 'Copied' : 'Copy diagnostics'}</button>
       {text !== null && (
         <details onToggle={(e) => setUnfolded(e.currentTarget.open)}>
           <summary>What it copies</summary>
-          {unfolded && <textarea className="mono" readOnly rows={10} style={{ width: '100%' }} aria-label="Diagnostics" value={text} />}
+          {unfolded && <textarea className="mono" readOnly rows={12} aria-label="Diagnostics" value={text} />}
         </details>
       )}
     </div>

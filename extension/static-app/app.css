@@ -201,6 +201,18 @@ details.protection[open] > summary { border-bottom: 1px solid var(--pc-border); 
 .protection-report .report-lines .report-detail { margin-left: auto; font-size: 12px; opacity: 0.75; }
 .report-actions { border-top: 1px solid var(--pc-border); padding-top: var(--space-3); }
 
+/* Copy diagnostics: the button, and below it, set apart, what it copies (folded). */
+.diagnostics { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); margin-top: var(--space-2); }
+.diagnostics details { align-self: stretch; }
+.diagnostics summary { width: fit-content; padding: var(--space-1) 0; font-size: 14px; color: var(--pc-muted); cursor: pointer; user-select: none; }
+.diagnostics summary:hover { color: var(--pc-text); }
+.diagnostics textarea {
+  display: block; box-sizing: border-box; width: 100%; margin-top: var(--space-2); padding: var(--space-2) var(--space-3);
+  font-size: 13px; line-height: 19px; color: var(--pc-text); background: var(--pc-bg);
+  border: 1px solid var(--pc-border); border-radius: var(--radius-control); resize: vertical;
+}
+.diagnostics-card .diagnostics { margin-top: 0; }
+
 table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; border-bottom: 1px solid var(--pc-border); padding: 8px 0; vertical-align: top; }
 th { color: var(--pc-muted); font-weight: 400; }

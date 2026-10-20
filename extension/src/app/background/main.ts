@@ -3,12 +3,13 @@
 // Photos tabs, and opens the app's tabs. Job state lives in the job store.
 
 import type { OpError, OpResult, PageOp, TabCommand } from '../../shared/protocol';
-import { resumeWaitingForPhotos } from '../shared/actions';
+import { pauseRunningJobs, resumeWaitingForPhotos } from '../shared/actions';
 import { CHANGES_CHANNEL } from '../shared/constants';
 import { eraseAllData } from '../shared/erase';
 import { plainMessage } from '../shared/errors';
 import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, tabProblem } from '../shared/googleProblems';
-import { keepProblemsHere } from '../shared/problemLog';
+import { ENGINE_FAILED_TEXT } from '../shared/job';
+import { keepProblemsHere, problemsSaved, recordUnexpectedReport } from '../shared/problemLog';
 import { IndexedDbJobStore } from '../shared/store';
 import { isAppRequest, reviewUrl, type AccountAnswer, type AppRequest, type ReviewTab, type TabRequest } from '../shared/messages';
 
@@ -201,6 +202,28 @@ async function wakeEngineIfWorkLeft(): Promise<void> {
   if (jobs.some((job) => job.status === 'running')) await wakeEngine();
 }
 
+/**
+ * An error nobody caught in the background page (from engine/guard.ts) goes to the problem log. If
+ * the page never got going, its jobs would wait for it forever: they pause, saying so, and the page
+ * is closed, so that Resume starts a new one.
+ */
+async function engineError(started: boolean, message: string, stack: string | null): Promise<void> {
+  console.error(`Photo Cleaner: ${started ? 'an error in the background page' : 'the background page could not start'}`, message);
+  recordUnexpectedReport(started ? 'background page: error' : 'background page: could not start', message, stack);
+  if (!started) {
+    await pauseRunningJobs(store, ENGINE_FAILED_TEXT, Date.now());
+    if (await engineRunning()) await chrome.offscreen.closeDocument();
+  }
+  await problemsSaved();
+}
+
+/** The background page stopped responding (the user pressed Restart): a new one carries on from the saved positions. */
+async function restartEngine(): Promise<void> {
+  console.warn('Photo Cleaner: restarting the background page, which stopped responding');
+  if (await engineRunning()) await chrome.offscreen.closeDocument();
+  await wakeEngine();
+}
+
 async function closeEngineIfIdle(): Promise<void> {
   const jobs = await store.all();
   if (!jobs.some((job) => job.status === 'running') && (await engineRunning())) await chrome.offscreen.closeDocument();
@@ -326,6 +349,12 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
       return true;
     case 'app-engine-idle':
       await closeEngineIfIdle();
+      return true;
+    case 'app-engine-error':
+      await engineError(request.started, request.message, request.stack);
+      return true;
+    case 'app-restart-engine':
+      await restartEngine();
       return true;
     case 'app-run-op':
       return runOp(request.account, request.op, request.params);

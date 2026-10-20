@@ -628,6 +628,27 @@ describe('clicks and keys reach what they should', () => {
     }
   });
 
+  it('a scan whose background page shows no sign of life says it is not responding; Restart asks for a new page and keeps the problem', async () => {
+    const jobs = new IndexedDbJobStore(indexedDB);
+    await jobs.update(jobId('library-scan', 'account-a'), () => startScanJob('account-a', NOW - 120_000)); // nothing since
+    for (const page of ['popup', 'review'] as const) {
+      const root = await open(page, page === 'review' ? '?account=account-a' : '');
+      await shows(root, 'Scan not responding', "Photo Cleaner's background work stopped responding", 'Not responding');
+      await ready(root.querySelector<HTMLElement>('.scan-step')!, 'Copy diagnostics');
+      if (page === 'popup') {
+        for (const r of roots.splice(0)) r.unmount();
+        vi.resetModules();
+      }
+    }
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await click(document.getElementById('root')!, 'Restart');
+    await vi.waitFor(() => expect(requests('app-restart-engine')).toHaveLength(1));
+    expect(await jobs.get(jobId('library-scan', 'account-a'))).toMatchObject({ status: 'running' });
+    expect((await jobs.get(jobId('library-scan', 'account-a')))!.aliveAtMs).toBeGreaterThanOrEqual(NOW);
+    await vi.waitFor(async () => expect(await new IndexedDbProblemLog(indexedDB).recent(NOW)).toMatchObject([{ where: 'scan: background page not responding', kind: 'UNEXPECTED' }]));
+    await shows(document.getElementById('root')!, 'Scanning');
+  });
+
   it('popup and panel: a stopped scan offers Copy diagnostics too', async () => {
     const line = await stoppedAtAlbums();
     for (const page of ['popup', 'panel'] as const) {

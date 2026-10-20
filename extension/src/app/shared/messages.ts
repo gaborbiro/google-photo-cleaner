@@ -11,6 +11,13 @@ export type AppRequest =
   | { kind: 'app-wake-engine' }
   /** The background page has nothing left to run and may be closed. */
   | { kind: 'app-engine-idle' }
+  /**
+   * From the background page's guard (engine/guard.ts): an error nobody caught there, as it was
+   * thrown (the service worker scrubs it before keeping it). [started]: whether the page had got going.
+   */
+  | { kind: 'app-engine-error'; started: boolean; message: string; stack: string | null }
+  /** The background page stopped responding: close it and start a new one, which carries on from the saved positions. */
+  | { kind: 'app-restart-engine' }
   /** Gentle mode: has the keyboard or mouse been used in the last minute? Answers 'active', 'idle' or 'locked'. */
   | { kind: 'app-idle-state' }
   /**

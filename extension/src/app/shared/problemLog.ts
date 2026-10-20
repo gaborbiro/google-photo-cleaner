@@ -128,16 +128,24 @@ const MAX_STACK_LINES = 8;
 
 /** An error in Photo Cleaner itself, in [where]: its message and where in the code, both scrubbed. */
 export function recordUnexpected(where: string, error: unknown, nowMs = Date.now()): void {
-  const stack = error instanceof Error && error.stack ? scrubbed(error.stack.split('\n').slice(1, 1 + MAX_STACK_LINES).map((l) => l.trim()).join('\n')) : null;
+  recordUnexpectedReport(where, error instanceof Error ? `${error.name}: ${error.message}` : 'Not an Error', error instanceof Error ? error.stack ?? null : null, nowMs);
+}
+
+/**
+ * An error in Photo Cleaner itself, as another page reported it ([message], and [stack] as Chrome
+ * writes it, starting with the message line): both scrubbed before they are kept.
+ */
+export function recordUnexpectedReport(where: string, message: string, stack: string | null, nowMs = Date.now()): void {
+  const frames = stack === null ? [] : stack.split('\n').slice(1, 1 + MAX_STACK_LINES).map((l) => l.trim()).filter((l) => l !== '');
   recordProblem({
     where,
     kind: 'UNEXPECTED',
-    message: error instanceof Error ? scrubbed(`${error.name}: ${error.message}`) : 'Not an Error',
+    message: scrubbed(message),
     rpcCode: null,
     httpStatus: null,
     request: null,
     answer: null,
-    stack,
+    stack: frames.length > 0 ? scrubbed(frames.join('\n')) : null,
   }, nowMs);
 }
 

@@ -175,7 +175,7 @@ body.popup .scan-title, body.panel .scan-title { flex-direction: column; align-i
 .is-running > .step-heading .step-status { color: var(--pc-accent); }
 .is-complete > .step-heading .step-number, .is-complete > .step-heading .step-status { color: var(--pc-keep); }
 .is-paused > .step-heading .step-status, .is-stale > .step-heading .step-status { color: var(--pc-amber); }
-.is-failed > .step-heading .step-status { color: var(--pc-trash); }
+.is-failed > .step-heading .step-status, .is-stalled > .step-heading .step-status { color: var(--pc-trash); }
 .step-body { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); min-width: 0; overflow-wrap: anywhere; }
 body.popup .scan-step, body.panel .scan-step { padding: var(--space-3); }
 

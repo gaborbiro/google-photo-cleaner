@@ -20,6 +20,19 @@ const review = new IndexedDbReviewStore();
 const problems = new IndexedDbProblemLog();
 keepProblemsHere();
 
+/**
+ * The time now, again every [everyMs]: what is shown can change without any saved change (a
+ * background page that stopped responding saves nothing).
+ */
+export function useClock(everyMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(timer);
+  }, [everyMs]);
+  return now;
+}
+
 /** The problem log, newest first, kept up to date; undefined while loading. */
 export function useProblems(): ProblemEntry[] | undefined {
   const [entries, setEntries] = useState<ProblemEntry[] | undefined>(undefined);

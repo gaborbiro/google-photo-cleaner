@@ -3,6 +3,9 @@
 export const APP_PAGE_CHANNEL = 'photo-cleaner-app';
 export const APP_PAGE_OWNER_KEY = '__photoCleanerAppPageId';
 
+/** Set on the background page's window once its code has started (read by engine/guard.ts). */
+export const ENGINE_STARTED_KEY = '__photoCleanerEngineStarted';
+
 /** BroadcastChannel on which the background page announces saved changes to all open surfaces. */
 export const CHANGES_CHANNEL = 'photo-cleaner-app-changes';
 

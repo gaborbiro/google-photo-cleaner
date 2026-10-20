@@ -33,6 +33,7 @@ const gptkNotice = '/*! Includes code from Google Photos Toolkit (https://github
   await bundle({ entryPoints: { background: 'src/app/background/main.ts' }, outdir, format: 'esm' });
   // The background page holds the AI model; its runtime is packed in, because extensions may not
   // load code from the internet. The WebGPU backend uses the "asyncify" build of ONNX Runtime.
+  await bundle({ entryPoints: { 'engine-guard': 'src/app/engine/guard.ts' }, outdir, format: 'iife' });
   await bundle({ entryPoints: { engine: 'src/app/engine/main.ts' }, outdir, format: 'esm' });
   // Search's AI model for descriptions, loaded by the review tab on its first text search.
   await bundle({ entryPoints: { 'search-ai': 'src/app/search/textModel.ts' }, outdir, format: 'esm' });

@@ -143,6 +143,14 @@ for 60 days.
 3. A database update with an old page still open: load a build with a newer database version while
    an old review tab is open. A message says to reload Google Photos tabs and close other Photo
    Cleaner tabs; after that it carries on by itself.
+4. The background page dying mid-scan: `chrome://extensions` → Photo Cleaner → Inspect views
+   `engine.html`, and in its console type `close()`. Within about 90 s the Scan card says "Scan not
+   responding" with **Restart** and Copy diagnostics; Restart carries on from where it was, and
+   Copy diagnostics lists "scan: background page not responding".
+5. The background page failing to start (pretended): while a scan runs, type in that console
+   `__photoCleanerEngineStarted = false; setTimeout(() => { throw new Error('test') })`. The scan
+   pauses with "Photo Cleaner's background work couldn't start…", the background page closes, and
+   Copy diagnostics lists "background page: could not start" with "Error: test". Resume carries on.
 
 ## 8. When Google Photos changes
 

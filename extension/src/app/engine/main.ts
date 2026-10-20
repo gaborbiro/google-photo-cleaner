@@ -12,7 +12,8 @@ import { refreshReviewSummary } from '../duplicates/session';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { runScan } from '../scan/session';
 import { OpPhotosSource } from '../scan/source';
-import { endJob, jobId, reportProgress, startAnalysisJob, type AnalysisJob, type Job, type ScanJob } from '../shared/job';
+import { ENGINE_STARTED_KEY } from '../shared/constants';
+import { ALIVE_EVERY_MS, endJob, jobId, markAlive, reportProgress, startAnalysisJob, type AnalysisJob, type Job, type ScanJob } from '../shared/job';
 import { keepProblemsHere, problemsSaved, recordUnexpected } from '../shared/problemLog';
 import { IndexedDbJobStore, onJobsChanged } from '../shared/store';
 
@@ -141,6 +142,20 @@ async function check(): Promise<void> {
   }
 }
 
+/**
+ * Every running job this page has in hand says so now and then, also while it waits (a rate limit,
+ * gentle mode, the model download): without it, the surfaces show the job as not responding (see
+ * notResponding in shared/job.ts).
+ */
+setInterval(() => {
+  for (const id of active) {
+    jobs.update(id, (j) => (j ? markAlive(j, Date.now()) : null)).catch((error: unknown) => console.warn('Photo Cleaner: could not say a job is still running', error));
+  }
+}, ALIVE_EVERY_MS);
+
 // A job started or resumed anywhere is picked up straight away.
 onJobsChanged(() => void check());
 void check();
+
+// For the guard (engine/guard.ts): from here on, an error no longer means the page couldn't start.
+(globalThis as Record<string, unknown>)[ENGINE_STARTED_KEY] = true;

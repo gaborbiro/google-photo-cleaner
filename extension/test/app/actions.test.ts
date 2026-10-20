@@ -1,8 +1,9 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
-import { pause, resume, resumeWaitingForPhotos, scanButton, setAnalysisFullSpeed, startAnalysis, startScan } from '../../src/app/shared/actions';
-import { endJob, jobId, NO_PROGRESS, reportProgress } from '../../src/app/shared/job';
+import { pause, pauseRunningJobs, resume, resumeWaitingForPhotos, scanButton, setAnalysisFullSpeed, startAnalysis, startScan } from '../../src/app/shared/actions';
+import { endJob, ENGINE_FAILED_TEXT, jobId, NO_PROGRESS, reportProgress } from '../../src/app/shared/job';
+import { keepProblems, problemsSaved, type ProblemEntry } from '../../src/app/shared/problemLog';
 import type { AppRequest } from '../../src/app/shared/messages';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
 
@@ -121,5 +122,31 @@ describe('analysis actions', () => {
     await pause(store, 'analysis', 'acc1', 2_000);
     expect((await store.get(jobId('analysis', 'acc1')))?.status).toBe('paused');
     expect((await store.get(jobId('library-scan', 'acc1')))?.status).toBe('running');
+  });
+});
+
+describe('when the background page fails', () => {
+  it("Restart keeps the problem, marks the job in hand again, and asks for a new background page", async () => {
+    const store = new IndexedDbJobStore(new IDBFactory());
+    const { sent, send } = recorder();
+    const saved: ProblemEntry[] = [];
+    keepProblems({ add: async (entry) => void saved.push(entry) }, '1.0.0');
+    await startScan(store, send, 'acc1', 1_000);
+    await scanButton({ action: 'restart-engine', target: 'library-scan' }, store, send, 'acc1', 200_000);
+    await problemsSaved();
+    expect(await store.get(scanOf('acc1'))).toMatchObject({ status: 'running', aliveAtMs: 200_000 });
+    expect(sent).toEqual([{ kind: 'app-wake-engine' }, { kind: 'app-restart-engine' }]);
+    expect(saved).toMatchObject([{ where: 'scan: background page not responding', kind: 'UNEXPECTED', message: 'No sign of life for over 90 s; restarted by the user', atMs: 200_000 }]);
+  });
+
+  it('a page that could not start pauses only the running jobs, saying why', async () => {
+    const store = new IndexedDbJobStore(new IDBFactory());
+    const { send } = recorder();
+    await startScan(store, send, 'acc1', 1_000);
+    await startScan(store, send, 'acc2', 1_000);
+    await pause(store, 'library-scan', 'acc2', 1_500);
+    expect(await pauseRunningJobs(store, ENGINE_FAILED_TEXT, 2_000)).toBe(1);
+    expect(await store.get(scanOf('acc1'))).toMatchObject({ status: 'paused', resumeWhenPhotosOpen: false, progress: { notice: ENGINE_FAILED_TEXT } });
+    expect(await store.get(scanOf('acc2'))).toMatchObject({ status: 'paused', progress: { notice: null } });
   });
 });

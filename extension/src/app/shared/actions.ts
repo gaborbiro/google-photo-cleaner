@@ -2,9 +2,10 @@
 // the service worker is then asked to make sure the background page is running.
 
 import { NO_ANALYSIS } from '../ai/analysis';
-import { jobId, pauseJob, resumeIfWaitingForPhotos, resumeJob, setFullSpeed, startAnalysisJob, startScanJob, type Job, type JobKind } from './job';
+import { endJob, jobId, markAlive, NOT_RESPONDING_AFTER_MS, pauseJob, resumeIfWaitingForPhotos, resumeJob, setFullSpeed, startAnalysisJob, startScanJob, type Job, type JobKind } from './job';
 import type { AppRequest } from './messages';
 import type { ScanView } from './jobView';
+import { recordProblem } from './problemLog';
 import type { JobStore } from './store';
 
 export type Send = (request: AppRequest) => Promise<unknown>;
@@ -34,6 +35,8 @@ export function scanButton(view: Pick<ScanView, 'action' | 'target'>, store: Job
       return pause(store, view.target, account, nowMs);
     case 'resume':
       return resume(store, send, view.target, account, nowMs);
+    case 'restart-engine':
+      return restartEngine(store, send, view.target, account, nowMs);
   }
 }
 
@@ -62,6 +65,33 @@ export async function resumeWaitingForPhotos(store: JobStore, account: string, n
     });
   }
   return resumed;
+}
+
+/** The background page couldn't start: every running job pauses, saying why (resumable). Returns how many did. */
+export async function pauseRunningJobs(store: JobStore, notice: string, nowMs: number): Promise<number> {
+  let paused = 0;
+  for (const job of await store.all()) {
+    if (job.status !== 'running') continue;
+    await store.update(job.id, (current) => (current?.status === 'running' ? endJob(current, 'paused', notice, nowMs) : current));
+    paused++;
+  }
+  return paused;
+}
+
+/**
+ * Restart on a job whose background page stopped responding: kept in the problem log, then the
+ * service worker starts a new page, which carries on from the saved position.
+ */
+export async function restartEngine(store: JobStore, send: Send, kind: JobKind, account: string, nowMs: number): Promise<Job | null> {
+  recordProblem({
+    where: `${kind === 'library-scan' ? 'scan' : 'analysis'}: background page not responding`,
+    kind: 'UNEXPECTED',
+    message: `No sign of life for over ${NOT_RESPONDING_AFTER_MS / 1000} s; restarted by the user`,
+    rpcCode: null, httpStatus: null, request: null, answer: null, stack: null,
+  }, nowMs);
+  const saved = await store.update(jobId(kind, account), (job) => (job ? markAlive(job, nowMs) : null));
+  await send({ kind: 'app-restart-engine' });
+  return saved;
 }
 
 export function setAnalysisFullSpeed(store: JobStore, account: string, fullSpeed: boolean, nowMs: number): Promise<Job | null> {

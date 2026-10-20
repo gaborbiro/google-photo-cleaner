@@ -7,7 +7,7 @@ import { MODEL_DOWNLOAD_BYTES } from '../ai/model';
 import { SCAN_MAX_AGE_MS, type ReportView } from '../scan/report';
 import { count, n } from './format';
 import { googleProblemLine } from './googleProblems';
-import type { AnalysisJob, Job, JobKind, ScanJob } from './job';
+import { NOT_RESPONDING_TEXT, notResponding, type AnalysisJob, type Job, type JobKind, type ScanJob } from './job';
 import type { AccountAnswer, ReviewTab } from './messages';
 import type { ReviewSummary } from '../duplicates/reviewStore';
 import type { ProtectionChoices } from './preferences';
@@ -38,7 +38,8 @@ interface ScanSummary {
   notice: string | null;
   /** "Started 14:02 · last step 14:03" while reading the photo list. */
   timesText: string | null;
-  action: 'start' | 'pause' | 'resume' | 'restart';
+  /** restart-engine: the background page stopped responding; a new one carries on. */
+  action: 'start' | 'pause' | 'resume' | 'restart' | 'restart-engine';
   actionLabel: string;
   /** Which of the two saved jobs the button acts on. */
   target: JobKind;
@@ -54,7 +55,8 @@ export interface ScanStepView {
   number: 1 | 2;
   title: string;
   description: string;
-  state: 'pending' | 'running' | 'paused' | 'failed' | 'complete' | 'stale';
+  /** stalled: running, but its background page stopped responding (see notResponding in job.ts). */
+  state: 'pending' | 'running' | 'stalled' | 'paused' | 'failed' | 'complete' | 'stale';
   statusText: string;
   phase: string | null;
   /** "Detail 140", the AI analysis's level of detail: shown quietly beside the protection details' scan times. */
@@ -128,14 +130,14 @@ export function scanView(scan: ScanJob | null, analysis: AnalysisJob | null, now
 
 function scanSummary(scan: ScanJob | null, analysis: AnalysisJob | null, nowMs: number, surface: ScanSurface): ScanSummary {
   if (scan === null) return { ...NONE, title: 'Not scanned yet', action: 'start', actionLabel: 'Scan library', target: 'library-scan', tabStatus: 'needed' };
-  if (scan.status !== 'finished') return readingView(scan, analysis?.fullSpeed ?? false);
+  if (scan.status !== 'finished') return readingView(scan, analysis?.fullSpeed ?? false, nowMs);
   return analysis === null
     ? { ...NONE, title: 'Photos not analysed yet', stage: 'Stage 2 of 2 · Analysing new photos', action: 'start', actionLabel: 'Analyse photos', target: 'analysis', tabStatus: 'needed', protectionKnown: true, fullSpeed: false }
     : analysingView(scan, analysis, nowMs, surface);
 }
 
 /** Stage 1: reading the photo list (the library scan). */
-function readingView(scan: ScanJob, fullSpeed: boolean): ScanSummary {
+function readingView(scan: ScanJob, fullSpeed: boolean, nowMs: number): ScanSummary {
   const p = scan.progress;
   const base = {
     ...NONE,
@@ -153,6 +155,7 @@ function readingView(scan: ScanJob, fullSpeed: boolean): ScanSummary {
   };
   switch (scan.status) {
     case 'running':
+      if (notResponding(scan, nowMs)) return { ...base, ...NOT_RESPONDING };
       return { ...base, title: 'Scanning', indeterminate: true, action: 'pause', actionLabel: 'Pause', tabStatus: 'scanning' };
     case 'paused':
       return { ...base, title: 'Scan paused', tone: 'caution', action: 'resume', actionLabel: 'Resume', tabStatus: 'needed' };
@@ -215,6 +218,7 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number, surface: 
   };
   switch (job.status) {
     case 'running':
+      if (notResponding(job, nowMs)) return { ...base, ...NOT_RESPONDING };
       return { ...base, title: 'Scanning', waiting: p.waiting, action: 'pause', actionLabel: 'Pause', tabStatus: 'scanning' };
     case 'paused':
       return { ...base, title: 'Scan paused', tone: 'caution', action: 'resume', actionLabel: 'Resume', tabStatus: 'needed' };
@@ -224,16 +228,24 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number, surface: 
 }
 
 const ANALYSIS_PHASES = { model: 'Getting the AI model ready (once)', 'speed-check': 'Checking this computer’s speed', analysing: 'Analysing new photos' };
-const STEP_STATUS = { pending: 'Not started', running: 'In progress', paused: 'Paused', failed: 'Stopped', complete: 'Complete', stale: 'Needs a refresh' };
+const STEP_STATUS = { pending: 'Not started', running: 'In progress', stalled: 'Not responding', paused: 'Paused', failed: 'Stopped', complete: 'Complete', stale: 'Needs a refresh' };
+
+/** A running stage whose background page stopped responding: say so, and offer to start a new one. */
+const NOT_RESPONDING = {
+  title: 'Scan not responding', tone: 'negative', notice: NOT_RESPONDING_TEXT, indeterminate: false, waiting: null,
+  action: 'restart-engine', actionLabel: 'Restart', tabStatus: 'needed',
+} as const;
 
 /** Keep the completed library report visible while analysis works, and never show old results as a new run's. */
 function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: ScanSummary, nowMs: number): [ScanStepView, ScanStepView] {
   const libraryReady = scan?.status === 'finished';
   const stale = libraryReady && nowMs - (scan.finishedAtMs ?? scan.updatedAtMs) > SCAN_MAX_AGE_MS;
-  const libraryState = stale ? 'stale' : scan?.status === 'finished' ? 'complete' : scan?.status ?? 'pending';
+  const scanStalled = scan !== null && notResponding(scan, nowMs);
+  const libraryState = stale ? 'stale' : scanStalled ? 'stalled' : scan?.status === 'finished' ? 'complete' : scan?.status ?? 'pending';
   const analysisReady = libraryReady && analysis !== null;
-  const analysisState = analysisReady ? (analysis.status === 'finished' ? 'complete' : analysis.status) : 'pending';
-  const library = scan ? readingView(scan, false) : null;
+  const analysisStalled = analysisReady && notResponding(analysis, nowMs);
+  const analysisState = analysisReady ? (analysis.status === 'finished' ? 'complete' : analysisStalled ? 'stalled' : analysis.status) : 'pending';
+  const library = scan ? readingView(scan, false, nowMs) : null;
   const detail = analysis?.progress.detail;
   const detailText = detail !== undefined && detail !== null ? `Detail ${detail}` : null;
   const supportLines = [scan?.progress.googleProblem, analysis?.progress.googleProblem]
@@ -253,11 +265,11 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       detailText,
       supportLines,
       problemLines: scanStopped && !libraryReady ? problemLine(scan) : [],
-      diagnostics: scanStopped,
+      diagnostics: scanStopped || scanStalled,
       // Once read, the report supplies the final counts; don't keep the live counters above it.
       lines: libraryReady ? [] : library?.lines ?? [],
-      indeterminate: scan?.status === 'running',
-      notice: stale ? 'More than a day old: check for new photos before anything can be trashed.' : scan?.progress.notice ?? null,
+      indeterminate: scan?.status === 'running' && !scanStalled,
+      notice: stale ? 'More than a day old: check for new photos before anything can be trashed.' : scanStalled ? NOT_RESPONDING_TEXT : scan?.progress.notice ?? null,
       timesText: libraryReady ? checkedText(scan.finishedAtMs ?? scan.updatedAtMs, nowMs) : library?.timesText ?? null,
       protectionKnown: libraryReady,
     },
@@ -273,11 +285,11 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       supportLines: [],
       // Its line is in step 1's protection details, which are shown by then.
       problemLines: [],
-      diagnostics: analysisStopped,
+      diagnostics: analysisStopped || analysisStalled,
       lines: analysisReady ? (analysis.status === 'finished' ? [summary.lines[0]] : summary.lines) : [],
       percent: analysisReady ? summary.percent : null,
       waiting: analysisReady ? summary.waiting : 'Starts automatically after step 1.',
-      notice: analysisReady ? analysis.progress.notice : null,
+      notice: analysisStalled ? NOT_RESPONDING_TEXT : analysisReady ? analysis.progress.notice : null,
       fullSpeed: analysis?.fullSpeed ?? false,
     },
   ];

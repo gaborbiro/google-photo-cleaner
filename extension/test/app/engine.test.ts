@@ -5,7 +5,8 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { jobId, startScanJob } from '../../src/app/shared/job';
+import { ENGINE_STARTED_KEY } from '../../src/app/shared/constants';
+import { ALIVE_EVERY_MS, jobId, startScanJob } from '../../src/app/shared/job';
 import { IndexedDbProblemLog } from '../../src/app/shared/problemLog';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
 import type { OpResult } from '../../src/shared/protocol';
@@ -42,9 +43,18 @@ function offscreenChrome(answer: (message: { kind: string; op?: string }) => unk
   }), sendMessage: runtime['sendMessage'] as ReturnType<typeof vi.fn> };
 }
 
+let generation = 0;
+
 beforeEach(() => {
   vi.resetModules();
   vi.stubGlobal('indexedDB', new IDBFactory());
+  // Each test's background page hears only its own test's saved changes (Node's channels span the file).
+  const scope = ++generation;
+  vi.stubGlobal('BroadcastChannel', class extends BroadcastChannel {
+    constructor(name: string) {
+      super(`${name}#${scope}`);
+    }
+  });
 });
 
 afterEach(() => {
@@ -83,4 +93,23 @@ describe('the background page', () => {
     }]);
     expect(warn).toHaveBeenCalled();
   }, 10_000);
+
+  it('says it has started, and while a request takes long, keeps saying the job is in hand', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval'] });
+    const jobs = new IndexedDbJobStore(indexedDB);
+    await jobs.update(jobId('library-scan', 'account-a'), () => startScanJob('account-a', 1_000));
+    const { chrome, sendMessage } = offscreenChrome((message) => {
+      if (message.kind !== 'app-run-op') return undefined;
+      if (message.op === 'status') return { ok: true, data: { accountFingerprint: 'account-a' } };
+      return new Promise(() => {}); // Google takes its time
+    });
+    vi.stubGlobal('chrome', chrome);
+    await import('../../src/app/engine/main');
+    expect((globalThis as Record<string, unknown>)[ENGINE_STARTED_KEY]).toBe(true);
+    await vi.waitFor(() => expect(sentKinds(sendMessage)).toContain('listLibraryPage'), { timeout: 3_000 });
+    expect((await jobs.get(jobId('library-scan', 'account-a')))?.aliveAtMs).toBeUndefined();
+    vi.advanceTimersByTime(ALIVE_EVERY_MS);
+    await vi.waitFor(async () => expect((await jobs.get(jobId('library-scan', 'account-a')))?.aliveAtMs).toBeGreaterThan(1_000));
+    vi.useRealTimers();
+  });
 });

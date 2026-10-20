@@ -26,7 +26,39 @@ interface JobBase {
    * saved before this existed).
    */
   resumeWhenPhotosOpen?: boolean;
+  /**
+   * While it runs, the background page's sign of life, every [ALIVE_EVERY_MS] even while it waits
+   * (absent in jobs saved before this existed). See [notResponding].
+   */
+  aliveAtMs?: number;
 }
+
+/** How often the background page says a running job is still in hand. */
+export const ALIVE_EVERY_MS = 15_000;
+/** A running job without any sign of life (progress or [JobBase.aliveAtMs]) for this long: its background page is gone or stuck. */
+export const NOT_RESPONDING_AFTER_MS = 90_000;
+
+/** Running, but the background page has shown no sign of life for [NOT_RESPONDING_AFTER_MS]. */
+export function notResponding(job: Job, nowMs: number): boolean {
+  return job.status === 'running' && nowMs - Math.max(job.updatedAtMs, job.aliveAtMs ?? 0) > NOT_RESPONDING_AFTER_MS;
+}
+
+/** The background page still has [job] in hand. */
+export function markAlive<J extends Job>(job: J, nowMs: number): J {
+  return job.status === 'running' ? { ...job, aliveAtMs: nowMs } : job;
+}
+
+/**
+ * Why every running job stopped when the background page couldn't start: paused, resumable, and
+ * not waiting for Google Photos (it wasn't missing).
+ */
+export const ENGINE_FAILED_TEXT =
+  "Photo Cleaner's background work couldn't start, so the scan stopped. Nothing in your library was changed. " +
+  'Resume to try again; if it keeps happening, Copy diagnostics into a problem report.';
+
+/** On a job whose background page stopped responding. */
+export const NOT_RESPONDING_TEXT =
+  "Photo Cleaner's background work stopped responding. Nothing in your library was changed. Restart to carry on from where it was.";
 
 export interface ScanJob extends JobBase {
   kind: 'library-scan';

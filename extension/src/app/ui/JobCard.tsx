@@ -3,16 +3,16 @@
 import { useState } from 'react';
 import type { AppRequest } from '../shared/messages';
 import { scanButton, setAnalysisFullSpeed } from '../shared/actions';
-import type { AnalysisJob, ScanJob } from '../shared/job';
+import { ALIVE_EVERY_MS, type AnalysisJob, type ScanJob } from '../shared/job';
 import { diagnosticsText } from '../shared/diagnostics';
 import { copyReportText, scanView, versionLine, type ScanSurface } from '../shared/jobView';
 import type { ReportView } from '../scan/report';
 import type { ProtectionChoices } from '../shared/preferences';
-import { extensionVersion, logFailure, send, setProtectionChoices, store, useProblems, useStorageProblem } from './hooks';
+import { extensionVersion, logFailure, send, setProtectionChoices, store, useClock, useProblems, useStorageProblem } from './hooks';
 
 /** One Scan in two stages: reading the photo list, then analysing the new photos. */
 export function ScanCard({ account, scan, analysis, report, surface }: { account: string; scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null | undefined; surface: ScanSurface }) {
-  const view = scanView(scan, analysis, Date.now(), surface);
+  const view = scanView(scan, analysis, useClock(ALIVE_EVERY_MS), surface);
   const act = () => void scanButton(view, store, send, account, Date.now()).catch(logFailure(view.actionLabel));
   const version = extensionVersion();
   return (

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
-import { endJob, NO_PROGRESS, pauseJob, reportProgress, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
+import { endJob, markAlive, NO_PROGRESS, NOT_RESPONDING_TEXT, pauseJob, reportProgress, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 import type { ReportView } from '../../src/app/scan/report';
 import { accountLabel, checkedText, copyReportText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView, versionLine } from '../../src/app/shared/jobView';
 import { accountAnswer, requestedReviewTab, reviewUrl } from '../../src/app/shared/messages';
@@ -9,17 +9,18 @@ import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 const NOW = new Date(2026, 9, 14, 21, 40).getTime();
 
 describe('one Scan in two stages', () => {
-  const reading = reportProgress(
+  // Running, with the background page saying it still has them in hand (see the not-responding test).
+  const reading = markAlive(reportProgress(
     startScanJob('acc1', 0),
     { ...NO_PROGRESS, phase: 'LIBRARY', libraryEntries: 12_500, albumsListed: 0, libraryReachedMs: new Date(2021, 4, 3).getTime() },
     1_000,
-  );
+  ), NOW);
   const scanned = endJob(reading, 'completed', null, NOW);
-  const analysing = reportProgress(
+  const analysing = markAlive(reportProgress(
     startAnalysisJob('acc1', 0, null, NO_ANALYSIS),
     { ...NO_ANALYSIS, stage: 'analysing', photos: 17_202, analysed: 4_300, newPhotos: 17_202, newAnalysed: 4_300, photosPerSecond: 5.7, etaSeconds: 2_265, detail: 140 },
     1,
-  );
+  ), NOW);
 
   it('offers to scan when nothing has run yet', () => {
     expect(scanView(null, null, NOW, 'tab')).toMatchObject({ title: 'Not scanned yet', action: 'start', actionLabel: 'Scan library', target: 'library-scan', lines: [], stage: null, fullSpeed: null });
@@ -125,6 +126,27 @@ describe('one Scan in two stages', () => {
     const steps = scanView(scanned, analysisStopped, NOW, 'tab').steps;
     expect(steps.map((s) => s.diagnostics)).toEqual([false, true]);
     expect(steps.map((s) => s.problemLines)).toEqual([[], []]);
+  });
+
+  it('a running stage whose background page shows no sign of life for 90 s is not responding, and offers Restart', () => {
+    const lastSign = NOW - 60_000;
+    const quiet = markAlive(reportProgress(startScanJob('acc1', 0), { ...NO_PROGRESS, phase: 'ALBUM_LIST' }, 1_000), lastSign);
+    // Under 90 s, also through a long wait: the page stamps the job while it waits.
+    expect(scanView(quiet, null, lastSign + 90_000, 'tab')).toMatchObject({ title: 'Scanning', action: 'pause', indeterminate: true });
+    const view = scanView(quiet, null, lastSign + 90_001, 'tab');
+    expect(view).toMatchObject({ title: 'Scan not responding', tone: 'negative', action: 'restart-engine', actionLabel: 'Restart', target: 'library-scan', indeterminate: false, notice: NOT_RESPONDING_TEXT, tabStatus: 'needed' });
+    expect(view.steps[0]).toMatchObject({ state: 'stalled', statusText: 'Not responding', indeterminate: false, notice: NOT_RESPONDING_TEXT, diagnostics: true });
+    // Progress is a sign of life too (and a job saved before the stamps existed has only that).
+    expect(scanView(reportProgress(quiet, quiet.progress, lastSign + 80_000), null, lastSign + 120_000, 'tab').title).toBe('Scanning');
+    expect(scanView(reportProgress(startScanJob('acc1', 0), NO_PROGRESS, lastSign), null, lastSign + 100_000, 'tab').title).toBe('Scan not responding');
+    // Only a running stage can be not responding.
+    expect(scanView(pauseJob(quiet, lastSign), null, NOW + 1_000_000, 'tab').title).toBe('Scan paused');
+    // Stage 2 the same way.
+    const quietAnalysis = markAlive(analysing, lastSign);
+    const later = scanView(scanned, quietAnalysis, lastSign + 91_000, 'tab');
+    expect(later).toMatchObject({ title: 'Scan not responding', action: 'restart-engine', target: 'analysis', notice: NOT_RESPONDING_TEXT });
+    expect(later.steps.map((s) => [s.state, s.diagnostics])).toEqual([['complete', false], ['stalled', true]]);
+    expect(later.steps[1].notice).toBe(NOT_RESPONDING_TEXT);
   });
 
   it('a paused or stopped stage 1 is resumed or started again', () => {

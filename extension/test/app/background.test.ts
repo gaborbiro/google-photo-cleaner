@@ -1,6 +1,9 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ENGINE_FAILED_TEXT, jobId, pauseJob, startScanJob } from '../../src/app/shared/job';
 import type { AppRequest } from '../../src/app/shared/messages';
+import { IndexedDbProblemLog } from '../../src/app/shared/problemLog';
+import { IndexedDbJobStore } from '../../src/app/shared/store';
 
 function event<Args extends unknown[]>() {
   const listeners = new Set<(...args: Args) => void>();
@@ -25,6 +28,8 @@ let tabs: {
 };
 let executeScript: ReturnType<typeof vi.fn>;
 let focusWindow: ReturnType<typeof vi.fn>;
+/** The background page (offscreen document): open until closed. */
+let offscreen: { open: boolean; hasDocument: ReturnType<typeof vi.fn>; closeDocument: ReturnType<typeof vi.fn>; createDocument: ReturnType<typeof vi.fn>; Reason: { WORKERS: string } };
 
 beforeEach(async () => {
   vi.resetModules();
@@ -39,6 +44,13 @@ beforeEach(async () => {
   };
   executeScript = vi.fn().mockResolvedValue([]);
   focusWindow = vi.fn().mockResolvedValue(undefined);
+  offscreen = {
+    open: true,
+    hasDocument: vi.fn(async () => offscreen.open),
+    closeDocument: vi.fn(async () => { offscreen.open = false; }),
+    createDocument: vi.fn(async () => { offscreen.open = true; }),
+    Reason: { WORKERS: 'WORKERS' },
+  };
   vi.stubGlobal('chrome', {
     runtime: {
       id: 'photo-cleaner',
@@ -51,6 +63,7 @@ beforeEach(async () => {
     tabs: { ...tabs, onUpdated: updated, onRemoved: removed },
     windows: { update: focusWindow },
     scripting: { executeScript },
+    offscreen,
   });
   await import('../../src/app/background/main');
 });
@@ -236,5 +249,45 @@ describe('which account is signed in', () => {
     const answer = ask({ id: 'photo-cleaner', tab: photos(42) });
     await vi.advanceTimersByTimeAsync(5_000);
     expect(await answer).toEqual(notResponding);
+  });
+});
+
+describe('the background page failing', () => {
+  const running = (account: string) => startScanJob(account, Date.now());
+
+  it('one that could not start: the error is kept (scrubbed), its jobs pause saying why, and it is closed so Resume starts a new one', async () => {
+    const jobs = new IndexedDbJobStore();
+    await jobs.update(jobId('library-scan', 'never-started'), () => running('never-started'));
+    await jobs.update(jobId('library-scan', 'already-paused'), () => pauseJob(running('already-paused'), Date.now()));
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const stack = 'TypeError: chrome.runtime.getManifest is not a function\n    at keepProblemsHere (chrome-extension://abcdefghijklmnopabcdefghijklmnop/engine.js:2:30)';
+    expect(await send({ kind: 'app-engine-error', started: false, message: 'TypeError: chrome.runtime.getManifest is not a function', stack })).toBe(true);
+    expect(await jobs.get(jobId('library-scan', 'never-started'))).toMatchObject({ status: 'paused', resumeWhenPhotosOpen: false, progress: { notice: ENGINE_FAILED_TEXT } });
+    expect(await jobs.get(jobId('library-scan', 'already-paused'))).toMatchObject({ status: 'paused', progress: { notice: null } });
+    expect(offscreen.closeDocument).toHaveBeenCalledOnce();
+    const [kept] = await new IndexedDbProblemLog().recent(Date.now());
+    expect(kept).toMatchObject({
+      where: 'background page: could not start', kind: 'UNEXPECTED', version: '0.0.0-test',
+      message: 'TypeError: chrome.runtime.getManifest is not a function', stack: 'at keepProblemsHere (engine.js:2:30)',
+    });
+    expect(error).toHaveBeenCalled();
+  });
+
+  it('an error after it started is only kept: its jobs go on', async () => {
+    const jobs = new IndexedDbJobStore();
+    await jobs.update(jobId('library-scan', 'still-going'), () => running('still-going'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await send({ kind: 'app-engine-error', started: true, message: 'Error: something minor', stack: null })).toBe(true);
+    expect(await jobs.get(jobId('library-scan', 'still-going'))).toMatchObject({ status: 'running' });
+    expect(offscreen.closeDocument).not.toHaveBeenCalled();
+    expect((await new IndexedDbProblemLog().recent(Date.now()))[0]).toMatchObject({ where: 'background page: error', message: 'Error: something minor', stack: null });
+  });
+
+  it('Restart closes a page that stopped responding and starts a new one', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await send({ kind: 'app-restart-engine' })).toBe(true);
+    expect(offscreen.closeDocument).toHaveBeenCalledOnce();
+    expect(offscreen.createDocument).toHaveBeenCalledOnce();
+    expect(offscreen.open).toBe(true);
   });
 });

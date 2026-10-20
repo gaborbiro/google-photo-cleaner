@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
-import { endJob, jobId, NO_PROGRESS, pauseJob, reportProgress, resumeIfWaitingForPhotos, resumeJob, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
+import { endJob, jobId, markAlive, NO_PROGRESS, NOT_RESPONDING_AFTER_MS, notResponding, pauseJob, reportProgress, resumeIfWaitingForPhotos, resumeJob, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 
 const progress = { ...NO_PROGRESS, phase: 'LIBRARY' as const, libraryEntries: 500 };
 
@@ -67,5 +67,22 @@ describe('analysis job', () => {
 
   it('scan and analysis jobs of one account have separate ids', () => {
     expect(startScanJob('acc1', 0).id).not.toBe(startAnalysisJob('acc1', 0, null, NO_ANALYSIS).id);
+  });
+});
+
+describe('signs of life', () => {
+  it('only a running job is marked as in hand', () => {
+    const running = startScanJob('acc1', 1_000);
+    expect(markAlive(running, 5_000)).toMatchObject({ aliveAtMs: 5_000, updatedAtMs: 1_000 });
+    const paused = pauseJob(running, 2_000);
+    expect(markAlive(paused, 5_000)).toBe(paused);
+  });
+
+  it('is not responding only when running with neither progress nor a stamp for over 90 s', () => {
+    const running = startScanJob('acc1', 1_000);
+    expect(notResponding(running, 1_000 + NOT_RESPONDING_AFTER_MS)).toBe(false);
+    expect(notResponding(running, 1_001 + NOT_RESPONDING_AFTER_MS)).toBe(true);
+    expect(notResponding(markAlive(running, 50_000), 1_001 + NOT_RESPONDING_AFTER_MS)).toBe(false);
+    expect(notResponding(endJob(running, 'failed', 'x', 2_000), 10_000_000)).toBe(false);
   });
 });

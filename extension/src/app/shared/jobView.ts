@@ -64,6 +64,10 @@ export interface ScanStepView {
    * analysis's stop, for a support request ("For support: analysis: preview · PROTOCOL · …").
    */
   supportLines: string[];
+  /** On the step itself, while it is stopped: Google's details behind it (the same line), when the protection details can't show them. */
+  problemLines: string[];
+  /** Whether the step stopped or paused because something went wrong: it then offers Copy diagnostics. */
+  diagnostics: boolean;
   lines: string[];
   percent: number | null;
   indeterminate: boolean;
@@ -235,6 +239,8 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
   const supportLines = [scan?.progress.googleProblem, analysis?.progress.googleProblem]
     .filter((problem) => problem !== undefined && problem !== null)
     .map(googleProblemLine);
+  const scanStopped = scan !== null && stoppedByProblem(scan);
+  const analysisStopped = analysisReady && stoppedByProblem(analysis);
   return [
     {
       ...NONE,
@@ -246,6 +252,8 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       phase: null,
       detailText,
       supportLines,
+      problemLines: scanStopped && !libraryReady ? problemLine(scan) : [],
+      diagnostics: scanStopped,
       // Once read, the report supplies the final counts; don't keep the live counters above it.
       lines: libraryReady ? [] : library?.lines ?? [],
       indeterminate: scan?.status === 'running',
@@ -263,6 +271,9 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       phase: analysisReady && analysis.status !== 'finished' ? ANALYSIS_PHASES[analysis.progress.stage ?? 'analysing'] : null,
       detailText: null,
       supportLines: [],
+      // Its line is in step 1's protection details, which are shown by then.
+      problemLines: [],
+      diagnostics: analysisStopped,
       lines: analysisReady ? (analysis.status === 'finished' ? [summary.lines[0]] : summary.lines) : [],
       percent: analysisReady ? summary.percent : null,
       waiting: analysisReady ? summary.waiting : 'Starts automatically after step 1.',
@@ -270,6 +281,20 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       fullSpeed: analysis?.fullSpeed ?? false,
     },
   ];
+}
+
+/**
+ * Stopped, or paused, because something went wrong: not finished, not running, not waiting only
+ * for Google Photos to open again, and with a reason to show (the user's own pause has none).
+ */
+function stoppedByProblem(job: Job): boolean {
+  return job.status === 'failed' || (job.status === 'paused' && job.progress.notice !== null && job.resumeWhenPhotosOpen !== true);
+}
+
+/** Google's details behind [job]'s stop, as one line; none when it stopped for another reason. */
+function problemLine(job: Job): string[] {
+  const problem = job.progress.googleProblem;
+  return problem ? [googleProblemLine(problem)] : [];
 }
 
 /** In the protection details and their copied report, so a support request says which version ran: "Photo Cleaner 0.4.14". */

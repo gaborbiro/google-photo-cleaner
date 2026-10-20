@@ -8,7 +8,7 @@
 // reading the trash (listTrashPage), not trusted from Google's reply.
 
 import { MAX_TRASH_BATCH, type OpResult, type WriteOp } from '../shared/protocol';
-import { accountFingerprint, badRequest, requiredString, type PageEnvironment } from './ops';
+import { accountFingerprint, badRequest, requiredString, unexpectedFailure, type PageEnvironment } from './ops';
 import { callRpc, OpFailure, readSessionTokens } from './rpc';
 
 /** A dedup key as Google writes them (letters, digits and a few separators); anything else never reaches a request. */
@@ -42,6 +42,6 @@ export async function runWriteOp(env: PageEnvironment, op: WriteOp, params: Reco
     return { ok: true, data: await dispatchWrite(env, op, params) };
   } catch (error) {
     if (error instanceof OpFailure) return { ok: false, error: error.error };
-    return { ok: false, error: { kind: 'PROTOCOL', message: error instanceof Error ? error.message : 'Unknown failure' } };
+    return { ok: false, error: unexpectedFailure(error) };
   }
 }

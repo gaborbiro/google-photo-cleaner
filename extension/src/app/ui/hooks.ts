@@ -11,11 +11,33 @@ import { latestReport, reportKey, type ReportView } from '../scan/report';
 import { IndexedDbPreferences, type ProtectionChoices } from '../shared/preferences';
 import { launchButton, surfaceView, type LaunchButton, type SurfaceView } from '../shared/jobView';
 import { IndexedDbReviewStore, type ReviewSummary } from '../duplicates/reviewStore';
+import { IndexedDbProblemLog, keepProblems, type ProblemEntry } from '../shared/problemLog';
 
 export const store = new IndexedDbJobStore();
 const inventory = new IndexedDbInventoryStore();
 const preferences = new IndexedDbPreferences();
 const review = new IndexedDbReviewStore();
+const problems = new IndexedDbProblemLog();
+keepProblems(problems, extensionVersion());
+
+/** The problem log, newest first, kept up to date; undefined while loading. */
+export function useProblems(): ProblemEntry[] | undefined {
+  const [entries, setEntries] = useState<ProblemEntry[] | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    const load = () => void problems.recent(Date.now()).then(
+      (recent) => alive && setEntries(recent),
+      (error: unknown) => console.warn('Photo Cleaner: could not read the problem log', error),
+    );
+    load();
+    const stop = onJobsChanged(load); // also hears of new problems (see problemLog.ts)
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, []);
+  return entries;
+}
 
 /**
  * The protection report of [account]'s latest scan, by the shared rules: null before any scan,

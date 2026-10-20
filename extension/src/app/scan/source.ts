@@ -4,6 +4,7 @@
 
 import type { AlbumDto, AlbumItemsPageDto, AlbumsPageDto, LibraryPageDto } from '../../page/normalize';
 import type { ErrorKind, OpResult, ReadOp } from '../../shared/protocol';
+import { requestDetails, type RequestDetails } from '../shared/problemLog';
 import type { AlbumRecord, EntryRef, InventoryItem } from './model';
 
 /**
@@ -28,6 +29,10 @@ export class SourceError extends Error {
     message: string,
     readonly httpStatus: number | null = null,
     readonly rpcCode: number | null = null,
+    /** Which operation failed, for diagnosing it. */
+    readonly request: RequestDetails | null = null,
+    /** What the page script saw of Google's answer, as it reported it (checked before it is kept). */
+    readonly diagnostic: unknown = null,
   ) {
     super(message);
   }
@@ -92,7 +97,7 @@ export class OpPhotosSource implements PhotosSource, AnalysisSource {
     if (result === undefined) throw new SourceError('TRANSIENT', 'No answer from the extension');
     if (!result.ok) {
       const e = result.error;
-      throw new SourceError(e.kind, e.message, e.httpStatus ?? null, e.rpcCode ?? null);
+      throw new SourceError(e.kind, e.message, e.httpStatus ?? null, e.rpcCode ?? null, requestDetails(op, params), e.diagnostic ?? null);
     }
     return result.data as T;
   }

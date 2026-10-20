@@ -8,11 +8,13 @@ import { CHANGES_CHANNEL } from '../shared/constants';
 import { eraseAllData } from '../shared/erase';
 import { plainMessage } from '../shared/errors';
 import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, tabProblem } from '../shared/googleProblems';
+import { keepProblemsHere } from '../shared/problemLog';
 import { IndexedDbJobStore } from '../shared/store';
 import { isAppRequest, reviewUrl, type AccountAnswer, type AppRequest, type ReviewTab, type TabRequest } from '../shared/messages';
 
 const PHOTOS_URL = 'https://photos.google.com/';
 const store = new IndexedDbJobStore();
+keepProblemsHere();
 
 async function photosTabs(): Promise<chrome.tabs.Tab[]> {
   const tabs = await chrome.tabs.query({ url: `${PHOTOS_URL}*` });

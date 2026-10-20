@@ -76,6 +76,10 @@ does, and Google can change that any day. When an answer doesn't fit (`PROTOCOL`
 stop and show the shared message in `extension/src/app/shared/googleProblems.ts`, saying nothing in
 the library was changed; log the details with `logGoogleProblem`. Never count such an answer as one
 failed photo, never retry it as if the connection dropped, and never carry on guessing.
+- `logGoogleProblem` also keeps the problem in the problem log (`shared/problemLog.ts`, shown by
+  Copy diagnostics), with what the page script saw: the request, where the parser gave up
+  (`within(...)` paths in `page/normalize.ts`) and the answer's structure (`page/skeleton.ts`),
+  never its values. A new reading step in `normalize.ts` should say where it reads (`within`).
 
 **Shared rules live in Kotlin.** Grouping, protection and the review queue are in `features/shared/*`,
 tested in `commonTest`, and compiled for the extension. Don't reimplement them in TypeScript.

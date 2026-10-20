@@ -13,7 +13,10 @@ import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { runScan } from '../scan/session';
 import { OpPhotosSource } from '../scan/source';
 import { endJob, jobId, reportProgress, startAnalysisJob, type AnalysisJob, type Job, type ScanJob } from '../shared/job';
+import { keepProblemsHere, problemsSaved, recordUnexpected } from '../shared/problemLog';
 import { IndexedDbJobStore, onJobsChanged } from '../shared/store';
+
+keepProblemsHere();
 
 const jobs = new IndexedDbJobStore();
 const inventory = new IndexedDbInventoryStore();
@@ -121,8 +124,9 @@ async function check(): Promise<void> {
     active.add(job.id);
     (job.kind === 'library-scan' ? runScanJob(job) : runAnalysisJob(job))
       .catch(async (error: unknown) => {
-        // A bug or something truly unexpected: the details go to the log (and later to error reports).
+        // A bug or something truly unexpected: the details go to the console and the problem log (Copy diagnostics).
         console.error('Photo Cleaner: the scan stopped because of an unexpected error', error);
+        recordUnexpected(`${job.kind === 'library-scan' ? 'scan' : 'analysis'}: stopped unexpectedly`, error);
         await jobs.update(job.id, (j) => (j ? endJob(j, 'paused', UNEXPECTED_STOP_TEXT, Date.now()) : null));
       })
       .finally(() => {
@@ -130,7 +134,11 @@ async function check(): Promise<void> {
         void check();
       });
   }
-  if (active.size === 0) await chrome.runtime.sendMessage({ kind: 'app-engine-idle' });
+  if (active.size === 0) {
+    // Closing this page would lose problems not yet saved.
+    await problemsSaved();
+    await chrome.runtime.sendMessage({ kind: 'app-engine-idle' });
+  }
 }
 
 // A job started or resumed anywhere is picked up straight away.

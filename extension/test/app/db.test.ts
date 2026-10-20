@@ -41,6 +41,7 @@ const STORES_BY_VERSION: { since: number; until?: number; name: string; options:
   { since: 5, name: STORES.preferences, options: { keyPath: 'account' }, indexes: [], record: { account: 'acc1', protection: { favourites: false, albums: true, archived: true } } },
   { since: 6, name: STORES.fingerprints, options: { keyPath: ['account', 'modelKey', 'mediaKey'] }, indexes: [], record: { account: 'acc1', modelKey: 'k', mediaKey: 'm2', vector: new Float32Array([0, 1]) } },
   { since: 6, name: STORES.reviewSummaries, options: { keyPath: 'account' }, indexes: [], record: { account: 'acc1', groupsToReview: 3, atMs: 1 } },
+  { since: 8, name: STORES.problems, options: { keyPath: 'id', autoIncrement: true }, indexes: [], record: { id: 1, atMs: 1, version: '0.4.13', where: 'scan: album list', kind: 'PROTOCOL' } },
 ];
 
 const storesIn = (version: number) => STORES_BY_VERSION.filter((s) => s.since <= version && (s.until === undefined || version < s.until));
@@ -63,7 +64,7 @@ async function savedDatabase(factory: IDBFactory, version: number): Promise<void
 }
 
 describe('database upgrades', () => {
-  for (const version of [2, 3, 4, 5, 6]) {
+  for (const version of [2, 3, 4, 5, 6, 7]) {
     it(`from version ${version}: every saved record and index is kept, and the new stores are added`, async () => {
       const factory = new IDBFactory();
       await savedDatabase(factory, version);

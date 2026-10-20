@@ -34,6 +34,7 @@ describe('Google Photos problems', () => {
     });
     expect(problem).toEqual({ where: 'analysis: preview', kind: 'PROTOCOL', message: 'Cannot read … at …', rpcCode: null, httpStatus: 400 });
     expect(JSON.stringify(warn.mock.calls)).not.toMatch(/AF1Qip|googleusercontent/);
+    expect(logGoogleProblem('account check', { kind: 'PROTOCOL', message: 'Signed in as someone.private@example.com' }).message).toBe('Signed in as …');
     warn.mockRestore();
     // The fixed messages stay readable.
     expect(googleProblemLine({ where: 'scan: library', kind: 'PROTOCOL', message: 'Parser item count differs from raw item count', rpcCode: null, httpStatus: null }))

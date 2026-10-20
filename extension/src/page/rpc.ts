@@ -5,6 +5,8 @@
 // pinned revision in vendor/gptk/UPSTREAM.md.
 
 import type { OpError } from '../shared/protocol';
+import { scrubbed } from '../shared/scrub';
+import { skeleton } from './skeleton';
 
 export interface SessionTokens {
   at: string;
@@ -14,10 +16,48 @@ export interface SessionTokens {
   account: string;
 }
 
+/** What else a failure knows, for its diagnostic (see ops.ts): it never leaves the page as it is. */
+export interface FailureDetails {
+  /** Where in the answer the reading gave up (see AnswerDiagnostic.at). */
+  at?: (number | string)[];
+  /** The reading's own error, already scrubbed. */
+  cause?: string;
+  /** What the answer's envelope held, when it didn't fit (see [envelopeSummary]). */
+  envelope?: string[];
+}
+
 export class OpFailure extends Error {
-  constructor(readonly error: OpError) {
+  constructor(readonly error: OpError, readonly details: FailureDetails = {}) {
     super(error.message);
   }
+}
+
+/** The tags the entries of a batchexecute answer start with, as seen in real answers. */
+const ENVELOPE_TAGS = ['wrb.fr', 'di', 'af.httprm', 'e', 'er'];
+const MAX_ENVELOPE_LINES = 20;
+
+/**
+ * What an answer's envelope held, without its values: its size, then one line per entry with its
+ * tag, whether it is about [rpcid], and its structure ('wrb.fr Z5xsfc ["id:6","id:6","s:1234",…]').
+ */
+export function envelopeSummary(rpcid: string, body: string): string[] {
+  const lines = body.split('\n');
+  const out = [`${lines.length} lines, ${body.length} characters`];
+  for (const line of lines) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue; // the )]}' prefix and blank lines
+    }
+    if (!Array.isArray(parsed)) continue; // the length lines between entries
+    for (const entry of parsed) {
+      const tag = Array.isArray(entry) && typeof entry[0] === 'string' && ENVELOPE_TAGS.includes(entry[0]) ? entry[0] : 'other';
+      const about = Array.isArray(entry) && entry[1] === rpcid ? ` ${rpcid}` : '';
+      out.push(`${tag}${about} ${JSON.stringify(skeleton(entry))}`);
+    }
+  }
+  return out.length > MAX_ENVELOPE_LINES ? [...out.slice(0, MAX_ENVELOPE_LINES), `…+${out.length - MAX_ENVELOPE_LINES} more`] : out;
 }
 
 interface WizGlobalData {
@@ -75,34 +115,38 @@ export function decodeEnvelope(rpcid: string, body: string): unknown {
   if (/^\s*<!doctype html|^\s*<html/i.test(body)) {
     throw new OpFailure({ kind: 'SESSION', message: 'Received an HTML page instead of RPC data (likely signed out)' });
   }
+  const unfit = (message: string, cause?: unknown) => new OpFailure({ kind: 'PROTOCOL', message }, {
+    envelope: envelopeSummary(rpcid, body),
+    ...(cause instanceof Error ? { cause: scrubbed(cause.message) } : {}),
+  });
   for (const line of body.split('\n')) {
     if (!line.includes('wrb.fr')) continue;
     let envelope: unknown;
     try {
       envelope = JSON.parse(line);
-    } catch {
-      throw new OpFailure({ kind: 'PROTOCOL', message: 'Unparseable wrb.fr line' });
+    } catch (error) {
+      throw unfit('Unparseable wrb.fr line', error);
     }
-    if (!Array.isArray(envelope)) throw new OpFailure({ kind: 'PROTOCOL', message: 'wrb.fr line is not an array' });
+    if (!Array.isArray(envelope)) throw unfit('wrb.fr line is not an array');
     for (const entry of envelope) {
       if (!Array.isArray(entry) || entry[0] !== 'wrb.fr' || entry[1] !== rpcid) continue;
       const payload = entry[2];
       if (typeof payload === 'string') {
         try {
           return JSON.parse(payload);
-        } catch {
-          throw new OpFailure({ kind: 'PROTOCOL', message: 'Unparseable RPC payload' });
+        } catch (error) {
+          throw unfit('Unparseable RPC payload', error);
         }
       }
       const status = entry[5];
       const code = Array.isArray(status) && typeof status[0] === 'number' ? status[0] : undefined;
       if (code !== undefined) {
-        throw new OpFailure({ kind: classifyRpcCode(code), message: `RPC ${rpcid} returned error code ${code}`, rpcCode: code });
+        throw new OpFailure({ kind: classifyRpcCode(code), message: `RPC ${rpcid} returned error code ${code}`, rpcCode: code }, { envelope: envelopeSummary(rpcid, body) });
       }
-      throw new OpFailure({ kind: 'PROTOCOL', message: `RPC ${rpcid} returned no payload and no error code` });
+      throw unfit(`RPC ${rpcid} returned no payload and no error code`);
     }
   }
-  throw new OpFailure({ kind: 'PROTOCOL', message: `No wrb.fr envelope for ${rpcid}` });
+  throw unfit(`No wrb.fr envelope for ${rpcid}`);
 }
 
 export async function callRpc(

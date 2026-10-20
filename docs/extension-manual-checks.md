@@ -148,8 +148,17 @@ for 60 days.
 
 These can't be triggered on purpose. If they ever appear, the message should say that Photo
 Cleaner no longer understands Google Photos' answers, that nothing in your library was changed,
-and to check for an update. The console has a line starting "Photo Cleaner: unexpected answer
-from Google Photos" with the details; keep it for the fix.
+and to check for an update.
+
+1. The stopped step shows a "For support: …" line and a **Copy diagnostics** button, in the popup,
+   the panel and the review tab, also when the scan stopped before the library was read (for
+   example while reading albums).
+2. Copy diagnostics, then paste it somewhere: it starts with the extension's version, says where
+   the scan stopped, and lists the problem with its request (e.g. `listAlbumsPage (Z5xsfc)`),
+   "Gave up at: …" and the structure of Google's answer. Keep it for the fix.
+3. Close Chrome, open it again, and open the review tab: the same problem is still under
+   **Copy diagnostics** (the card above Erase is always there).
+4. "What it copies" unfolds to show the same text.
 
 ## 9. Privacy
 
@@ -158,3 +167,5 @@ from Google Photos" with the details; keep it for the fix.
    (`googleusercontent.com/…`), album titles or tokens.
 2. DevTools → Network on the review tab: requests go only to Google Photos (through its tab) and,
    for the AI models, Hugging Face.
+3. Copy diagnostics (review tab, Scan) and read what it copied: no photo or album keys
+   (`AF1Qip…`), addresses, album titles, tokens, your email or the account's fingerprint.

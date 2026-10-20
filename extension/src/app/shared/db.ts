@@ -26,6 +26,8 @@ export const STORES = {
   preferences: 'preferences',
   /** Per account: how many duplicate groups are waiting for review, as last worked out, for the popup. */
   reviewSummaries: 'reviewSummaries',
+  /** What went wrong lately, for diagnosing it (see problemLog.ts): the newest 50, none older than 30 days. */
+  problems: 'problems',
 } as const;
 
 export function request<T>(req: IDBRequest<T>): Promise<T> {
@@ -115,6 +117,7 @@ function upgrade(open: IDBOpenDBRequest): void {
     jobs?.createIndex('decisionId', 'decisionId');
     create(STORES.preferences, { keyPath: 'account' });
     create(STORES.reviewSummaries, { keyPath: 'account' });
+    create(STORES.problems, { keyPath: 'id', autoIncrement: true });
   };
 }
 

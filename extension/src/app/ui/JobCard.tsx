@@ -4,10 +4,11 @@ import { useState } from 'react';
 import type { AppRequest } from '../shared/messages';
 import { scanButton, setAnalysisFullSpeed } from '../shared/actions';
 import type { AnalysisJob, ScanJob } from '../shared/job';
+import { diagnosticsText } from '../shared/diagnostics';
 import { copyReportText, scanView, versionLine, type ScanSurface } from '../shared/jobView';
 import type { ReportView } from '../scan/report';
 import type { ProtectionChoices } from '../shared/preferences';
-import { extensionVersion, logFailure, send, setProtectionChoices, store, useStorageProblem } from './hooks';
+import { extensionVersion, logFailure, send, setProtectionChoices, store, useProblems, useStorageProblem } from './hooks';
 
 /** One Scan in two stages: reading the photo list, then analysing the new photos. */
 export function ScanCard({ account, scan, analysis, report, surface }: { account: string; scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null | undefined; surface: ScanSurface }) {
@@ -36,6 +37,8 @@ export function ScanCard({ account, scan, analysis, report, surface }: { account
               {step.lines.length > 0 && <div className="lines">{step.lines.map((line) => <div key={line} className="mono">{line}</div>)}</div>}
               {step.waiting && <p className="muted">{step.waiting}</p>}
               {step.notice && <p className="warn">{step.notice}</p>}
+              {step.problemLines.map((line) => <p key={line} className="mono muted support-line">{line}</p>)}
+              {step.diagnostics && <Diagnostics scan={scan} analysis={analysis} />}
               {step.timesText && <p className="muted mono">{step.timesText}</p>}
               {step.fullSpeed !== null && (
                 <label className="setting">
@@ -88,6 +91,43 @@ function ProtectionDetails({ report, detailText, versionText, supportLines, copy
         <div className="report-actions"><button className="small" onClick={copy} title="Counts only, no album names">{copied ? 'Copied' : 'Copy report'}</button></div>
       </div>
     </details>
+  );
+}
+
+/**
+ * What went wrong lately, for a problem report: one button copies it, and what it copies can be
+ * looked at first. Never photos, album names or account details (see diagnostics.ts).
+ */
+function Diagnostics({ scan, analysis }: { scan: ScanJob | null; analysis: AnalysisJob | null }) {
+  const problems = useProblems();
+  const [copied, setCopied] = useState(false);
+  const [unfolded, setUnfolded] = useState(false);
+  const text = problems === undefined ? null : diagnosticsText({ version: extensionVersion(), nowMs: Date.now(), scan, analysis, problems });
+  const copy = () => {
+    if (text !== null) void navigator.clipboard.writeText(text).then(() => setCopied(true), logFailure('copying the diagnostics'));
+  };
+  return (
+    <div className="diagnostics">
+      <div className="report-actions">
+        <button className="small" disabled={text === null} onClick={copy} title="For a problem report: no photos, album names or account details">{copied ? 'Copied' : 'Copy diagnostics'}</button>
+      </div>
+      {text !== null && (
+        <details onToggle={(e) => setUnfolded(e.currentTarget.open)}>
+          <summary>What it copies</summary>
+          {unfolded && <textarea className="mono" readOnly rows={10} style={{ width: '100%' }} aria-label="Diagnostics" value={text} />}
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** Always in the review tab's Scan tab: Copy diagnostics, also for a problem the Scan card doesn't show. */
+export function DiagnosticsCard({ scan, analysis }: { scan: ScanJob | null; analysis: AnalysisJob | null }) {
+  return (
+    <section className="card utility diagnostics-card">
+      <p className="muted">Something not working? Copy what went wrong lately into your problem report. It holds no photos, album names or account details.</p>
+      <Diagnostics scan={scan} analysis={analysis} />
+    </section>
   );
 }
 

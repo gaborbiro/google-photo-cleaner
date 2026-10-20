@@ -43,6 +43,7 @@ beforeEach(async () => {
     runtime: {
       id: 'photo-cleaner',
       getURL: (path: string) => `chrome-extension://photo-cleaner/${path}`,
+      getManifest: () => ({ version: '9.8.7' }),
       onMessage: { addListener: (listener: typeof receive) => { receive = listener; } },
       onStartup: { addListener: vi.fn() },
       onInstalled: { addListener: vi.fn() },

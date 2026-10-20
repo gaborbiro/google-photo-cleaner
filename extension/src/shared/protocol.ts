@@ -57,6 +57,27 @@ export interface OpError {
   message: string;
   httpStatus?: number;
   rpcCode?: number;
+  /** For a request to Google that failed: what the page script saw, for diagnosing it later. */
+  diagnostic?: AnswerDiagnostic;
+}
+
+/**
+ * What a page script saw when a request to Google failed, made of its structure only, never its
+ * values (see page/skeleton.ts): enough to find out why an answer didn't fit.
+ */
+export interface AnswerDiagnostic {
+  /** Google's name for the request, e.g. "Z5xsfc" (the album list). */
+  rpcId: string;
+  /** Where in the answer the reading gave up: list positions and field numbers from the top, e.g. [0, 12]. Null when not known. */
+  at: (number | string)[] | null;
+  /** The answer's structure, cut short (long lists, deep nesting); null when there was no answer to read. */
+  answer: unknown;
+  /** The structure of the part at [at] (e.g. the one album row that didn't fit), in more depth; null without [at]. */
+  focus: unknown;
+  /** When the answer's envelope itself didn't fit: what it held, one line per entry. Null otherwise. */
+  envelope: string[] | null;
+  /** The reading's own error, scrubbed (e.g. when the vendored parser tripped). */
+  cause: string | null;
 }
 
 export type OpResult = { ok: true; data: unknown } | { ok: false; error: OpError };

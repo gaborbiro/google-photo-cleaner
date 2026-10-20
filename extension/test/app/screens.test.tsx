@@ -18,6 +18,7 @@ import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
 import { endJob, jobId, NO_PROGRESS, reportProgress, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 import type { AccountAnswer } from '../../src/app/shared/messages';
 import { ALL_PROTECTED, IndexedDbPreferences } from '../../src/app/shared/preferences';
+import { IndexedDbProblemLog } from '../../src/app/shared/problemLog';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
 import type { PageOp } from '../../src/shared/protocol';
 import { fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fakes';
@@ -576,6 +577,81 @@ describe('clicks and keys reach what they should', () => {
     } finally {
       delete (navigator as { clipboard?: unknown }).clipboard;
     }
+  });
+
+  /** A scan that stopped while reading the album list, as the developer's did, with its entry in the problem log. */
+  async function stoppedAtAlbums() {
+    const jobs = new IndexedDbJobStore(indexedDB);
+    const problem = { where: 'scan: album list', kind: 'PROTOCOL' as const, message: 'Album has 10 fields, expected 9 or 12', rpcCode: null, httpStatus: null };
+    const reading = reportProgress(startScanJob('account-a', NOW), { ...NO_PROGRESS, phase: 'ALBUM_LIST', libraryEntries: 18_432, favouriteEntries: 15, googleProblem: problem }, NOW);
+    await jobs.update(jobId('library-scan', 'account-a'), () => endJob(reading, 'failed', 'Photo Cleaner no longer understands Google Photos’ answers.', NOW));
+    await new IndexedDbProblemLog(indexedDB).add({
+      ...problem, atMs: NOW, version: '9.8.7', request: { op: 'listAlbumsPage', sent: [] }, stack: null,
+      answer: { rpcId: 'Z5xsfc', at: [0, 1], answer: [[['key:44'], ['key:44', null]]], focus: ['key:44', null], envelope: null, cause: null },
+    });
+    return `For support: ${problem.where} · PROTOCOL · ${problem.message}`;
+  }
+
+  /** The button starting with [label] in [within], once it can be pressed. */
+  const ready = (within: HTMLElement, label: string) => vi.waitFor(() => {
+    const button = [...within.querySelectorAll('button')].find((b) => b.textContent?.startsWith(label));
+    if (!button || button.disabled) throw new Error(`"${label}" is not ready in: ${within.textContent}`);
+    return button;
+  }, { timeout: 3_000 });
+
+  it('review: a scan stopped while reading albums shows Google’s details on step 1, and Copy diagnostics copies the problem log', async () => {
+    const line = await stoppedAtAlbums();
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      const root = await open('review', '?account=account-a');
+      await shows(root, 'Scan stopped', line);
+      const library = root.querySelector<HTMLElement>('.scan-step')!;
+      expect(library.querySelector('.support-line')?.textContent).toBe(line);
+      expect(root.querySelector('details.protection')).toBeNull(); // the library was never read
+      (await ready(library, 'Copy diagnostics')).click();
+      await vi.waitFor(() => expect(library.querySelector('.diagnostics button')?.textContent).toBe('Copied'));
+      const copied = writeText.mock.calls[0]![0];
+      expect(copied).toMatch(/^Photo Cleaner 1\.2\.3 · diagnostics copied/);
+      expect(copied).toContain('Step 1, read your library: failed at ALBUM_LIST · library 18,432 · favourites 15');
+      expect(copied).toContain('1. ');
+      expect(copied).toContain('scan: album list\n   PROTOCOL · Album has 10 fields, expected 9 or 12\n   Request: listAlbumsPage (Z5xsfc) · sent with nothing\n   Gave up at: [0][1]');
+      expect(copied).not.toContain('someone@example.com');
+
+      // What it copies can be looked at first.
+      expect(library.querySelector('textarea')).toBeNull();
+      const details = library.querySelector<HTMLDetailsElement>('.diagnostics details')!;
+      details.querySelector('summary')!.click();
+      await vi.waitFor(() => expect(library.querySelector('textarea')?.value).toBe(copied));
+    } finally {
+      delete (navigator as { clipboard?: unknown }).clipboard;
+    }
+  });
+
+  it('popup and panel: a stopped scan offers Copy diagnostics too', async () => {
+    const line = await stoppedAtAlbums();
+    for (const page of ['popup', 'panel'] as const) {
+      const root = await open(page);
+      await shows(root, line);
+      await ready(root, 'Copy diagnostics');
+      for (const r of roots.splice(0)) r.unmount();
+      vi.resetModules();
+    }
+  });
+
+  it('review: Copy diagnostics is always there, also with nothing stopped and with no account; the Scan card offers it only after a stop', async () => {
+    await scannedAndAnalysed(indexedDB);
+    const root = await open('review', '?account=account-a');
+    await shows(root, 'Scan complete', 'Something not working?');
+    await ready(root.querySelector<HTMLElement>('.diagnostics-card')!, 'Copy diagnostics');
+    expect(root.querySelector('.scan-card .diagnostics')).toBeNull();
+    for (const r of roots.splice(0)) r.unmount();
+    vi.resetModules();
+
+    account = NO_TAB;
+    const empty = await open('review');
+    await shows(empty, 'No account yet', 'Something not working?');
+    await ready(empty, 'Copy diagnostics');
   });
 
   it('panel: Open in tab asks for the review tab on Scan', async () => {

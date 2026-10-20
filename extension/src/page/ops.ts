@@ -2,7 +2,8 @@
 // (line numbers in comments). No mutating RPC is reachable from here: the trash operations live in
 // trashOps.ts, which only Photo Cleaner's own page script includes.
 
-import type { OpResult, ReadOp } from '../shared/protocol';
+import type { AnswerDiagnostic, OpError, OpResult, ReadOp } from '../shared/protocol';
+import { scrubbed } from '../shared/scrub';
 import {
   normalizeAlbumItemsPage,
   normalizeAlbumsPage,
@@ -12,7 +13,7 @@ import {
   normalizeTrashPage,
 } from './normalize';
 import { callRpc, OpFailure, readBody, readSessionTokens, type Fetcher, type SessionTokens } from './rpc';
-import { skeleton } from './skeleton';
+import { ANSWER_LIMITS, FOCUS_LIMITS, partAt, skeleton } from './skeleton';
 
 export interface PageEnvironment {
   wiz: () => Parameters<typeof readSessionTokens>[0];
@@ -108,12 +109,46 @@ async function fetchPreview(env: PageEnvironment, params: Record<string, unknown
   return { contentType, byteLength: bytes.length, base64: toBase64(bytes) };
 }
 
+/**
+ * A failed request to Google ([rpcId]) with its diagnostic: the answer's structure and where the
+ * reading gave up, made here because only the page script sees the answer. Never its values.
+ */
+function diagnosed(error: unknown, rpcId: string, payload: unknown): OpFailure {
+  const failure = error instanceof OpFailure ? error
+    : new OpFailure({ kind: 'PROTOCOL', message: `${rpcId} answer could not be read` }, error instanceof Error ? { cause: scrubbed(error.message) } : {});
+  const { at, cause, envelope } = failure.details;
+  const diagnostic: AnswerDiagnostic = {
+    rpcId,
+    at: at ?? null,
+    answer: payload === undefined ? null : skeleton(payload, ANSWER_LIMITS),
+    focus: payload === undefined || at === undefined ? null : skeleton(partAt(payload, at), FOCUS_LIMITS),
+    envelope: envelope ?? null,
+    cause: cause ?? null,
+  };
+  return new OpFailure({ ...failure.error, diagnostic }, failure.details);
+}
+
 async function dispatch(env: PageEnvironment, op: ReadOp, params: Record<string, unknown>): Promise<object> {
   if (op === 'fetchPreview') return fetchPreview(env, params);
 
   const tokens = readSessionTokens(env.wiz());
   const account = await accountFingerprint(env, tokens);
-  const rpc = (rpcid: string, data: unknown) => callRpc(rpcid, data, tokens, env.sourcePath(), env.fetcher);
+  /** Asks Google, and reads its answer with [normalize]; a failure of either says what was seen. */
+  const read = async <T extends object>(rpcId: string, data: unknown, normalize: (payload: unknown) => T): Promise<object> => {
+    let payload: unknown;
+    try {
+      payload = await callRpc(rpcId, data, tokens, env.sourcePath(), env.fetcher);
+    } catch (error) {
+      throw diagnosed(error, rpcId, undefined);
+    }
+    let page: T;
+    try {
+      page = normalize(payload);
+    } catch (error) {
+      throw diagnosed(error, rpcId, payload);
+    }
+    return { ...withShape(params, payload, page), accountFingerprint: account };
+  };
 
   switch (op) {
     case 'status':
@@ -123,43 +158,36 @@ async function dispatch(env: PageEnvironment, op: ReadOp, params: Record<string,
       // api.ts:114-136 getItemsByTakenDate
       const pageToken = optionalString(params, 'pageToken');
       const takenAtOrBeforeMs = optionalInteger(params, 'takenAtOrBeforeMs');
-      const payload = await rpc('lcxiM', [pageToken, takenAtOrBeforeMs, TIMELINE_PAGE_SIZE, null, 1, TIMELINE_SOURCE_ALL]);
-      return { ...withShape(params, payload, normalizeTimelinePage(payload)), accountFingerprint: account };
+      return read('lcxiM', [pageToken, takenAtOrBeforeMs, TIMELINE_PAGE_SIZE, null, 1, TIMELINE_SOURCE_ALL], normalizeTimelinePage);
     }
 
     case 'listArchivePage': {
       // api.ts:114-136 getItemsByTakenDate with source 'archive'
       const pageToken = optionalString(params, 'pageToken');
-      const payload = await rpc('lcxiM', [pageToken, null, TIMELINE_PAGE_SIZE, null, 1, TIMELINE_SOURCE_ARCHIVE]);
-      return { ...withShape(params, payload, normalizeArchivePage(payload)), accountFingerprint: account };
+      return read('lcxiM', [pageToken, null, TIMELINE_PAGE_SIZE, null, 1, TIMELINE_SOURCE_ARCHIVE], normalizeArchivePage);
     }
 
-    case 'listFavouritesPage': {
+    case 'listFavouritesPage':
       // api.ts:187-201 getFavoriteItems
-      const payload = await rpc('EzkLib', ['Favorites', [[5, '8', 0, 9]], optionalString(params, 'pageToken')]);
-      return { ...withShape(params, payload, normalizeGenericPage(payload)), accountFingerprint: account };
-    }
+      return read('EzkLib', ['Favorites', [[5, '8', 0, 9]], optionalString(params, 'pageToken')], normalizeGenericPage);
 
-    case 'listAlbumsPage': {
+    case 'listAlbumsPage':
       // api.ts:275-290 getAlbums
-      const payload = await rpc('Z5xsfc', [optionalString(params, 'pageToken'), null, null, null, 1, null, null, 100, [2], 5]);
-      return { ...withShape(params, payload, normalizeAlbumsPage(payload)), accountFingerprint: account };
-    }
+      return read('Z5xsfc', [optionalString(params, 'pageToken'), null, null, null, 1, null, null, 100, [2], 5], normalizeAlbumsPage);
 
     case 'listAlbumItemsPage': {
       // api.ts:292-308 getAlbumPage
       const albumKey = requiredString(params, 'albumKey');
-      const payload = await rpc('snAcKc', [albumKey, optionalString(params, 'pageToken'), null, optionalString(params, 'authKey')]);
-      const page = normalizeAlbumItemsPage(payload);
-      if (page.albumKey !== albumKey) throw new OpFailure({ kind: 'PROTOCOL', message: 'Album page is for a different album' });
-      return { ...withShape(params, payload, page), accountFingerprint: account };
+      return read('snAcKc', [albumKey, optionalString(params, 'pageToken'), null, optionalString(params, 'authKey')], (payload) => {
+        const page = normalizeAlbumItemsPage(payload);
+        if (page.albumKey !== albumKey) throw new OpFailure({ kind: 'PROTOCOL', message: 'Album page is for a different album' }, { at: [3, 0] });
+        return page;
+      });
     }
 
-    case 'listTrashPage': {
+    case 'listTrashPage':
       // api.ts getTrashItems
-      const payload = await rpc('zy0IHe', [optionalString(params, 'pageToken')]);
-      return { ...withShape(params, payload, normalizeTrashPage(payload)), accountFingerprint: account };
-    }
+      return read('zy0IHe', [optionalString(params, 'pageToken')], normalizeTrashPage);
   }
 }
 
@@ -168,6 +196,11 @@ export async function runOp(env: PageEnvironment, op: ReadOp, params: Record<str
     return { ok: true, data: await dispatch(env, op, params) };
   } catch (error) {
     if (error instanceof OpFailure) return { ok: false, error: error.error };
-    return { ok: false, error: { kind: 'PROTOCOL', message: error instanceof Error ? error.message : 'Unknown failure' } };
+    return { ok: false, error: unexpectedFailure(error) };
   }
+}
+
+/** A failure nobody foresaw in the page script (a bug): scrubbed, since its message could quote anything. */
+export function unexpectedFailure(error: unknown): OpError {
+  return { kind: 'PROTOCOL', message: error instanceof Error ? scrubbed(error.message) : 'Unknown failure' };
 }

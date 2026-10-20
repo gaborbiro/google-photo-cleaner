@@ -7,7 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { documentTitle, reviewAccount, reviewPageView, scanView } from '../shared/jobView';
 import { REVIEW_TABS, requestedReviewTab, type ReviewTab } from '../shared/messages';
 import { extensionVersion, send, useAccount, useAllJobs, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useSpinningTabIcon, useStartOverWhenErased } from '../ui/hooks';
-import { EraseCard, ProtectionCard, ScanCard, StorageProblem } from '../ui/JobCard';
+import { DiagnosticsCard, EraseCard, ProtectionCard, ScanCard, StorageProblem } from '../ui/JobCard';
 import { DuplicatesReview } from '../duplicates/reviewModel';
 import { reviewDeps } from '../duplicates/session';
 import { SearchModel } from '../search/searchModel';
@@ -149,7 +149,8 @@ function Review() {
       {selected === null ? (
         <div className="scan-tab">
           <p className="muted">No account yet: open Google Photos and start a scan from the panel.</p>
-          {/* Erasing covers every account, so it is here even when none is signed in. */}
+          {/* Diagnostics and erasing cover every account, so they are here even when none is signed in. */}
+          <DiagnosticsCard scan={null} analysis={null} />
           <EraseCard />
         </div>
       ) : (
@@ -162,6 +163,7 @@ function Review() {
             <div className="scan-tab" hidden={tab !== 'scan'}>
               {job !== undefined && analysis !== undefined && <ScanCard account={selected} scan={job} analysis={analysis} report={report} surface="tab" />}
               {choices !== undefined && <ProtectionCard account={selected} choices={choices} />}
+              {job !== undefined && analysis !== undefined && <DiagnosticsCard scan={job} analysis={analysis} />}
               <EraseCard />
             </div>
           )}

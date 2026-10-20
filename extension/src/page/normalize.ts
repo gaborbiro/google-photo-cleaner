@@ -14,6 +14,7 @@
 
 import parser from '../../vendor/gptk/src/api/parser';
 import type { AlbumItemsPage, AlbumsPage, LibraryGenericPage, LibraryTimelinePage } from '../../vendor/gptk/src/types';
+import { scrubbed } from '../shared/scrub';
 import { OpFailure } from './rpc';
 
 export type MediaType = 'PHOTO' | 'VIDEO';
@@ -79,8 +80,24 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function protocol(message: string): OpFailure {
-  return new OpFailure({ kind: 'PROTOCOL', message });
+/** A path into an answer: list positions and field numbers from the top. */
+type Path = (number | string)[];
+
+function protocol(message: string, at?: Path): OpFailure {
+  return new OpFailure({ kind: 'PROTOCOL', message }, at === undefined ? {} : { at });
+}
+
+/**
+ * [read] of the part of the answer at [path]: a failure inside says it happened there, unless it
+ * already says where more exactly.
+ */
+function within<T>(path: Path, read: () => T): T {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof OpFailure && error.details.at === undefined) throw new OpFailure(error.error, { ...error.details, at: path });
+    throw error;
+  }
 }
 
 function asArray(value: unknown, what: string): unknown[] {
@@ -112,35 +129,35 @@ type ListEnd = 'absent' | 'empty-string';
 function nextMarker(raw: unknown[], index: number, end: ListEnd, itemCount: number, what: string): string | null {
   const value = raw[index];
   if (typeof value === 'string' && MARKER.test(value)) {
-    if (itemCount === 0) throw protocol(`${what}: a page with no items says more follow`);
+    if (itemCount === 0) throw protocol(`${what}: a page with no items says more follow`, [index]);
     return value;
   }
   const ended = itemCount === 0
     ? value === undefined || value === null || value === ''
     : end === 'absent' ? index >= raw.length : value === '';
   if (ended) return null;
-  throw protocol(`${what}: unexpected next-page marker`);
+  throw protocol(`${what}: unexpected next-page marker`, [index]);
 }
 
 /** Item list at `index`: an array, or nothing at all (absent or null) for a page without items. */
 function itemList(raw: unknown[], index: number, what: string): unknown[] {
   const value = raw[index];
   if (value === null || value === undefined) return [];
-  return asArray(value, what);
+  return within([index], () => asArray(value, what));
 }
 
 /** GPTK's reading of a payload; it assumes the shapes it knows, so anything it trips over is a protocol failure. */
 function parse(payload: unknown, rpcid: string): unknown {
   try {
     return parser(payload, rpcid);
-  } catch {
-    throw protocol(`${rpcid} answer could not be read`);
+  } catch (error) {
+    throw new OpFailure({ kind: 'PROTOCOL', message: `${rpcid} answer could not be read` }, error instanceof Error ? { cause: scrubbed(error.message) } : {});
   }
 }
 
 /** The item list at `index`, every row checked by [row] before anything reads it. */
 function rows(raw: unknown[], index: number, lengths: number[], what: string, endsWithDetails = true): unknown[][] {
-  return itemList(raw, index, `${what}s`).map((value) => row(value, lengths, what, endsWithDetails));
+  return itemList(raw, index, `${what}s`).map((value, i) => within([index, i], () => row(value, lengths, what, endsWithDetails)));
 }
 
 /** A row of a listing: an array whose length is one of [lengths], ending in its details object unless told otherwise. */
@@ -253,9 +270,9 @@ function timelinePage(payload: unknown, lengths: number[], what: string): Librar
   const rawItems = rows(raw, 0, lengths, `${what} item`);
   const parsed = rawItems.length > 0 ? (parse(payload, 'lcxiM') as LibraryTimelinePage | null) : null;
   const parsedItems = parsed?.items ?? [];
-  if (parsedItems.length !== rawItems.length) throw protocol('Parser item count differs from raw item count');
+  if (parsedItems.length !== rawItems.length) throw protocol('Parser item count differs from raw item count', [0]);
   return {
-    items: rawItems.map((rawItem, i) => libraryItem(rawItem, parsedItems[i])),
+    items: rawItems.map((rawItem, i) => within([0, i], () => libraryItem(rawItem, parsedItems[i]))),
     // The last page is just [items]; an empty listing (an empty archive) is [].
     nextPageToken: nextMarker(raw, 1, 'absent', rawItems.length, `${what} page`),
     lastItemTakenAtMs: numberOrNull(typeof raw[2] === 'string' ? Number(raw[2]) : raw[2]),
@@ -268,9 +285,9 @@ export function normalizeGenericPage(payload: unknown): LibraryPageDto {
   const rawItems = rows(raw, 0, LIBRARY_ROW_LENGTHS, 'Library item');
   const parsed = rawItems.length > 0 ? (parse(payload, 'EzkLib') as LibraryGenericPage | null) : null;
   const parsedItems = parsed?.items ?? [];
-  if (parsedItems.length !== rawItems.length) throw protocol('Parser item count differs from raw item count');
+  if (parsedItems.length !== rawItems.length) throw protocol('Parser item count differs from raw item count', [0]);
   return {
-    items: rawItems.map((rawItem, i) => libraryItem(rawItem, parsedItems[i])),
+    items: rawItems.map((rawItem, i) => within([0, i], () => libraryItem(rawItem, parsedItems[i]))),
     // Its last page ends with "" (seen on favourites, and on 42 pages of "Recently added", the same
     // request, whose markers had the usual form and whose last page was [null, ""], with no items).
     nextPageToken: nextMarker(raw, 1, 'empty-string', rawItems.length, 'Library page'),
@@ -284,21 +301,22 @@ export function normalizeAlbumsPage(payload: unknown): AlbumsPageDto {
   const rawAlbums = rows(raw, 0, ALBUM_ROW_LENGTHS, 'Album');
   const parsed = rawAlbums.length > 0 ? (parse(payload, 'Z5xsfc') as AlbumsPage | null) : null;
   const parsedAlbums = parsed?.items ?? [];
-  if (parsedAlbums.length !== rawAlbums.length) throw protocol('Parser album count differs from raw album count');
+  if (parsedAlbums.length !== rawAlbums.length) throw protocol('Parser album count differs from raw album count', [0]);
   return {
-    albums: rawAlbums.map((rawAlbum, i) => {
-      const meta = asArray(detailsOf(rawAlbum)[ALBUM_EXT], 'Album details');
+    albums: rawAlbums.map((rawAlbum, i) => within([0, i], () => {
+      const metaPath = [0, i, rawAlbum.length - 1, String(ALBUM_EXT)];
+      const meta = within(metaPath, () => asArray(detailsOf(rawAlbum)[ALBUM_EXT], 'Album details'));
       const album = parsedAlbums[i];
       return {
-        albumKey: requireKey(album.mediaKey, ALBUM_KEY, 'album key'),
+        albumKey: within([0, i, 0], () => requireKey(album.mediaKey, ALBUM_KEY, 'album key')),
         title: stringOrNull(meta[1]),
         ownerActorId: stringOrNull(album.ownerActorId),
-        reportedItemCount: count(meta[3], 'Album item count'),
+        reportedItemCount: within([...metaPath, 3], () => count(meta[3], 'Album item count')),
         isShared: booleanOrNull(meta[4]),
         kindCode: numberOrNull(meta[0]),
         authKey: stringOrNull(meta[5]),
       };
-    }),
+    })),
     // The last page is just [albums].
     nextPageToken: nextMarker(raw, 1, 'absent', rawAlbums.length, 'Albums page'),
   };
@@ -308,16 +326,16 @@ export function normalizeAlbumsPage(payload: unknown): AlbumsPageDto {
 export function normalizeAlbumItemsPage(payload: unknown): AlbumItemsPageDto {
   const raw = asArray(payload, 'Album page');
   const rawItems = rows(raw, 1, ALBUM_ENTRY_ROW_LENGTHS, 'Album item');
-  const details = asArray(raw[3], 'Album page details');
-  const itemCount = count(details[21], 'Album page item count');
+  const details = within([3], () => asArray(raw[3], 'Album page details'));
+  const itemCount = within([3, 21], () => count(details[21], 'Album page item count'));
   // Only an empty album sends no list of entries.
-  if (rawItems.length === 0 && itemCount !== 0) throw protocol('Album page without entries for an album that has some');
+  if (rawItems.length === 0 && itemCount !== 0) throw protocol('Album page without entries for an album that has some', [1]);
   const parsed = parse(payload, 'snAcKc') as AlbumItemsPage | null;
   const parsedItems = parsed?.items ?? [];
-  if (parsedItems.length !== rawItems.length) throw protocol('Parser item count differs from raw item count');
+  if (parsedItems.length !== rawItems.length) throw protocol('Parser item count differs from raw item count', [1]);
   return {
-    albumKey: requireKey(details[0], ALBUM_KEY, 'album key'),
-    items: rawItems.map((rawArray, i) => {
+    albumKey: within([3, 0], () => requireKey(details[0], ALBUM_KEY, 'album key')),
+    items: rawItems.map((rawArray, i) => within([1, i], () => {
       const item = parsedItems[i];
       return {
         mediaKey: requireKey(item.mediaKey, MEDIA_KEY, 'mediaKey'),
@@ -326,7 +344,7 @@ export function normalizeAlbumItemsPage(payload: unknown): AlbumItemsPageDto {
         mediaType: mediaTypeOf(detailsOf(rawArray)),
         uploaderActorId: actorOf(rawArray),
       };
-    }),
+    })),
     // The last page ends with "".
     nextPageToken: nextMarker(raw, 2, 'empty-string', rawItems.length, 'Album page'),
     reportedItemCount: itemCount,
@@ -346,7 +364,7 @@ export function normalizeTrashPage(payload: unknown): TrashPageDto {
   // Trash rows have 15 fields and, unlike the others, no details object at the end.
   const items = rows(raw, 0, TRASH_ROW_LENGTHS, 'Trash item', false);
   return {
-    dedupKeys: items.map((item) => requireKey(item[3], DEDUP_KEY, 'dedupKey')),
+    dedupKeys: items.map((item, i) => within([0, i, 3], () => requireKey(item[3], DEDUP_KEY, 'dedupKey'))),
     // The last page is just [items] (one real page seen, of a bin with a few photos).
     nextPageToken: nextMarker(raw, 1, 'absent', items.length, 'Trash page'),
   };

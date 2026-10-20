@@ -1,10 +1,13 @@
 // What the user reads when Google Photos answers in a way Photo Cleaner can't use. Photo Cleaner
 // talks to Google Photos the way Google's own web page does, through requests Google doesn't
 // document and can change at any time. When an answer doesn't fit, everything stops before anything
-// is changed and says so plainly; the technical details go to the log (and later to error reports).
+// is changed and says so plainly; the technical details go to the console and the problem log
+// (problemLog.ts), which the user can copy into a problem report (Copy diagnostics).
 
 import type { ErrorKind, OpError } from '../../shared/protocol';
+import { scrubbed } from '../../shared/scrub';
 import { SourceError } from '../scan/source';
+import { checkedDiagnostic, recordProblem } from './problemLog';
 
 /**
  * Google's answer didn't have the shape this version expects (PROTOCOL), or a request no longer fits
@@ -75,15 +78,11 @@ export interface GoogleProblem {
 }
 
 /**
- * Anything in a message that could be an address or an ID (a photo's, an album's, a token) is cut
- * out: the messages are fixed texts, except an unexpected error's own, which could quote anything.
+ * Logs the details of a changed or refused answer from Google, keeps them in the problem log with
+ * what the page script saw of the answer (for Copy diagnostics), and returns the short version for
+ * saving with the job.
  */
-function scrubbed(message: string): string {
-  return message.replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, '…').replace(/[A-Za-z0-9_-]{20,}/g, '…');
-}
-
-/** Logs the details of a changed or refused answer from Google, and returns them for saving with the job. */
-export function logGoogleProblem(where: string, error: { kind: ErrorKind; message: string; rpcCode?: number | null; httpStatus?: number | null }): GoogleProblem {
+export function logGoogleProblem(where: string, error: SourceError | OpError): GoogleProblem {
   const problem: GoogleProblem = {
     where,
     kind: error.kind,
@@ -92,6 +91,13 @@ export function logGoogleProblem(where: string, error: { kind: ErrorKind; messag
     httpStatus: error.httpStatus ?? null,
   };
   console.warn(`Photo Cleaner: unexpected answer from Google Photos (${where})`, problem);
+  const fromSource = error instanceof SourceError;
+  recordProblem({
+    ...problem,
+    request: fromSource ? error.request : null,
+    answer: checkedDiagnostic(error.diagnostic),
+    stack: null,
+  });
   return problem;
 }
 

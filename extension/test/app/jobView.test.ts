@@ -107,6 +107,26 @@ describe('one Scan in two stages', () => {
     expect(versionLine('0.4.14')).toBe('Photo Cleaner 0.4.14');
   });
 
+  it('a step that stopped because something went wrong offers Copy diagnostics; one stopped early shows its support line itself', () => {
+    const problem = { where: 'scan: album list', kind: 'PROTOCOL' as const, message: 'Album has 10 fields, expected 9 or 12', rpcCode: null, httpStatus: null };
+    const failedEarly = endJob(reportProgress(reading, { ...reading.progress, phase: 'ALBUM_LIST', googleProblem: problem }, 1_000), 'failed', 'Not understood.', 2_000);
+    const [library, analysis] = scanView(failedEarly, null, NOW, 'tab').steps;
+    expect(library).toMatchObject({ state: 'failed', diagnostics: true, protectionKnown: false, problemLines: ['For support: scan: album list · PROTOCOL · Album has 10 fields, expected 9 or 12'] });
+    expect(analysis).toMatchObject({ diagnostics: false, problemLines: [] });
+    // Paused by a problem (repeated network failures, a refusal): also offered.
+    expect(scanView(endJob(reading, 'paused', 'Repeated network problems.', 2_000), null, NOW, 'tab').steps[0]).toMatchObject({ diagnostics: true, problemLines: [] });
+    // Not for the user's own pause, a pause that only waits for Google Photos, a running or a finished step.
+    expect(scanView(pauseJob(reading, 2_000), null, NOW, 'tab').steps[0].diagnostics).toBe(false);
+    expect(scanView(endJob(reading, 'paused', 'Google Photos was closed.', 2_000, true), null, NOW, 'tab').steps[0].diagnostics).toBe(false);
+    expect(scanView(reading, null, NOW, 'tab').steps[0].diagnostics).toBe(false);
+    expect(scanView(scanned, analysing, NOW, 'tab').steps.map((s) => s.diagnostics)).toEqual([false, false]);
+    // Stage 2 stopped: offered there; its support line stays in step 1's protection details.
+    const analysisStopped = endJob(reportProgress(analysing, { ...analysing.progress, googleProblem: { ...problem, where: 'analysis: preview' } }, 1), 'paused', 'Not understood.', NOW);
+    const steps = scanView(scanned, analysisStopped, NOW, 'tab').steps;
+    expect(steps.map((s) => s.diagnostics)).toEqual([false, true]);
+    expect(steps.map((s) => s.problemLines)).toEqual([[], []]);
+  });
+
   it('a paused or stopped stage 1 is resumed or started again', () => {
     expect(scanView(endJob(reading, 'paused', 'The session ended.', 2_000), null, NOW, 'tab')).toMatchObject({ title: 'Scan paused', action: 'resume', actionLabel: 'Resume', target: 'library-scan', notice: 'The session ended.', indeterminate: false });
     expect(scanView(pauseJob(reading, 2_000), null, NOW, 'tab').action).toBe('resume');

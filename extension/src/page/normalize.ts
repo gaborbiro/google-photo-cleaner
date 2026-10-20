@@ -207,6 +207,11 @@ function actorOf(rawItem: unknown[]): string | null {
 
 /** Library and favourites rows: 16 fields, sometimes 17 (one more list before the details). */
 const LIBRARY_ROW_LENGTHS = [16, 17];
+/**
+ * Archive rows (lcxiM asked for the archive only): 10 fields, the short form album entries have,
+ * with no archive flag (seen October 2026, in an archive of 20 photos).
+ */
+const ARCHIVE_ROW_LENGTHS = [10];
 /** Album entry rows: 10 fields, sometimes 11 (one more number before the details). */
 const ALBUM_ENTRY_ROW_LENGTHS = [10, 11];
 /** Album list rows: 9 fields for regular albums, 12 for newer shared ones. */
@@ -234,15 +239,25 @@ function libraryItem(raw: unknown[], parsed: { mediaKey?: unknown; dedupKey?: un
 
 /** lcxiM: library by taken date. */
 export function normalizeTimelinePage(payload: unknown): LibraryPageDto {
-  const raw = asArray(payload, 'Library page');
-  const rawItems = rows(raw, 0, LIBRARY_ROW_LENGTHS, 'Library item');
+  return timelinePage(payload, LIBRARY_ROW_LENGTHS, 'Library');
+}
+
+/** lcxiM asked for the archive only. Its rows carry no archive flag: being listed here is what archived means. */
+export function normalizeArchivePage(payload: unknown): LibraryPageDto {
+  const page = timelinePage(payload, ARCHIVE_ROW_LENGTHS, 'Archive');
+  return { ...page, items: page.items.map((item) => ({ ...item, isArchived: true })) };
+}
+
+function timelinePage(payload: unknown, lengths: number[], what: string): LibraryPageDto {
+  const raw = asArray(payload, `${what} page`);
+  const rawItems = rows(raw, 0, lengths, `${what} item`);
   const parsed = rawItems.length > 0 ? (parse(payload, 'lcxiM') as LibraryTimelinePage | null) : null;
   const parsedItems = parsed?.items ?? [];
   if (parsedItems.length !== rawItems.length) throw protocol('Parser item count differs from raw item count');
   return {
     items: rawItems.map((rawItem, i) => libraryItem(rawItem, parsedItems[i])),
     // The last page is just [items]; an empty listing (an empty archive) is [].
-    nextPageToken: nextMarker(raw, 1, 'absent', rawItems.length, 'Library page'),
+    nextPageToken: nextMarker(raw, 1, 'absent', rawItems.length, `${what} page`),
     lastItemTakenAtMs: numberOrNull(typeof raw[2] === 'string' ? Number(raw[2]) : raw[2]),
   };
 }

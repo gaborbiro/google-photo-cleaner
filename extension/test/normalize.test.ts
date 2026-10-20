@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeAlbumItemsPage,
   normalizeAlbumsPage,
+  normalizeArchivePage,
   normalizeGenericPage,
   normalizeTimelinePage,
   normalizeTrashPage,
@@ -17,6 +18,7 @@ import {
   mediaKey,
   rawAlbum,
   rawAlbumMember,
+  rawArchiveItem,
   rawLibraryItem,
   rawTrashItem,
   timelinePayload,
@@ -135,6 +137,35 @@ describe('library pages', () => {
     expect(normalizeGenericPage(genericPayload([rawLibraryItem()], marker())).nextPageToken).toBe(marker());
     for (const value of NOT_MARKERS) protocolFailure(() => normalizeGenericPage([[rawLibraryItem()], value]));
     protocolFailure(() => normalizeGenericPage([[rawLibraryItem()]]));
+  });
+});
+
+describe('archive pages', () => {
+  it('reads the short rows the archive-only listing sends, every one archived', () => {
+    const page = normalizeArchivePage(timelinePayload([
+      rawArchiveItem(mediaKey('a'), dedupKey('a')),
+      rawArchiveItem(mediaKey('b'), dedupKey('b'), true),
+    ], null));
+    expect(page.items.map((i) => [i.mediaKey, i.dedupKey, i.isArchived])).toEqual([
+      [mediaKey('a'), dedupKey('a'), true],
+      [mediaKey('b'), dedupKey('b'), true],
+    ]);
+    expect(page.nextPageToken).toBeNull();
+    expect(normalizeArchivePage(timelinePayload([rawArchiveItem()], marker('p2'))).nextPageToken).toBe(marker('p2'));
+    expect(normalizeArchivePage([])).toEqual({ items: [], nextPageToken: null, lastItemTakenAtMs: null });
+  });
+
+  it('refuses rows of another length, keys of the wrong form, and anything else where the marker belongs', () => {
+    const row = rawArchiveItem();
+    protocolFailure(() => normalizeArchivePage(timelinePayload([rawLibraryItem()], null)));
+    protocolFailure(() => normalizeArchivePage(timelinePayload([[...row.slice(0, -1), null, row.at(-1)]], null)));
+    protocolFailure(() => normalizeArchivePage(timelinePayload([[...row.slice(0, -1), null]], null)));
+    protocolFailure(() => normalizeArchivePage(timelinePayload([rawArchiveItem(mediaKey('a'), 'DEDUP')], null)));
+    for (const value of [...NOT_MARKERS, '']) protocolFailure(() => normalizeArchivePage([[rawArchiveItem()], value, '1700000000000']));
+  });
+
+  it('the library listing still refuses the archive’s short rows', () => {
+    protocolFailure(() => normalizeTimelinePage(timelinePayload([rawArchiveItem()], null)));
   });
 });
 

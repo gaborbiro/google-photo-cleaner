@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { previewUrl, runOp, type PageEnvironment } from '../src/page/ops';
 import { runWriteOp } from '../src/page/trashOps';
 import { isAllowedOp, isReadOp, READ_OPS, WRITE_OPS } from '../src/shared/protocol';
-import { albumItemsPayload, albumKey, dedupKey, envelope, marker, mediaKey, rawAlbumMember, rawLibraryItem, rawTrashItem, timelinePayload } from './fixtures';
+import { albumItemsPayload, albumKey, dedupKey, envelope, marker, mediaKey, rawAlbumMember, rawArchiveItem, rawLibraryItem, rawTrashItem, timelinePayload } from './fixtures';
 
 const wiz = { SNlM0e: 'AT', FdrFJe: '1', cfb2h: 'bl', eptZe: '/_/PhotosUi/', oPEP7c: 'someone@example.com' };
 
@@ -48,10 +48,10 @@ describe('runOp', () => {
     let body = '';
     const e = env((_url, init) => {
       body = decodeURIComponent(String(init.body));
-      return envelope('lcxiM', timelinePayload([rawLibraryItem({ archived: true })], null));
+      return envelope('lcxiM', timelinePayload([rawArchiveItem()], null));
     });
     const result = await runOp(e, 'listArchivePage', {});
-    expect(result.ok).toBe(true);
+    expect(result).toMatchObject({ ok: true, data: { items: [{ dedupKey: dedupKey('ARCHIVED'), isArchived: true }] } });
     expect(body).toContain('[null,null,500,null,1,2]');
   });
 

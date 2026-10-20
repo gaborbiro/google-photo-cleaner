@@ -59,6 +59,21 @@ export function rawLibraryItem(o: RawItemOptions = {}): unknown[] {
   return item;
 }
 
+/**
+ * An archive row (lcxiM asked for the archive only): 10 fields, without the archive flag, shaped
+ * as in a real answer (October 2026). The image details sometimes end with one more list.
+ */
+export function rawArchiveItem(key = mediaKey('archived'), dedup = dedupKey('ARCHIVED'), imageExtra = false): unknown[] {
+  const image: unknown[] = ['https://photos.fife.usercontent.google.com/pw/A', 4000, 3000, null, null, null, null, null, [null, null, 3]];
+  if (imageExtra) image.push([1_700_000_050_000]);
+  return [
+    key, image, 1_700_000_000_000, dedup, 3_600_000, 1_700_000_100_000, null,
+    [[1], [2], [3], [4], [8], [21], [14], [15], [17], [18], [19], [22], [28, false, true], [29, false, true], [35, false, true]],
+    2,
+    { '15': 1_700_000_200_000, '129168200': [[]], '163238866': [false] },
+  ];
+}
+
 /** A library page: [items, marker, last item's time] — or just [items] on the last page. */
 export function timelinePayload(items: unknown[], token: string | null, lastTs = '1700000000000'): unknown[] {
   return token === null ? [items] : [items, token, lastTs];

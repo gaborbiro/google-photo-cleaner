@@ -6,6 +6,7 @@ import type { OpResult, ReadOp } from '../shared/protocol';
 import {
   normalizeAlbumItemsPage,
   normalizeAlbumsPage,
+  normalizeArchivePage,
   normalizeGenericPage,
   normalizeTimelinePage,
   normalizeTrashPage,
@@ -130,7 +131,7 @@ async function dispatch(env: PageEnvironment, op: ReadOp, params: Record<string,
       // api.ts:114-136 getItemsByTakenDate with source 'archive'
       const pageToken = optionalString(params, 'pageToken');
       const payload = await rpc('lcxiM', [pageToken, null, TIMELINE_PAGE_SIZE, null, 1, TIMELINE_SOURCE_ARCHIVE]);
-      return { ...withShape(params, payload, normalizeTimelinePage(payload)), accountFingerprint: account };
+      return { ...withShape(params, payload, normalizeArchivePage(payload)), accountFingerprint: account };
     }
 
     case 'listFavouritesPage': {

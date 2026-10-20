@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // What build.mjs builds in from the manifest (see src/app/shared/version.ts).
+  define: { __PHOTO_CLEANER_VERSION__: JSON.stringify('0.0.0-test') },
   test: {
     // Refuses to test against an old copy of the shared Kotlin rules (see scripts/kotlinFresh.mjs).
     globalSetup: ['./scripts/kotlinFreshSetup.mjs'],

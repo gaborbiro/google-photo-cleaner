@@ -12,7 +12,9 @@ try {
 
 // Builds the Photo Cleaner extension into dist-app/.
 
-const common = { bundle: true, target: 'chrome116', legalComments: 'inline', logLevel: 'info' };
+// The extension's version, built in: the background page (an offscreen document) can't ask Chrome for its manifest.
+const version = JSON.parse(readFileSync('static-app/manifest.json', 'utf8')).version;
+const common = { bundle: true, target: 'chrome116', legalComments: 'inline', logLevel: 'info', define: { __PHOTO_CLEANER_VERSION__: JSON.stringify(version) } };
 const gptkNotice = '/*! Includes code from Google Photos Toolkit (https://github.com/xob0t/Google-Photos-Toolkit), MIT License, Copyright (c) 2024 xob0t. See THIRD_PARTY_GPTK_LICENSE. */';
 
 {
@@ -25,7 +27,7 @@ const gptkNotice = '/*! Includes code from Google Photos Toolkit (https://github
     const { metafile } = await build({ ...common, ...options, metafile: true });
     for (const input of Object.keys(metafile.inputs)) inputs.add(input);
   };
-  const react = { jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, minify: true };
+  const react = { jsx: 'automatic', define: { ...common.define, 'process.env.NODE_ENV': '"production"' }, minify: true };
   await bundle({ entryPoints: { page: 'src/app/page/main.ts' }, outdir, format: 'iife', banner: { js: gptkNotice } });
   await bundle({ entryPoints: { content: 'src/app/content/main.ts' }, outdir, format: 'iife' });
   await bundle({ entryPoints: { background: 'src/app/background/main.ts' }, outdir, format: 'esm' });

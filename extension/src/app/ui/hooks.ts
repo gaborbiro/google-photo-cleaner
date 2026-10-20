@@ -11,14 +11,14 @@ import { latestReport, reportKey, type ReportView } from '../scan/report';
 import { IndexedDbPreferences, type ProtectionChoices } from '../shared/preferences';
 import { launchButton, surfaceView, type LaunchButton, type SurfaceView } from '../shared/jobView';
 import { IndexedDbReviewStore, type ReviewSummary } from '../duplicates/reviewStore';
-import { IndexedDbProblemLog, keepProblems, type ProblemEntry } from '../shared/problemLog';
+import { IndexedDbProblemLog, keepProblemsHere, type ProblemEntry } from '../shared/problemLog';
 
 export const store = new IndexedDbJobStore();
 const inventory = new IndexedDbInventoryStore();
 const preferences = new IndexedDbPreferences();
 const review = new IndexedDbReviewStore();
 const problems = new IndexedDbProblemLog();
-keepProblems(problems, extensionVersion());
+keepProblemsHere();
 
 /** The problem log, newest first, kept up to date; undefined while loading. */
 export function useProblems(): ProblemEntry[] | undefined {

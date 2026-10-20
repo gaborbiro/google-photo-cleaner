@@ -9,6 +9,7 @@ import type { AnswerDiagnostic, ErrorKind } from '../../shared/protocol';
 import { scrubbed } from '../../shared/scrub';
 import { CHANGES_CHANNEL } from './constants';
 import { committed, openDatabase, request, STORES } from './db';
+import { BUILT_VERSION } from './version';
 
 /** At most this many entries are kept, the newest. */
 export const MAX_PROBLEMS = 50;
@@ -101,14 +102,12 @@ export function keepProblems(log: ProblemSink, version: string): void {
   sink = { log, version };
 }
 
-/** This page of the extension keeps its problems in the browser database (see [keepProblems]). */
+/**
+ * This page of the extension keeps its problems in the browser database (see [keepProblems]). Uses
+ * no extension API, so it works in the background page (an offscreen document) too.
+ */
 export function keepProblemsHere(): void {
-  keepProblems(new IndexedDbProblemLog(), extensionVersion());
-}
-
-/** The extension's version, as its manifest says. */
-export function extensionVersion(): string {
-  return chrome.runtime.getManifest().version;
+  keepProblems(new IndexedDbProblemLog(), BUILT_VERSION);
 }
 
 /** Saves [problem] in the background; [problemsSaved] waits for it. */

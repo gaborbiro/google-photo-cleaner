@@ -673,6 +673,27 @@ describe('clicks and keys reach what they should', () => {
     }
   });
 
+  it('a paused analysis on a photo list days old offers Check for new photos, which reads the list again', async () => {
+    const jobs = new IndexedDbJobStore(indexedDB);
+    const daysAgo = NOW - 3 * 24 * 60 * 60 * 1000;
+    await jobs.update(jobId('library-scan', 'account-a'), () => endJob(startScanJob('account-a', daysAgo), 'completed', null, daysAgo));
+    const analysing = reportProgress(startAnalysisJob('account-a', daysAgo, null, NO_ANALYSIS), { ...NO_ANALYSIS, stage: 'analysing', photos: 6, newPhotos: 6, newAnalysed: 2 }, daysAgo);
+    await jobs.update(jobId('analysis', 'account-a'), () => endJob(analysing, 'paused', 'Google may have changed something.', daysAgo));
+    const popup = await open('popup');
+    await shows(popup, 'Scan paused', 'More than a day old, so nothing can be trashed yet', 'Check for new photos');
+    for (const r of roots.splice(0)) r.unmount();
+    vi.resetModules();
+
+    const root = await open('review', '?account=account-a');
+    await shows(root, 'Check for new photos');
+    expect(root.querySelector('.scan-title button')?.textContent).toBe('Check for new photos');
+    await click(root, 'Check for new photos');
+    await vi.waitFor(async () => expect(await jobs.get(jobId('library-scan', 'account-a'))).toMatchObject({ status: 'running' }));
+    expect((await jobs.get(jobId('library-scan', 'account-a')))!.startedAtMs).toBeGreaterThanOrEqual(NOW); // a new read, not the old one
+    expect(await jobs.get(jobId('analysis', 'account-a'))).toMatchObject({ status: 'paused' }); // it follows the new read
+    expect(requests('app-wake-engine').length).toBeGreaterThan(0);
+  });
+
   it('popup and panel: a stopped scan offers Copy diagnostics too', async () => {
     const line = await stoppedAtAlbums();
     for (const page of ['popup', 'panel'] as const) {

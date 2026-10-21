@@ -149,6 +149,23 @@ describe('one Scan in two stages', () => {
     expect(later.steps[1].notice).toBe(NOT_RESPONDING_TEXT);
   });
 
+  it('with the photo list over a day old and the analysis not running, the next step is a fresh read, which the analysis then follows', () => {
+    const dayLater = NOW + 25 * 60 * 60 * 1000;
+    const paused = endJob(analysing, 'paused', 'Google may have changed something.', NOW);
+    const view = scanView(scanned, paused, dayLater, 'tab');
+    expect(view).toMatchObject({ title: 'Scan paused', tone: 'caution', action: 'restart', actionLabel: 'Check for new photos', target: 'library-scan', tabStatus: 'out of date' });
+    expect(view.steps[0]).toMatchObject({ state: 'stale', notice: 'More than a day old, so nothing can be trashed yet. Check for new photos reads it again; the analysis then carries on where it was.' });
+    expect(view.steps[1]).toMatchObject({ state: 'paused', notice: 'Google may have changed something.' });
+    // The same when it stopped, or never started.
+    expect(scanView(scanned, endJob(analysing, 'failed', 'Broken.', NOW), dayLater, 'tab')).toMatchObject({ actionLabel: 'Check for new photos', target: 'library-scan' });
+    expect(scanView(scanned, null, dayLater, 'tab')).toMatchObject({ title: 'Photos not analysed yet', actionLabel: 'Check for new photos', target: 'library-scan' });
+    // Within the day, the analysis is resumed as before; while it runs, it can be paused.
+    expect(scanView(scanned, paused, NOW + 60_000, 'tab')).toMatchObject({ action: 'resume', target: 'analysis' });
+    expect(scanView(scanned, markAlive(analysing, dayLater), dayLater, 'tab')).toMatchObject({ action: 'pause', target: 'analysis' });
+    // A finished analysis keeps its own wording.
+    expect(scanView(scanned, endJob(analysing, 'completed', null, NOW), dayLater, 'tab').steps[0].notice).toBe('More than a day old: check for new photos before anything can be trashed.');
+  });
+
   it('a paused or stopped stage 1 is resumed or started again', () => {
     expect(scanView(endJob(reading, 'paused', 'The session ended.', 2_000), null, NOW, 'tab')).toMatchObject({ title: 'Scan paused', action: 'resume', actionLabel: 'Resume', target: 'library-scan', notice: 'The session ended.', indeterminate: false });
     expect(scanView(pauseJob(reading, 2_000), null, NOW, 'tab').action).toBe('resume');

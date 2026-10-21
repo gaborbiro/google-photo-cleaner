@@ -131,10 +131,29 @@ export function scanView(scan: ScanJob | null, analysis: AnalysisJob | null, now
 function scanSummary(scan: ScanJob | null, analysis: AnalysisJob | null, nowMs: number, surface: ScanSurface): ScanSummary {
   if (scan === null) return { ...NONE, title: 'Not scanned yet', action: 'start', actionLabel: 'Scan library', target: 'library-scan', tabStatus: 'needed' };
   if (scan.status !== 'finished') return readingView(scan, analysis?.fullSpeed ?? false, nowMs);
-  return analysis === null
+  const summary: ScanSummary = analysis === null
     ? { ...NONE, title: 'Photos not analysed yet', stage: 'Stage 2 of 2 · Analysing new photos', action: 'start', actionLabel: 'Analyse photos', target: 'analysis', tabStatus: 'needed', protectionKnown: true, fullSpeed: false }
     : analysingView(scan, analysis, nowMs, surface);
+  // Resuming the analysis on an old photo list would never let anything be trashed: read it again first.
+  return staleMidAnalysis(scan, analysis, nowMs)
+    ? { ...summary, tone: 'caution', action: 'restart', actionLabel: 'Check for new photos', target: 'library-scan', tabStatus: 'out of date' }
+    : summary;
 }
+
+/** The finished photo list is older than a day: it no longer proves what is protected. */
+function scanStale(scan: ScanJob, nowMs: number): boolean {
+  return scan.status === 'finished' && nowMs - (scan.finishedAtMs ?? scan.updatedAtMs) > SCAN_MAX_AGE_MS;
+}
+
+/** The photo list is out of date and the analysis is neither running nor finished: the next step is a fresh read. */
+function staleMidAnalysis(scan: ScanJob | null, analysis: AnalysisJob | null, nowMs: number): boolean {
+  return scan !== null && scanStale(scan, nowMs) && (analysis === null || (analysis.status !== 'running' && analysis.status !== 'finished'));
+}
+
+/** Step 1's notice when its photo list is out of date. */
+const STALE_TEXT = 'More than a day old: check for new photos before anything can be trashed.';
+const STALE_MID_ANALYSIS_TEXT =
+  'More than a day old, so nothing can be trashed yet. Check for new photos reads it again; the analysis then carries on where it was.';
 
 /** Stage 1: reading the photo list (the library scan). */
 function readingView(scan: ScanJob, fullSpeed: boolean, nowMs: number): ScanSummary {
@@ -181,7 +200,7 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number, surface: 
           (p.failed > 0 ? ` · ${n(p.failed)} could not be read (tried again next time)` : stale ? '' : ' · ready to review'),
         checkedText(finishedAt, nowMs),
       ],
-      notice: stale ? 'More than a day old: check for new photos before anything can be trashed.' : null,
+      notice: stale ? STALE_TEXT : null,
       // A repeat Scan only re-reads the list of photos (minutes) and analyses the new ones; nothing is analysed twice.
       action: 'restart',
       actionLabel: 'Check for new photos',
@@ -239,7 +258,7 @@ const NOT_RESPONDING = {
 /** Keep the completed library report visible while analysis works, and never show old results as a new run's. */
 function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: ScanSummary, nowMs: number): [ScanStepView, ScanStepView] {
   const libraryReady = scan?.status === 'finished';
-  const stale = libraryReady && nowMs - (scan.finishedAtMs ?? scan.updatedAtMs) > SCAN_MAX_AGE_MS;
+  const stale = scan !== null && scanStale(scan, nowMs);
   const scanStalled = scan !== null && notResponding(scan, nowMs);
   const libraryState = stale ? 'stale' : scanStalled ? 'stalled' : scan?.status === 'finished' ? 'complete' : scan?.status ?? 'pending';
   const analysisReady = libraryReady && analysis !== null;
@@ -269,7 +288,7 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       // Once read, the report supplies the final counts; don't keep the live counters above it.
       lines: libraryReady ? [] : library?.lines ?? [],
       indeterminate: scan?.status === 'running' && !scanStalled,
-      notice: stale ? 'More than a day old: check for new photos before anything can be trashed.' : scanStalled ? NOT_RESPONDING_TEXT : scan?.progress.notice ?? null,
+      notice: stale ? (staleMidAnalysis(scan, analysis, nowMs) ? STALE_MID_ANALYSIS_TEXT : STALE_TEXT) : scanStalled ? NOT_RESPONDING_TEXT : scan?.progress.notice ?? null,
       timesText: libraryReady ? checkedText(scan.finishedAtMs ?? scan.updatedAtMs, nowMs) : library?.timesText ?? null,
       protectionKnown: libraryReady,
     },

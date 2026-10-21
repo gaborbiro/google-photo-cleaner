@@ -64,6 +64,10 @@ and copy the console (right-click the page → Inspect → Console).
    and dark mode and at the panel's narrow width; fold it again to get back to the short summary.
 7. **Check for new photos**: it reads the photo list again but only analyses photos that are new;
    with none new it finishes quickly.
+   With the analysis paused and the photo list more than a day old (pause it, then set the
+   computer's clock a day ahead, or wait), the button says **Check for new photos** instead of
+   Resume, and step 1 says the analysis carries on afterwards. Press it: step 1 reads the list
+   again, then step 2 carries on without redoing photos already analysed.
 8. Note the speed (photos per second) and how long the full library took.
 9. Copy diagnostics (review tab, Scan tab, the card above Erase): under **Recent runs** there is one
    entry for the library read (pages and time per listing) and one for the analysis (photos done,

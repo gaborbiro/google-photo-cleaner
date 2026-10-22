@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { jobId, type AnalysisJob, type Job, type JobKind, type ScanJob } from '../shared/job';
-import { accountAnswer, type AccountAnswer, type AppRequest } from '../shared/messages';
+import { accountAnswer, panelOptions, type AccountAnswer, type AppRequest } from '../shared/messages';
 import { openDatabase, storageProblemText } from '../shared/db';
 import { IndexedDbJobStore, onErased, onJobsChanged } from '../shared/store';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
@@ -132,19 +132,34 @@ export function send(request: AppRequest): Promise<unknown> {
   return chrome.runtime.sendMessage(request);
 }
 
+/**
+ * Opens the panel of Photos tab [tabId] and brings that tab forward. Chrome opens a side panel only
+ * straight from a click, so it is asked here, at once, rather than by the service worker after a message.
+ */
+export async function showPanel(tabId: number): Promise<void> {
+  try {
+    const offered = chrome.sidePanel.setOptions(panelOptions(tabId)); // in case this tab has not been given it yet
+    const opened = chrome.sidePanel.open({ tabId });
+    await Promise.all([offered, opened, send({ kind: 'app-show-panel', tabId })]);
+  } catch (error) {
+    console.error('Photo Cleaner: could not open the panel', error);
+  }
+}
+
 /** The extension's version, as its manifest says: "0.4.14". */
 export function extensionVersion(): string {
   return chrome.runtime.getManifest().version;
 }
 
 /**
- * The popup's and the panel's data: which account is signed in, its Scan (undefined while loading),
- * and the one button to the review tab ("Review 1,731 groups" or "Open in tab").
+ * The popup's and the panel's data: which account is signed in (in the panel's [tabId], for the panel),
+ * its Scan (undefined while loading), and the one button to the review tab ("Review 1,731 groups" or
+ * "Open in tab").
  */
-export function useSignedInScan(): {
+export function useSignedInScan(tabId?: number): {
   view: SurfaceView; scan: ScanJob | null | undefined; analysis: AnalysisJob | null | undefined; report: ReportView | null | undefined; launch: LaunchButton;
 } {
-  const view = surfaceView(useAccount().answer);
+  const view = surfaceView(useAccount(tabId).answer);
   const scan = useScanJob(view.account);
   const analysis = useAnalysisJob(view.account);
   const choices = useProtectionChoices(view.account);
@@ -269,13 +284,13 @@ export function useAllJobs(): Job[] {
 const ACCOUNT_REFRESH_MS = 5_000;
 
 /**
- * Which Google account the Photos tab is signed in to: the panel's own tab, or for the popup
+ * Which Google account the Photos tab is signed in to: the panel's own tab [tabId], or for the popup
  * and review tab the most relevant Photos tab. Checked again every few seconds and on focus,
  * so switching accounts in Google Photos shows up by itself. Answers can arrive out of order: one
  * older than the answer shown is dropped (rather than all but the latest: when each check takes
  * about as long as the gap between checks, every answer would be outrun by the next request).
  */
-export function useAccount(): { answer: AccountAnswer | undefined; refresh: () => void } {
+export function useAccount(tabId?: number): { answer: AccountAnswer | undefined; refresh: () => void } {
   const [answer, setAnswer] = useState<AccountAnswer | undefined>(undefined);
   const asked = useRef(0);
   const shown = useRef(0);
@@ -286,11 +301,11 @@ export function useAccount(): { answer: AccountAnswer | undefined; refresh: () =
       shown.current = request;
       setAnswer(latest);
     };
-    send({ kind: 'app-account' }).then((reply) => show(accountAnswer(reply)), (error: unknown) => {
+    send({ kind: 'app-account', tabId }).then((reply) => show(accountAnswer(reply)), (error: unknown) => {
       console.warn('Photo Cleaner: the extension did not answer which account is signed in', error);
-      show({ account: null, problem: 'The extension is restarting; try again in a moment.', photosTabOpen: null });
+      show({ account: null, problem: 'The extension is restarting; try again in a moment.', photosTabOpen: null, tabId: null });
     });
-  }, []);
+  }, [tabId]);
   useEffect(() => {
     refresh();
     const timer = setInterval(refresh, ACCOUNT_REFRESH_MS);

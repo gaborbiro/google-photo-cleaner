@@ -17,25 +17,36 @@ and copy the console (right-click the page → Inspect → Console).
 
 ## 1. Opening it
 
-1. In Google Photos, click **Photo Cleaner** on the page. The panel opens on the right. Click it
-   twice quickly: still one panel.
-2. Reload the extension (↻) and the Photos tab: still one button and, when opened, one panel.
-3. Toolbar icon → popup: the account's email, the Scan card, then two buttons: **Open in tab ↗**
+1. The panel is Chrome's side panel. In Google Photos, open the popup and click **Open panel in
+   Google Photos**: the panel opens beside the page and Google Photos narrows to make room (nothing
+   covers it). Nothing of Photo Cleaner's is drawn on Google's page itself. Chrome's toolbar shows its
+   side panel button, which closes the panel; so does the × in the panel's Chrome header. Drag the
+   panel's edge: it gets wider and narrower, and stays readable.
+2. With the panel open, switch to a tab of another site: the panel hides. Switch back: it is there
+   again, as it was. In the Photos tab, go to another site and back: the panel is offered only on
+   Google Photos (Chrome's side panel menu lists Photo Cleaner there, not elsewhere).
+3. Updating from 0.4.39 or older: reload the extension (↻) without reloading the Photos tab. The old
+   purple **Photo Cleaner** button and panel disappear from the page, and **Open panel in Google
+   Photos** opens the side panel in that tab.
+4. Two Photos tabs signed in to different accounts, each with its panel open: each panel shows its own
+   tab's account.
+5. Toolbar icon → popup: the account's email, the Scan card, then two buttons: **Open in tab ↗**
    (or **Review N groups ↗** once groups are waiting) and **Open panel in Google Photos ↗**. Texts
    are comfortably readable (not tiny).
-4. **Open in tab**: the review tab opens on **1 · Scan**, with the heading "Photo Cleaner", the
+6. **Open in tab**: the review tab opens on **1 · Scan**, with the heading "Photo Cleaner", the
    account's email, and the tabs **1 · Scan**, **2 · Duplicates**, **Search**.
-5. With groups waiting, the popup's and the panel's button says **Review N groups** and opens
+7. With groups waiting, the popup's and the panel's button says **Review N groups** and opens
    **2 · Duplicates**. With the review tab already open on another tab, and a few photos selected in
    Duplicates: the button brings that tab forward and switches it to Duplicates without reloading
    (the selection and the place in the list are still there).
-6. Close the Photos tab, open the popup: it says Photo Cleaner works inside Google Photos and offers
-   **Open Google Photos**, which opens it with the Photo Cleaner panel already visible once the page
-   loads. With Photos already open, **Open panel in Google Photos** focuses that tab and opens one panel.
-7. Reload the extension (↻) with a Photos tab open, without reloading that tab, then open the popup:
+8. Close the Photos tab, open the popup: it says Photo Cleaner works inside Google Photos and offers
+   **Open Google Photos**, which opens it (without the panel). With Photos open in a background tab,
+   or in another window, **Open panel in Google Photos** brings that tab forward with its panel open.
+   Clicking it twice: still one panel.
+9. Reload the extension (↻) with a Photos tab open, without reloading that tab, then open the popup:
    within a few seconds it shows the account; "Looking for Google Photos…" never stays longer than
    about 5 s. Without an account it says why and offers **Open Google Photos**.
-8. Two Photos tabs, the one used last put to sleep (`chrome://discards` → Discard) and the other
+10. Two Photos tabs, the one used last put to sleep (`chrome://discards` → Discard) and the other
    awake, with some other tab active: the popup shows the awake tab's account. With every Photos tab asleep, it says the tab is asleep and
    **Open Google Photos** wakes it.
 

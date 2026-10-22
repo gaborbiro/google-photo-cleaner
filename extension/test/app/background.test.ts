@@ -28,6 +28,9 @@ let tabs: {
 };
 let executeScript: ReturnType<typeof vi.fn>;
 let focusWindow: ReturnType<typeof vi.fn>;
+let installed: () => void;
+/** Chrome's side panel, with the options set for each tab so far. */
+let sidePanel: { options: Map<number, chrome.sidePanel.PanelOptions>; getOptions: ReturnType<typeof vi.fn>; setOptions: ReturnType<typeof vi.fn> };
 /** The background page (offscreen document): open until closed. */
 let offscreen: { open: boolean; hasDocument: ReturnType<typeof vi.fn>; closeDocument: ReturnType<typeof vi.fn>; createDocument: ReturnType<typeof vi.fn>; Reason: { WORKERS: string } };
 
@@ -51,6 +54,12 @@ beforeEach(async () => {
     createDocument: vi.fn(async () => { offscreen.open = true; }),
     Reason: { WORKERS: 'WORKERS' },
   };
+  sidePanel = {
+    options: new Map(),
+    // A tab without options of its own has the default ones: enabled, and no page (none in the manifest).
+    getOptions: vi.fn(async ({ tabId }: { tabId: number }) => sidePanel.options.get(tabId) ?? { enabled: true }),
+    setOptions: vi.fn(async (options: chrome.sidePanel.PanelOptions) => { sidePanel.options.set(options.tabId!, options); }),
+  };
   vi.stubGlobal('chrome', {
     runtime: {
       id: 'photo-cleaner',
@@ -58,11 +67,12 @@ beforeEach(async () => {
       getManifest: () => ({ version: '9.8.7' }),
       onMessage: { addListener: (listener: typeof receive) => { receive = listener; } },
       onStartup: { addListener: vi.fn() },
-      onInstalled: { addListener: vi.fn() },
+      onInstalled: { addListener: (listener: () => void) => { installed = listener; } },
     },
     tabs: { ...tabs, onUpdated: updated, onRemoved: removed },
     windows: { update: focusWindow },
     scripting: { executeScript },
+    sidePanel,
     offscreen,
   });
   await import('../../src/app/background/main');
@@ -74,74 +84,66 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function request(kind: 'app-open-photos' | 'app-show-panel') {
-  return send({ kind });
-}
-
 function send(message: AppRequest) {
   return new Promise<unknown>((resolve) => {
     expect(receive(message, { id: 'photo-cleaner' }, resolve)).toBe(true);
   });
 }
 
-describe('opening Google Photos with its panel', () => {
-  it.each(['app-open-photos', 'app-show-panel'] as const)('%s focuses an existing tab and opens its panel', async (kind) => {
-    expect(await request(kind)).toBe(true);
+describe('opening Google Photos', () => {
+  it('Open Google Photos brings the open tab forward, in its window', async () => {
+    expect(await send({ kind: 'app-open-photos' })).toBe(true);
     expect(tabs.create).not.toHaveBeenCalled();
-    expect(tabs.update).toHaveBeenCalledWith(42, { active: true });
-    expect(focusWindow).toHaveBeenCalledWith(7, { focused: true });
-    expect(tabs.sendMessage).toHaveBeenCalledExactlyOnceWith(42, { kind: 'app-toggle-panel', open: true });
-    expect(updated.listeners.size).toBe(0);
-    expect(removed.listeners.size).toBe(0);
+    expect(tabs.update).toHaveBeenCalledExactlyOnceWith(42, { active: true });
+    expect(focusWindow).toHaveBeenCalledExactlyOnceWith(7, { focused: true });
   });
 
-  it('waits for the newly created tab, then opens the panel in that tab', async () => {
-    const loading = { ...tab, id: 84, status: 'loading' };
+  it('Open Google Photos opens a tab when none is open', async () => {
     tabs.query.mockResolvedValue([]);
-    tabs.create.mockResolvedValue(loading);
-    tabs.get.mockResolvedValue(loading);
-    const opening = request('app-open-photos');
-    await vi.waitFor(() => expect(tabs.get).toHaveBeenCalledWith(84));
-    updated.emit(42, { status: 'complete' }, tab);
-    expect(tabs.sendMessage).not.toHaveBeenCalled();
-    expect(executeScript).not.toHaveBeenCalled();
-    updated.emit(84, { status: 'complete' }, { ...tab, id: 84 });
-    expect(await opening).toBe(true);
+    expect(await send({ kind: 'app-open-photos' })).toBe(true);
     expect(tabs.create).toHaveBeenCalledExactlyOnceWith({ url: 'https://photos.google.com/' });
-    expect(tabs.sendMessage).toHaveBeenCalledExactlyOnceWith(84, { kind: 'app-toggle-panel', open: true });
-    expect(updated.listeners.size).toBe(0);
-    expect(removed.listeners.size).toBe(0);
+    expect(tabs.update).not.toHaveBeenCalled();
   });
 
-  it('handles a new tab that finished loading before the listener was attached', async () => {
-    tabs.query.mockResolvedValue([]);
-    tabs.create.mockResolvedValue({ ...tab, status: 'loading' });
-    expect(await request('app-open-photos')).toBe(true);
-    expect(tabs.sendMessage).toHaveBeenCalledExactlyOnceWith(42, { kind: 'app-toggle-panel', open: true });
+  it('after the popup opened a tab’s panel, that tab is brought forward, in its window', async () => {
+    const other = { ...tab, id: 84, windowId: 9 };
+    tabs.get.mockResolvedValue(other);
+    expect(await send({ kind: 'app-show-panel', tabId: 84 })).toBe(true);
+    expect(tabs.get).toHaveBeenCalledWith(84);
+    expect(tabs.update).toHaveBeenCalledExactlyOnceWith(84, { active: true });
+    expect(focusWindow).toHaveBeenCalledExactlyOnceWith(9, { focused: true });
+  });
+});
+
+describe('the panel (Chrome’s side panel)', () => {
+  const page = (id: number, url?: string) => ({ id, windowId: 7, url }) as chrome.tabs.Tab;
+
+  it('is offered on a Google Photos page as it loads, naming its tab, and taken away when the tab goes elsewhere', async () => {
+    updated.emit(5, { status: 'loading' }, page(5, 'https://photos.google.com/album/x'));
+    await vi.waitFor(() => expect(sidePanel.options.get(5)).toEqual({ tabId: 5, path: 'panel.html?tab=5', enabled: true }));
+    // Another site: Chrome gives no address without the "tabs" permission.
+    updated.emit(5, { status: 'loading' }, page(5));
+    await vi.waitFor(() => expect(sidePanel.options.get(5)).toEqual({ tabId: 5, enabled: false }));
+    updated.emit(5, { status: 'loading' }, page(5, 'https://photos.google.com/'));
+    await vi.waitFor(() => expect(sidePanel.options.get(5)).toMatchObject({ enabled: true }));
+    expect(sidePanel.setOptions).toHaveBeenCalledTimes(3);
   });
 
-  it('injects the panel into a tab opened before the extension started', async () => {
-    tabs.sendMessage.mockRejectedValueOnce(new Error('No listener'));
-    expect(await request('app-show-panel')).toBe(true);
-    expect(executeScript.mock.calls).toEqual([
-      [{ target: { tabId: 42 }, files: ['page.js'], world: 'MAIN' }],
-      [{ target: { tabId: 42 }, files: ['content.js'] }],
-    ]);
-    expect(tabs.sendMessage).toHaveBeenCalledTimes(2);
+  it('is set only when it changes, so a panel in use is not reloaded; and only as a page starts loading', async () => {
+    sidePanel.options.set(5, { tabId: 5, path: 'panel.html?tab=5', enabled: true });
+    updated.emit(5, { status: 'loading' }, page(5, 'https://photos.google.com/'));
+    updated.emit(5, { status: 'complete' }, page(6, 'https://photos.google.com/'));
+    updated.emit(6, { title: 'Photos' }, page(6, 'https://photos.google.com/'));
+    await vi.waitFor(() => expect(sidePanel.getOptions).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(sidePanel.setOptions).not.toHaveBeenCalled();
   });
 
-  it.each(['closed', 'timed out'] as const)('cleans up when a loading tab is %s', async (outcome) => {
-    vi.useFakeTimers();
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    tabs.get.mockResolvedValue({ ...tab, status: 'loading' });
-    const opening = request('app-open-photos');
-    await vi.waitFor(() => expect(tabs.get).toHaveBeenCalled());
-    if (outcome === 'closed') removed.emit(42, { windowId: 7, isWindowClosing: false });
-    else await vi.advanceTimersByTimeAsync(30_000);
-    expect(await opening).toMatchObject({ error: expect.any(String) });
-    expect(tabs.sendMessage).not.toHaveBeenCalled();
-    expect(updated.listeners.size).toBe(0);
-    expect(removed.listeners.size).toBe(0);
+  it('after an install or update, every open Photos tab gets it, also those asleep (which get the page script once awake)', async () => {
+    tabs.query.mockResolvedValue([page(1, 'https://photos.google.com/'), { ...page(2, 'https://photos.google.com/'), discarded: true }]);
+    installed();
+    await vi.waitFor(() => expect([...sidePanel.options.keys()].sort()).toEqual([1, 2]));
+    await vi.waitFor(() => expect(executeScript.mock.calls.map(([{ target }]) => target.tabId)).toEqual([1, 1]));
   });
 });
 
@@ -174,12 +176,11 @@ describe('which account is signed in', () => {
   function tabsAnswer(answers: Record<number, () => unknown>) {
     tabs.sendMessage.mockImplementation(async (tabId: number) => answers[tabId]());
   }
-  function ask(sender: chrome.runtime.MessageSender = { id: 'photo-cleaner' }) {
-    return new Promise<unknown>((resolve) => {
-      expect(receive({ kind: 'app-account' }, sender, resolve)).toBe(true);
-    });
+  /** Asks as the popup does, or as the panel of tab [tabId]. */
+  function ask(tabId?: number) {
+    return send({ kind: 'app-account', tabId });
   }
-  const notResponding = { account: null, problem: 'The Google Photos tab is not responding; reload it.', photosTabOpen: true };
+  const notResponding = { account: null, problem: 'The Google Photos tab is not responding; reload it.', photosTabOpen: true, tabId: 42 };
 
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -187,7 +188,7 @@ describe('which account is signed in', () => {
 
   it('says when no Google Photos tab is open', async () => {
     tabs.query.mockResolvedValue([]);
-    expect(await ask()).toEqual({ account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false });
+    expect(await ask()).toEqual({ account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false, tabId: null });
   });
 
   it('gives a tab that does not answer 5 seconds, then says it is not responding', async () => {
@@ -208,7 +209,7 @@ describe('which account is signed in', () => {
       if (target.tabId === 2) throw new Error('Cannot access the tab');
       return [];
     });
-    expect(await ask()).toEqual({ account: { fingerprint: 'acc3', email: 'acc3@example.com' }, problem: null, photosTabOpen: true });
+    expect(await ask()).toEqual({ account: { fingerprint: 'acc3', email: 'acc3@example.com' }, problem: null, photosTabOpen: true, tabId: 3 });
     expect(tabs.sendMessage.mock.calls.map(([tabId]) => tabId)).not.toContain(1); // a sleeping tab is not woken for this
   });
 
@@ -227,26 +228,28 @@ describe('which account is signed in', () => {
   it('without an account, gives the reason of a tab that answered before that of one asleep or not responding', async () => {
     tabs.query.mockResolvedValue([photos(1, { discarded: true }), photos(2)]);
     tabsAnswer({ 2: () => signedOut });
-    expect(await ask()).toEqual({ account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true });
+    expect(await ask()).toEqual({ account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true, tabId: 2 });
   });
 
   it('without any answer, gives the first tab’s reason', async () => {
     tabs.query.mockResolvedValue([photos(1, { discarded: true }), photos(2, { discarded: true })]);
-    expect(await ask()).toEqual({ account: null, problem: 'The Google Photos tab is asleep; click on it to wake it.', photosTabOpen: true });
+    expect(await ask()).toEqual({ account: null, problem: 'The Google Photos tab is asleep; click on it to wake it.', photosTabOpen: true, tabId: 1 });
     expect(tabs.sendMessage).not.toHaveBeenCalled();
   });
 
   it('for the panel, asks only its own tab', async () => {
     tabs.query.mockResolvedValue([photos(1), photos(42)]);
+    tabs.get.mockResolvedValue(photos(42));
     tabsAnswer({ 1: () => signedIn('acc1'), 42: () => signedOut });
-    expect(await ask({ id: 'photo-cleaner', tab: photos(42) })).toEqual({ account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true });
+    expect(await ask(42)).toEqual({ account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true, tabId: 42 });
+    expect(tabs.get).toHaveBeenCalledWith(42);
     expect(tabs.sendMessage.mock.calls.map(([tabId]) => tabId)).toEqual([42]);
   });
 
   it('for the panel, a frozen tab is not responding after 5 seconds', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     tabsAnswer({ 42: never });
-    const answer = ask({ id: 'photo-cleaner', tab: photos(42) });
+    const answer = ask(42);
     await vi.advanceTimersByTimeAsync(5_000);
     expect(await answer).toEqual(notResponding);
   });

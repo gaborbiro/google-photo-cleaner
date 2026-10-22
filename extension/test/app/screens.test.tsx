@@ -30,14 +30,18 @@ vi.mock('react-dom/client', async (original) => {
   return { ...real, createRoot: (...args: Parameters<typeof real.createRoot>) => { const root = real.createRoot(...args); roots.push(root); return root; } };
 });
 
-const SIGNED_IN: AccountAnswer = { account: { fingerprint: 'account-a', email: 'someone@example.com' }, problem: null, photosTabOpen: true };
-const NO_TAB: AccountAnswer = { account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false };
+/** The Google Photos tab: the panel's, and the one signed in. */
+const PHOTOS_TAB = 42;
+const SIGNED_IN: AccountAnswer = { account: { fingerprint: 'account-a', email: 'someone@example.com' }, problem: null, photosTabOpen: true, tabId: PHOTOS_TAB };
+const NO_TAB: AccountAnswer = { account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false, tabId: null };
 
 /** The background's answer to which account is signed in: as it is, or one at a time, when each is asked. */
 let account: AccountAnswer | { error: string } | (() => Promise<AccountAnswer>);
 /** What the pages asked the background page, in order. */
 let sent: { kind: string; [key: string]: unknown }[];
 let eraseAnswer: { ok?: true; error?: string };
+/** What the pages asked of Chrome's side panel, in order. */
+let sidePanelCalls: [string, unknown][];
 /** Google Photos' trash. */
 let google: FakeGoogle;
 let errors: MockInstance;
@@ -58,6 +62,10 @@ function pretendExtension() {
       },
       getURL: (path: string) => `chrome-extension://photo-cleaner/${path}`,
       getManifest: () => ({ version: '1.2.3' }),
+    },
+    sidePanel: {
+      setOptions: async (options: unknown) => { sidePanelCalls.push(['setOptions', options]); },
+      open: async (options: unknown) => { sidePanelCalls.push(['open', options]); },
     },
   });
 }
@@ -100,8 +108,8 @@ async function scannedAndAnalysed(factory: IDBFactory, notAnalysed = 0) {
   await jobs.update(jobId('analysis', 'account-a'), () => endJob(analysed, 'completed', null, NOW));
 }
 
-/** Opens a page as Chrome would: its HTML's root element, then its script. */
-async function open(page: 'popup' | 'panel' | 'review', query = '') {
+/** Opens a page as Chrome would: its HTML's root element, then its script. The panel is the Photos tab's. */
+async function open(page: 'popup' | 'panel' | 'review', query = page === 'panel' ? `?tab=${PHOTOS_TAB}` : '') {
   window.history.replaceState(null, '', `/${page}.html${query}`);
   document.body.innerHTML = '<div id="root"></div>';
   await import(`../../src/app/${page}/main.tsx`);
@@ -136,6 +144,7 @@ beforeEach(() => {
   account = SIGNED_IN;
   sent = [];
   eraseAnswer = { ok: true };
+  sidePanelCalls = [];
   google = new FakeGoogle();
   pretendExtension();
   pretendLayout();
@@ -393,7 +402,7 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(labels(again)).toHaveLength(3), { timeout: 3_000 });
   });
 
-  it('popup: its two buttons ask the background page for the review tab on Scan, and for the panel', async () => {
+  it('popup: its two buttons ask for the review tab on Scan, and open the signed-in Photos tab’s panel, bringing the tab forward', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('popup');
     await shows(root, 'Open in tab');
@@ -401,7 +410,25 @@ describe('clicks and keys reach what they should', () => {
     await click(root, 'Open in tab');
     await click(root, 'Open panel in Google Photos');
     expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a', tab: 'scan' }]);
-    expect(requests('app-show-panel')).toHaveLength(1);
+    // Chrome opens a side panel only straight from a click: the popup asks Chrome itself, not the service worker.
+    expect(sidePanelCalls).toEqual([
+      ['setOptions', { tabId: PHOTOS_TAB, path: `panel.html?tab=${PHOTOS_TAB}`, enabled: true }],
+      ['open', { tabId: PHOTOS_TAB }],
+    ]);
+    await vi.waitFor(() => expect(requests('app-show-panel')).toEqual([{ kind: 'app-show-panel', tabId: PHOTOS_TAB }]));
+  });
+
+  it('panel: asks which account its own Photos tab is signed in to', async () => {
+    const root = await open('panel', '?tab=7');
+    await shows(root, 'someone@example.com');
+    expect(requests('app-account').length).toBeGreaterThan(0);
+    expect(requests('app-account').every((r) => r.tabId === 7)).toBe(true);
+  });
+
+  it('popup: asks about the best Photos tab, naming none', async () => {
+    const root = await open('popup');
+    await shows(root, 'someone@example.com');
+    expect(requests('app-account').every((r) => r.tabId === undefined)).toBe(true);
   });
 
   it.each(['popup', 'panel'] as const)('%s: with groups waiting its button offers to review them, opening the review tab on Duplicates', async (page) => {
@@ -434,7 +461,7 @@ describe('clicks and keys reach what they should', () => {
     ['a tab not responding', 'The Google Photos tab is not responding; reload it.'],
     ['a signed-out tab', 'Google Photos is signed out in this tab.'],
   ])('popup with %s says why, and offers to open Google Photos once it knows', async (_, problem) => {
-    account = problem === null ? () => new Promise(() => {}) : { account: null, problem, photosTabOpen: true };
+    account = problem === null ? () => new Promise(() => {}) : { account: null, problem, photosTabOpen: true, tabId: PHOTOS_TAB };
     const root = await open('popup');
     if (problem === null) {
       await shows(root, 'Looking for Google Photos…');
@@ -455,7 +482,7 @@ describe('clicks and keys reach what they should', () => {
   });
 
   it('panel in a tab that is signed out says so', async () => {
-    account = { account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true };
+    account = { account: null, problem: 'Google Photos is signed out in this tab.', photosTabOpen: true, tabId: PHOTOS_TAB };
     const root = await open('panel');
     await shows(root, 'Google Photos is signed out in this tab.');
   });
@@ -487,7 +514,7 @@ describe('clicks and keys reach what they should', () => {
     const jobs = new IndexedDbJobStore(indexedDB);
     const reading = startScanJob('account-a', NOW);
     await jobs.update(reading.id, () => reading);
-    const root = await open(page, page === 'review' ? '?account=account-a' : '');
+    const root = await open(page, page === 'review' ? '?account=account-a' : undefined);
     await shows(root, 'Read your library', 'Analyse photos', 'Full speed');
     const steps = () => [...root.querySelectorAll<HTMLElement>('.scan-step')];
     expect(steps()).toHaveLength(2);
@@ -518,7 +545,7 @@ describe('clicks and keys reach what they should', () => {
     await jobs.update(jobId('analysis', 'account-a'), () => reportProgress(startAnalysisJob('account-a', NOW, null, NO_ANALYSIS), {
       ...NO_ANALYSIS, stage: 'analysing', detail: 140, photos: 6, newPhotos: 6, newAnalysed: 2,
     }, NOW));
-    const root = await open(page, page === 'review' ? '?account=account-a' : '');
+    const root = await open(page, page === 'review' ? '?account=account-a' : undefined);
     await shows(root, 'Protection details', 'Detail 140');
     const [library, analysis] = [...root.querySelectorAll<HTMLElement>('.scan-step')];
     const timesRow = () => library.querySelector('details.protection .report-times');
@@ -632,7 +659,7 @@ describe('clicks and keys reach what they should', () => {
     const jobs = new IndexedDbJobStore(indexedDB);
     await jobs.update(jobId('library-scan', 'account-a'), () => startScanJob('account-a', NOW - 120_000)); // nothing since
     for (const page of ['popup', 'review'] as const) {
-      const root = await open(page, page === 'review' ? '?account=account-a' : '');
+      const root = await open(page, page === 'review' ? '?account=account-a' : undefined);
       await shows(root, 'Scan not responding', "Photo Cleaner's background work stopped responding", 'Not responding');
       await ready(root.querySelector<HTMLElement>('.scan-step')!, 'Copy diagnostics');
       if (page === 'popup') {

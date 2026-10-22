@@ -428,14 +428,16 @@ export interface SurfaceView {
    * doesn't flash up each time the popup opens.
    */
   offerPhotos: boolean;
+  /** The popup offers Open panel in Google Photos, on this Photos tab: the one signed in to [account]. */
+  panelTab: number | null;
 }
 
 export function surfaceView(answer: AccountAnswer | undefined): SurfaceView {
-  const none = { problemText: null, account: null, accountName: null };
+  const none = { problemText: null, account: null, accountName: null, panelTab: null };
   if (answer === undefined) return { ...none, state: 'looking', offerPhotos: false };
   if (answer.account) {
     const { fingerprint, email } = answer.account;
-    return { state: 'account', problemText: null, account: fingerprint, accountName: accountLabel(fingerprint, email), offerPhotos: false };
+    return { state: 'account', problemText: null, account: fingerprint, accountName: accountLabel(fingerprint, email), offerPhotos: false, panelTab: answer.tabId };
   }
   return { ...none, state: answer.photosTabOpen === false ? 'no-photos' : 'problem', problemText: answer.problem, offerPhotos: true };
 }

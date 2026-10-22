@@ -11,7 +11,7 @@ import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, tabProblem } from 
 import { ENGINE_FAILED_TEXT } from '../shared/job';
 import { keepProblemsHere, problemsSaved, recordUnexpectedReport } from '../shared/problemLog';
 import { IndexedDbJobStore } from '../shared/store';
-import { isAppRequest, reviewUrl, type AccountAnswer, type AppRequest, type ReviewTab, type TabRequest } from '../shared/messages';
+import { isAppRequest, panelOptions, reviewUrl, type AccountAnswer, type AppRequest, type ReviewTab } from '../shared/messages';
 
 const PHOTOS_URL = 'https://photos.google.com/';
 const store = new IndexedDbJobStore();
@@ -28,7 +28,7 @@ async function injectInto(tabId: number): Promise<void> {
   await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
 }
 
-async function sendToTab<T>(tabId: number, message: TabCommand | TabRequest): Promise<T> {
+async function sendToTab<T>(tabId: number, message: TabCommand): Promise<T> {
   try {
     return (await chrome.tabs.sendMessage(tabId, message)) as T;
   } catch {
@@ -55,29 +55,30 @@ function timeLimit<T>(work: Promise<T>, ms: number): Promise<T> {
  * Google changed something) from one that is asleep or didn't answer in time.
  */
 async function askAccount(tab: chrome.tabs.Tab): Promise<{ answer: AccountAnswer; answered: boolean }> {
-  if (tab.discarded) return { answer: { account: null, problem: 'The Google Photos tab is asleep; click on it to wake it.', photosTabOpen: true }, answered: false };
+  const tabId = tab.id ?? null;
+  if (tab.discarded) return { answer: { account: null, problem: 'The Google Photos tab is asleep; click on it to wake it.', photosTabOpen: true, tabId }, answered: false };
   let result: OpResult;
   try {
-    if (tab.id === undefined) throw new Error('the tab has no id');
-    result = await timeLimit(sendToTab<OpResult>(tab.id, { kind: 'pc-command', op: 'status', params: {} }), ACCOUNT_CHECK_MS);
+    if (tabId === null) throw new Error('the tab has no id');
+    result = await timeLimit(sendToTab<OpResult>(tabId, { kind: 'pc-command', op: 'status', params: {} }), ACCOUNT_CHECK_MS);
   } catch (error) {
     console.warn('Photo Cleaner: a Google Photos tab did not answer the account check', error);
-    return { answer: { account: null, problem: 'The Google Photos tab is not responding; reload it.', photosTabOpen: true }, answered: false };
+    return { answer: { account: null, problem: 'The Google Photos tab is not responding; reload it.', photosTabOpen: true, tabId }, answered: false };
   }
-  if (!result.ok) return { answer: { account: null, problem: accountProblem(result.error), photosTabOpen: true }, answered: true };
+  if (!result.ok) return { answer: { account: null, problem: accountProblem(result.error), photosTabOpen: true, tabId }, answered: true };
   const data = result.data as { accountFingerprint: string; accountEmail?: string };
-  return { answer: { account: { fingerprint: data.accountFingerprint, email: data.accountEmail ?? null }, problem: null, photosTabOpen: true }, answered: true };
+  return { answer: { account: { fingerprint: data.accountFingerprint, email: data.accountEmail ?? null }, problem: null, photosTabOpen: true, tabId }, answered: true };
 }
 
 /**
- * Which account is signed in: in the asking Photos tab (the panel's), else in the first open Photos tab
+ * Which account is signed in: in [tab] when it is a Photos tab (the panel's), else in the first open Photos tab
  * that can say (active first, then most recently used). Every tab is asked at once, so one that doesn't
  * answer costs the time limit once. Without an account, why: a tab that answered gives the reason
  * (signed out…), before one that is asleep or not responding.
  */
 async function accountOf(tab: chrome.tabs.Tab | undefined): Promise<AccountAnswer> {
   const tabs = tab?.url?.startsWith(PHOTOS_URL) ? [tab] : await photosTabs();
-  if (tabs.length === 0) return { account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false };
+  if (tabs.length === 0) return { account: null, problem: 'No Google Photos tab is open.', photosTabOpen: false, tabId: null };
   const asked = tabs.map(askAccount);
   let reason: { answer: AccountAnswer; answered: boolean } | null = null;
   for (const pending of asked) {
@@ -270,41 +271,30 @@ async function eraseAll(): Promise<{ ok: true }> {
 
 // --- tabs ---
 
-async function openPhotos(): Promise<chrome.tabs.Tab> {
-  const tab = (await photosTabs())[0];
-  if (tab?.id !== undefined) {
-    await chrome.tabs.update(tab.id, { active: true });
-    if (tab.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true });
-    return tab;
-  } else {
-    return chrome.tabs.create({ url: PHOTOS_URL });
-  }
+/** Brings [tab] forward in its window, and the window to the front. */
+async function bringForward(tab: chrome.tabs.Tab): Promise<void> {
+  if (tab.id === undefined) throw new Error('The tab to bring forward has no id');
+  await chrome.tabs.update(tab.id, { active: true });
+  if (tab.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true });
 }
 
-/** A new or waking tab must finish loading before the panel is opened, or navigation hides it again. */
-function waitForPhotosTab(tabId: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => done(new Error('Google Photos is still loading. Try opening the panel again.')), RELOAD_TIMEOUT_MS);
-    function done(error?: unknown) {
-      clearTimeout(timer);
-      chrome.tabs.onUpdated.removeListener(updated);
-      chrome.tabs.onRemoved.removeListener(removed);
-      if (error) reject(error);
-      else resolve();
-    }
-    function updated(id: number, info: chrome.tabs.OnUpdatedInfo) {
-      if (id === tabId && info.status === 'complete') done();
-    }
-    function removed(id: number) {
-      if (id === tabId) done(new Error('The Google Photos tab was closed before the panel opened.'));
-    }
-    chrome.tabs.onUpdated.addListener(updated);
-    chrome.tabs.onRemoved.addListener(removed);
-    // Listen first so a tab that finishes between creation and this check cannot be missed.
-    void chrome.tabs.get(tabId).then((tab) => {
-      if (tab.status === 'complete') done();
-    }, done);
-  });
+async function openPhotos(): Promise<void> {
+  const tab = (await photosTabs())[0];
+  if (tab) await bringForward(tab);
+  else await chrome.tabs.create({ url: PHOTOS_URL });
+}
+
+/**
+ * The panel is offered on Google Photos tabs only: Chrome hides it on a tab that leaves Google Photos
+ * and shows it again on coming back. Without the "tabs" permission, Chrome gives no address for other
+ * sites' tabs. Options already set are left alone, so a panel in use is not reloaded.
+ */
+async function offerPanel(tab: chrome.tabs.Tab): Promise<void> {
+  if (tab.id === undefined) return;
+  const wanted = tab.url?.startsWith(PHOTOS_URL) ? panelOptions(tab.id) : { tabId: tab.id, enabled: false };
+  const current = await chrome.sidePanel.getOptions({ tabId: tab.id });
+  if (current.enabled === wanted.enabled && (!wanted.enabled || current.path === wanted.path)) return;
+  await chrome.sidePanel.setOptions(wanted);
 }
 
 /**
@@ -323,19 +313,11 @@ async function openReview(account: string | null, tab: ReviewTab): Promise<void>
   }
 }
 
-async function showPanel(): Promise<void> {
-  const tab = await openPhotos();
-  if (tab.id !== undefined) {
-    await waitForPhotosTab(tab.id);
-    await sendToTab(tab.id, { kind: 'app-toggle-panel', open: true });
-  }
-}
-
 async function handle(request: AppRequest, sender: chrome.runtime.MessageSender): Promise<unknown> {
   switch (request.kind) {
     case 'app-account': {
       // The panel and popup ask this as they open: a good moment to carry on, too.
-      const answer = await accountOf(sender.tab);
+      const answer = await accountOf(request.tabId === undefined ? undefined : await chrome.tabs.get(request.tabId));
       if (answer.account) await carryOn(answer.account.fingerprint);
       return answer;
     }
@@ -364,8 +346,10 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
       await openReview(request.account, request.tab);
       return true;
     case 'app-open-photos':
+      await openPhotos();
+      return true;
     case 'app-show-panel':
-      await showPanel();
+      await bringForward(await chrome.tabs.get(request.tabId));
       return true;
   }
 }
@@ -383,8 +367,13 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 chrome.runtime.onStartup.addListener(() => void wakeEngineIfWorkLeft());
 chrome.runtime.onInstalled.addListener(() => {
   void wakeEngineIfWorkLeft();
-  // Photos tabs opened before the install get the page script and panel now.
+  // Photos tabs opened before the install get the panel, and the page script once awake.
   void photosTabs().then((tabs) => tabs.forEach((tab) => {
+    offerPanel(tab).catch((e) => console.warn('Could not offer the panel in a Photos tab', e));
     if (tab.id !== undefined && !tab.discarded) injectInto(tab.id).catch((e) => console.warn('Could not inject into a Photos tab', e));
   }));
+});
+// Each page that starts loading: Google Photos gets the panel, any other page has it taken away.
+chrome.tabs.onUpdated.addListener((_, info, tab) => {
+  if (info.status === 'loading') offerPanel(tab).catch((e) => console.warn('Could not offer or remove the panel in a tab', e));
 });

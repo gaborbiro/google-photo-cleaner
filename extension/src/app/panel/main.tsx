@@ -1,12 +1,16 @@
-// The panel inside photos.google.com: the control room for the account signed in to this tab.
+// The panel beside photos.google.com (Chrome's side panel, closed with Chrome's own button): the
+// control room for the account signed in to its tab.
 
 import { createRoot } from 'react-dom/client';
+import { panelTab } from '../shared/messages';
 import { send, useSignedInScan, useStartOverWhenErased } from '../ui/hooks';
 import { ScanCard, StorageProblem } from '../ui/JobCard';
 
+const TAB_ID = panelTab(location.search);
+
 function Panel() {
   useStartOverWhenErased();
-  const { view, scan, analysis, report, launch } = useSignedInScan();
+  const { view, scan, analysis, report, launch } = useSignedInScan(TAB_ID);
   return (
     <main className="panel">
       <header className="surface-header">
@@ -14,7 +18,6 @@ function Panel() {
           <h1>Photo Cleaner</h1>
           {view.accountName && <p className="account mono" title="The Google account signed in to Google Photos">{view.accountName}</p>}
         </div>
-        <button className="ghost" title="Close the panel (a scan keeps running)" aria-label="Close the panel" onClick={() => window.parent.postMessage({ kind: 'app-close-panel' }, 'https://photos.google.com')}>×</button>
       </header>
       <StorageProblem />
       {view.state === 'looking' && <p className="muted">Checking which account is signed in…</p>}

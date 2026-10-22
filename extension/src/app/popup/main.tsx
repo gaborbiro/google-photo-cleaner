@@ -1,12 +1,13 @@
 // The toolbar popup: the front door. Says what to do next, depending on where things stand.
 
 import { createRoot } from 'react-dom/client';
-import { send, useSignedInScan, useStartOverWhenErased } from '../ui/hooks';
+import { send, showPanel, useSignedInScan, useStartOverWhenErased } from '../ui/hooks';
 import { ScanCard, StorageProblem } from '../ui/JobCard';
 
 function Popup() {
   useStartOverWhenErased();
   const { view, scan, analysis, report, launch } = useSignedInScan();
+  const { panelTab } = view;
   return (
     <main className="popup">
       <header>
@@ -23,7 +24,7 @@ function Popup() {
           {scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} surface="popup" />}
           <div className="launch">
             <button className="primary" onClick={() => void send({ kind: 'app-open-review', account: view.account, tab: launch.tab })}>{launch.text} <span aria-hidden="true">↗</span></button>
-            <button onClick={() => void send({ kind: 'app-show-panel' })}>Open panel in Google Photos <span aria-hidden="true">↗</span></button>
+            {panelTab !== null && <button onClick={() => void showPanel(panelTab)}>Open panel in Google Photos <span aria-hidden="true">↗</span></button>}
           </div>
         </>
       )}

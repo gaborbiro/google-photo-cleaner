@@ -5,8 +5,8 @@ import type { PageOp } from '../../shared/protocol';
 // the Photos tabs; job state itself goes through the job store.
 
 export type AppRequest =
-  /** Which Google account a Photos tab is signed in to: the sender's tab (panel) or the best Photos tab. */
-  | { kind: 'app-account'; account?: string }
+  /** Which Google account a Photos tab is signed in to: the panel's tab [tabId], or else the best Photos tab. */
+  | { kind: 'app-account'; tabId?: number }
   /** A job was started or resumed: make sure the background page is running. */
   | { kind: 'app-wake-engine' }
   /** The background page has nothing left to run and may be closed. */
@@ -27,8 +27,10 @@ export type AppRequest =
   | { kind: 'app-run-op'; account: string; op: PageOp; params: Record<string, unknown> }
   /** Open the review tab for [account] on [tab], or bring the open one forward and switch it there. */
   | { kind: 'app-open-review'; account: string | null; tab: ReviewTab }
+  /** Bring the best Photos tab forward, or open one. */
   | { kind: 'app-open-photos' }
-  | { kind: 'app-show-panel' }
+  /** Bring Photos tab [tabId] forward: the popup has just opened its panel (see [panelOptions]). */
+  | { kind: 'app-show-panel'; tabId: number }
   /** A Google Photos page has loaded (from its content script): jobs waiting for it may carry on. */
   | { kind: 'app-photos-ready' }
   /** Erase everything Photo Cleaner saved on this computer; answers `{ ok: true }` or `{ error }`. */
@@ -57,6 +59,23 @@ export interface AccountAnswer {
   problem: string | null;
   /** Whether a Google Photos tab is open; null when unknown (the extension itself did not answer). */
   photosTabOpen: boolean | null;
+  /** The Photos tab this answer is about (the popup opens its panel); null when none. */
+  tabId: number | null;
+}
+
+/**
+ * The panel is Chrome's side panel, one for each Google Photos tab, beside the page rather than on
+ * it. Its address names its tab (`panel.html?tab=42`): the panel asks about that tab's account.
+ */
+export function panelOptions(tabId: number): chrome.sidePanel.PanelOptions {
+  return { tabId, path: `panel.html?tab=${tabId}`, enabled: true };
+}
+
+/** The panel's tab, from its address (see [panelOptions]). */
+export function panelTab(search: string): number {
+  const tabId = Number(new URLSearchParams(search).get('tab'));
+  if (!Number.isInteger(tabId) || tabId <= 0) throw new Error(`The panel's address names no tab: "${search}"`);
+  return tabId;
 }
 
 const EXTENSION_SILENT = 'The extension did not answer. Try again; if it keeps happening, reload the extension.';
@@ -68,11 +87,8 @@ const EXTENSION_SILENT = 'The extension did not answer. Try again; if it keeps h
 export function accountAnswer(reply: unknown): AccountAnswer {
   if (typeof reply === 'object' && reply !== null && 'account' in reply && 'problem' in reply) return reply as AccountAnswer;
   const error = typeof reply === 'object' && reply !== null ? (reply as { error?: unknown }).error : undefined;
-  return { account: null, problem: typeof error === 'string' ? error : EXTENSION_SILENT, photosTabOpen: null };
+  return { account: null, problem: typeof error === 'string' ? error : EXTENSION_SILENT, photosTabOpen: null, tabId: null };
 }
-
-/** Service worker -> Photos tab content script. */
-export type TabRequest = { kind: 'app-toggle-panel'; open?: boolean };
 
 export function isAppRequest(value: unknown): value is AppRequest {
   return typeof value === 'object' && value !== null && typeof (value as { kind?: unknown }).kind === 'string' &&

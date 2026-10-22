@@ -101,9 +101,10 @@ Find duplicate and unwanted photos in the user's Google Photos library and move 
 |---|---|
 | `unlimitedStorage` | Keeps the AI model's files (about 320 MB) and the per-photo analysis (tens of MB for libraries with tens of thousands of photos) on the computer, so they are not evicted and downloaded or analysed again. |
 | `offscreen` | Runs the library scan and the AI analysis in a hidden extension page, so a scan of a large library (often over an hour) keeps going when the user closes the panel or the review tab. |
-| `scripting` | After installing or updating, adds Photo Cleaner's panel to photos.google.com tabs that were already open, so the user does not have to reload them. |
+| `scripting` | After installing or updating, adds Photo Cleaner's script to photos.google.com tabs that were already open, so the user does not have to reload them. |
 | `idle` | Slows the analysis down while the user is using the computer and runs at full speed when they are away, so the AI does not make the computer sluggish. |
-| Host: `https://photos.google.com/*` | Photo Cleaner works inside the user's signed-in Google Photos tab: it reads the photo list, favourites, archive and albums there, shows its panel, and trashes or restores the photos the user approves. |
+| `sidePanel` | Shows Photo Cleaner's panel (the account, the scan's progress, the way to the review) in Chrome's side panel beside Google Photos, only on photos.google.com tabs. |
+| Host: `https://photos.google.com/*` | Photo Cleaner works inside the user's signed-in Google Photos tab: it reads the photo list, favourites, archive and albums there, and trashes or restores the photos the user approves. |
 
 The AI model is downloaded from Hugging Face without a host permission: Hugging Face lets any page
 fetch model files (CORS), so the extension needs no access to its sites.
@@ -125,7 +126,7 @@ in the roadmap).
 ## Note for the reviewers (Package → test instructions)
 
 > Photo Cleaner needs a Google account with some photos in Google Photos. Open photos.google.com, then
-> click the extension's icon and press "Scan" in the panel on the right. Stage 1 lists the library;
+> click the extension's icon and press "Scan" (or "Open panel in Google Photos" for the side panel). Stage 1 lists the library;
 > stage 2 downloads the AI model (about 320 MB from Hugging Face) and analyses the photos on the
 > graphics card (WebGPU). "Open review" opens the Duplicates and Search tabs.
 >

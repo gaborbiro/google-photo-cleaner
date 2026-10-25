@@ -109,8 +109,13 @@ function asArray(value: unknown, what: string): unknown[] {
 const MARKER = /^[A-Za-z0-9_-]{64,}$/;
 /** A photo's own ID: AF1Qip and 37 or 38 more characters (43 only seen inside albums). */
 const MEDIA_KEY = /^AF1Qip[A-Za-z0-9_-]{37,38}$/;
-/** The ID every copy of a photo shares: 27 characters, rarely followed by ":" and 11 to 16 more. */
-const DEDUP_KEY = /^[A-Za-z0-9_-]{27}(?::[A-Za-z0-9_-]{11,16})?$/;
+/**
+ * The ID every copy of a photo shares: usually 27 characters, rarely followed by ":" and 11 to 16
+ * more, but other forms come too (18 characters with others among them, on an item from 2012). Any
+ * ID without spaces is read; the shared rules never let an item with an unusual one be trashed, and
+ * stop all trashing when an album has one that no library item has.
+ */
+const DEDUP_KEY = /^\S{1,512}$/;
 /** An album's ID: AF1Qip and 38 more characters, or 64 more for newer shared albums. */
 const ALBUM_KEY = /^AF1Qip(?:[A-Za-z0-9_-]{38}|[A-Za-z0-9_-]{64})$/;
 
@@ -201,9 +206,14 @@ function detailsOf(checkedRow: unknown[]): Record<string, unknown> {
   return checkedRow.at(-1) as Record<string, unknown>;
 }
 
-function mediaTypeOf(ext: Record<string, unknown>): MediaType {
-  const duration = ext[DURATION_EXT];
-  return Array.isArray(duration) && typeof duration[0] === 'number' ? 'VIDEO' : 'PHOTO';
+/**
+ * Videos carry their duration in the details; the rest are photos. Video details without a
+ * duration (seen on an item from 2012 with a 320×240 placeholder preview) leave the type unknown.
+ */
+function mediaTypeOf(ext: Record<string, unknown>): MediaType | null {
+  const video = ext[DURATION_EXT];
+  if (video === undefined) return 'PHOTO';
+  return Array.isArray(video) && typeof video[0] === 'number' ? 'VIDEO' : null;
 }
 
 function favouriteOf(ext: Record<string, unknown>): boolean | null {

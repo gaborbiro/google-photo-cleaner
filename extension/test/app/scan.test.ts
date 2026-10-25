@@ -15,6 +15,7 @@ import {
   eligibilityOf,
   eligibleIndexes,
   fakeAlbum,
+  fakeDedupKey,
   fakeItem,
   FakePhotos,
   newStore,
@@ -68,6 +69,40 @@ describe('library scan', () => {
     expect(eligibilityOf(result, 3).unknownReasons).toEqual(['MEDIA_TYPE_UNKNOWN']);
     expect(eligibilityOf(result, 4).eligibility).toBe('PROTECTED'); // the favourites listing protects without the flag
     expect(eligibilityOf(result, 5).eligibility).toBe('PROTECTED'); // archived photos are protected
+  });
+
+  it('an item whose dedup key has an unusual form is read but never eligible; an album still protects it', async () => {
+    const store = newStore();
+    const source = new FakePhotos(
+      [fakeItem(0), { ...fakeItem(1), dedupKey: 'abcdefgh:ijklmnopq' }, { ...fakeItem(2), dedupKey: 'abcdefgh+ijklmnop2' }],
+      [{ ...fakeAlbum('A', [], { reportedCount: 1 }), members: [{ mediaKey: 'A-entry-2', dedupKey: 'abcdefgh+ijklmnop2' }] }],
+    );
+    expect((await scan(source, store)).outcome).toEqual({ kind: 'completed' });
+    const result = await classifyLatest(store);
+    expect(result.report.coverage.isComplete).toBe(true);
+    expect(eligibleIndexes(result)).toEqual([0]);
+    expect(eligibilityOf(result, 1)).toMatchObject({ eligibility: 'UNKNOWN', unknownReasons: ['DEDUP_KEY_UNUSUAL'] });
+    expect(eligibilityOf(result, 2)).toMatchObject({ eligibility: 'PROTECTED', protectionReasons: ['IN_ALBUM'] });
+    const view = reportView(result);
+    expect(view.warningText).toBeNull();
+    expect(view.diagnosticLines).toContain('Photos: 1 unknown for unusual Google ID');
+  });
+
+  it('an album entry with an unusual dedup key that no library item has blocks trashing, saying so', async () => {
+    const store = newStore();
+    const source = new FakePhotos(
+      [fakeItem(0)],
+      [{ ...fakeAlbum('A', [], { reportedCount: 1 }), members: [{ mediaKey: 'A-entry-9', dedupKey: 'abcdefgh:ijklmnopq' }] }],
+    );
+    await scan(source, store);
+    const result = await classifyLatest(store);
+    expect(eligibleIndexes(result)).toEqual([]);
+    const view = reportView(result);
+    expect(view.warningText).toBe("No photo can be trashed: 1 album has a photo Photo Cleaner can't match to your library");
+    expect(view.diagnosticLines.slice(0, 2)).toEqual([
+      "Blocking trashing: 1 album has a photo Photo Cleaner can't match to your library",
+      'Album issue 1 (blocks): unusual Google ID · shared unknown · kind 1 · Google reports 1, 1 read · not read a second time',
+    ]);
   });
 
   it('photos saved from someone else are judged like the user’s own: protected in an album, else eligible', async () => {
@@ -154,7 +189,7 @@ describe('library scan', () => {
       const source = shortAlbum();
       let reads = 0;
       source.failure = (op) => {
-        if (op === 'album:A' && ++reads === 2) source.albums[0]!.members.push({ mediaKey: 'A-entry-4', dedupKey: 'dedup-4' });
+        if (op === 'album:A' && ++reads === 2) source.albums[0]!.members.push({ mediaKey: 'A-entry-4', dedupKey: fakeDedupKey(4) });
         return null;
       };
       expect((await scan(source, store)).outcome.kind).toBe('completed');
@@ -172,7 +207,7 @@ describe('library scan', () => {
       const source = shortAlbum();
       let reads = 0;
       source.failure = (op) => {
-        if (op === 'album:A' && ++reads === 2) source.albums[0]!.members[1] = { mediaKey: 'A-entry-3', dedupKey: 'dedup-9' };
+        if (op === 'album:A' && ++reads === 2) source.albums[0]!.members[1] = { mediaKey: 'A-entry-3', dedupKey: fakeDedupKey(9) };
         return null;
       };
       await scan(source, store);

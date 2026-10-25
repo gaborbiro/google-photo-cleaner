@@ -18,17 +18,17 @@ import kotlin.test.assertEquals
 class ProtectionChoicesTest {
 
     private fun item(key: String, favourite: Boolean = false, archived: Boolean = false, owned: Boolean = true) =
-        InventoryItem(key, "d-$key", 1_000, StoredMediaType.PHOTO, favourite, archived, owned, 1, 1, null)
+        InventoryItem(key, dedupKey(key), 1_000, StoredMediaType.PHOTO, favourite, archived, owned, 1, 1, null)
 
     /** A favourite, an album photo, an archived one, one saved from someone's share into an album, and a plain one. */
     private val snapshot = InventorySnapshot(
         run = ScanRun(1, "acc", NOW - 60_000, NOW, RunStatus.COMPLETED, null),
         cursors = listOf(ScanPhase.LIBRARY, ScanPhase.FAVOURITES, ScanPhase.ARCHIVE, ScanPhase.ALBUM_LIST).map { PhaseCursor(it, "", null, 1, 0, 0, true) },
         items = listOf(item("fav", favourite = true), item("inAlbum"), item("archived", archived = true), item("shared", owned = false), item("plain")),
-        favouriteDedupKeys = setOf("d-fav"),
-        archivedDedupKeys = setOf("d-archived"),
+        favouriteDedupKeys = setOf(dedupKey("fav")),
+        archivedDedupKeys = setOf(dedupKey("archived")),
         albums = emptyList(),
-        albumMembership = mapOf("d-inAlbum" to setOf("a1"), "d-shared" to setOf("a1")),
+        albumMembership = mapOf(dedupKey("inAlbum") to setOf("a1"), dedupKey("shared") to setOf("a1")),
     )
 
     private fun eligibility(chosen: ProtectionChoices) =
@@ -69,7 +69,7 @@ class ProtectionChoicesTest {
 
     @Test
     fun only_the_chosen_reasons_are_given_and_counted() {
-        val favAndAlbum = snapshot.copy(albumMembership = snapshot.albumMembership + ("d-fav" to setOf("a1")))
+        val favAndAlbum = snapshot.copy(albumMembership = snapshot.albumMembership + (dedupKey("fav") to setOf("a1")))
         val result = InventoryClassifier.classify(favAndAlbum, NOW, chosen = ProtectionChoices(albums = false))
         assertEquals(setOf(ProtectionReason.FAVOURITE), result.items.single { it.item.mediaKey == "fav" }.protectionReasons)
         val photos = result.report.counts.single { it.mediaType == StoredMediaType.PHOTO }

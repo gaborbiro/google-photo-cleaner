@@ -104,24 +104,65 @@ describe('library pages', () => {
   it('fails the whole page when an item has no stable key, or a key of the wrong form', () => {
     for (const bad of [
       { dedupKey: null },
+      { dedupKey: '' },
       { mediaKey: '' },
       { takenAtMs: null },
       { mediaKey: 'AF1QipSHORT' },
       { mediaKey: mediaKey('a').replace('AF1Qip', 'AF1Qix') },
       { mediaKey: `${mediaKey('a').slice(0, -1)}.` },
-      { dedupKey: 'DEDUP' },
-      { dedupKey: `${dedupKey('a')}:` },
-      { dedupKey: `${dedupKey('a')}:short` },
+      // Text, not an ID.
       { dedupKey: dedupKey('a b') },
+      { dedupKey: 'x'.repeat(513) },
     ] as const) {
       protocolFailure(() => normalizeTimelinePage(timelinePayload([rawLibraryItem(), rawLibraryItem(bad)], null)));
     }
   });
 
-  it('accepts the rarer dedup key with a suffix after ":"', () => {
-    const keys = [`${dedupKey('a')}:${'b'.repeat(11)}`, `${dedupKey('c')}:${'d'.repeat(16)}`];
+  it('reads dedup keys of every form; the shared rules keep items with an unusual one from the trash', () => {
+    const keys = [
+      `${dedupKey('a')}:${'b'.repeat(11)}`,
+      `${dedupKey('c')}:${'d'.repeat(16)}`,
+      'abc+def/ghi:jkl=mn',
+      'DEDUP',
+      `${dedupKey('e')}:short`,
+    ];
     const page = normalizeTimelinePage(timelinePayload(keys.map((k) => rawLibraryItem({ dedupKey: k })), null));
     expect(page.items.map((i) => i.dedupKey)).toEqual(keys);
+  });
+
+  it('reads the item from 2012 that stopped a scan in October 2026', () => {
+    // Its shape as the problem report described it: 17 fields, a 320×240 preview without a size,
+    // a caption, video details without a duration, and an 18-character dedup key with a ":".
+    const row = [
+      mediaKey('old'),
+      ['https://photos.fife.usercontent.google.com/pw/OLD', 320, 240, null, null, null, null, null, [null, null, 1]],
+      1_337_400_000_000,
+      'abcdefgh:ijklmnopq',
+      0,
+      1_337_500_000_000,
+      null,
+      [[1], [2], [3], [14], [15], [19], [22], [27, false, true], [28, false, true], [29, false, true], [35, false, true]],
+      2,
+      null, null, null, null,
+      false,
+      1_337_600_000_000,
+      [[1]],
+      {
+        '76647426': [null, null, null, null, null, 1, null, null, null, null, null, null, null, ['https://video-downloads.googleusercontent.com/OLD']],
+        '129168200': [[], [null, null, null, false]],
+        '163238866': [false],
+        '396644657': ['MVI_01.AVI'],
+      },
+    ];
+    const page = normalizeTimelinePage(timelinePayload([rawLibraryItem(), row], marker()));
+    expect(page.items[1]).toMatchObject({ mediaKey: mediaKey('old'), dedupKey: 'abcdefgh:ijklmnopq', mediaType: null, isFavourite: false, isArchived: false });
+  });
+
+  it('video details without a duration leave the media type unknown', () => {
+    const row = rawLibraryItem({ videoDurationMs: 5000 });
+    (row.at(-1) as Record<string, unknown>)['76647426'] = [null, null, null, null, null, 1];
+    const page = normalizeTimelinePage(timelinePayload([rawLibraryItem(), rawLibraryItem({ videoDurationMs: 5000 }), row], null));
+    expect(page.items.map((i) => i.mediaType)).toEqual(['PHOTO', 'VIDEO', null]);
   });
 
   it('rejects a payload that is not a page', () => {
@@ -160,7 +201,7 @@ describe('archive pages', () => {
     protocolFailure(() => normalizeArchivePage(timelinePayload([rawLibraryItem()], null)));
     protocolFailure(() => normalizeArchivePage(timelinePayload([[...row.slice(0, -1), null, row.at(-1)]], null)));
     protocolFailure(() => normalizeArchivePage(timelinePayload([[...row.slice(0, -1), null]], null)));
-    protocolFailure(() => normalizeArchivePage(timelinePayload([rawArchiveItem(mediaKey('a'), 'DEDUP')], null)));
+    protocolFailure(() => normalizeArchivePage(timelinePayload([rawArchiveItem(mediaKey('a'), 'DE DUP')], null)));
     for (const value of [...NOT_MARKERS, '']) protocolFailure(() => normalizeArchivePage([[rawArchiveItem()], value, '1700000000000']));
   });
 
@@ -252,6 +293,8 @@ describe('album contents', () => {
 
   it('fails an album page with an entry lacking a dedup key, or of another shape', () => {
     protocolFailure(() => normalizeAlbumItemsPage(albumItemsPayload([rawAlbumMember(mediaKey('k'), '')], null)));
+    protocolFailure(() => normalizeAlbumItemsPage(albumItemsPayload([rawAlbumMember(mediaKey('k'), 'DE DUP')], null)));
+    expect(normalizeAlbumItemsPage(albumItemsPayload([rawAlbumMember(mediaKey('k'), 'abcdefgh:ijklmnopq')], null)).items[0].dedupKey).toBe('abcdefgh:ijklmnopq');
     protocolFailure(() => normalizeAlbumItemsPage(albumItemsPayload([rawAlbumMember('k', dedupKey('k'))], null)));
     const entry = rawAlbumMember(mediaKey('k'), dedupKey('k'));
     protocolFailure(() => normalizeAlbumItemsPage(albumItemsPayload([[...entry.slice(0, -1)]], null)));
@@ -269,7 +312,8 @@ describe('the trash', () => {
 
   it('refuses anything else where the marker belongs, keys of the wrong form, and rows of another length', () => {
     for (const value of [...NOT_MARKERS, '']) protocolFailure(() => normalizeTrashPage([[rawTrashItem(dedupKey('a'))], value]));
-    protocolFailure(() => normalizeTrashPage([[rawTrashItem('dk1')]]));
+    protocolFailure(() => normalizeTrashPage([[rawTrashItem('dk 1')]]));
+    expect(normalizeTrashPage([[rawTrashItem('abcdefgh:ijklmnopq')]]).dedupKeys).toEqual(['abcdefgh:ijklmnopq']);
     protocolFailure(() => normalizeTrashPage([[rawTrashItem(dedupKey('a')).slice(0, 6)]]));
     protocolFailure(() => normalizeTrashPage([[[...rawTrashItem(dedupKey('a')), {}]]]));
   });

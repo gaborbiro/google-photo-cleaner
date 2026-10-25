@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { calibrationReport, decisionItems, groupingSettings, reviewQueue, type ActiveDecision, type AnalysedPhoto } from '../../src/app/duplicates/rules';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
-import { fakeItem, FakePhotos, newStore, NOW, scan } from './fakes';
+import { fakeDedupKey, fakeItem, FakePhotos, newStore, NOW, scan } from './fakes';
 
 /** A unit vector at [degrees]: photos 3° apart are 99.9% similar, 60° apart 50%. */
 const at = (degrees: number) => Float32Array.from([Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)]);
@@ -44,7 +44,7 @@ describe('duplicate rules from Kotlin', () => {
     const photos = [photo(0), photo(1), photo(2), photo(3), photo(4)];
     const vectors = [at(0), at(2), at(4), at(1), at(70)];
     const group = reviewQueue(snapshot, NOW, photos, vectors, [], groupingSettings(140), ALL_PROTECTED).pending[0]!;
-    expect(decisionItems(group, 'APPROVED', new Set(['lib-2', 'lib-0']))).toEqual([{ mediaKey: 'lib-0', dedupKey: 'dedup-0' }, { mediaKey: 'lib-2', dedupKey: 'dedup-2' }]);
+    expect(decisionItems(group, 'APPROVED', new Set(['lib-2', 'lib-0']))).toEqual([{ mediaKey: 'lib-0', dedupKey: fakeDedupKey(0) }, { mediaKey: 'lib-2', dedupKey: fakeDedupKey(2) }]);
     expect(() => decisionItems(group, 'APPROVED', new Set(['lib-3']))).toThrow('Only eligible photos can be trashed'); // the favourite
     expect(() => decisionItems(group, 'APPROVED', new Set())).toThrow('Nothing is selected for the trash');
     expect(decisionItems(group, 'KEPT', new Set(['lib-0']))).toEqual([]);

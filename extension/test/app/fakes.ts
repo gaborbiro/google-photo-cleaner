@@ -12,11 +12,19 @@ import { runScan, type ScanOutcome, type ScanPolicy, type ScanProgress } from '.
 import { SourceError, type Page, type PhotosSource } from '../../src/app/scan/source';
 import type { OpError, OpResult, PageOp } from '../../src/shared/protocol';
 
+/**
+ * The dedup key of fake item [index]: of the usual form (27 characters), as Google sends them, so
+ * the shared rules judge the item like a real one.
+ */
+export function fakeDedupKey(index: number): string {
+  return `dedup-${index}`.padEnd(27, 'x');
+}
+
 /** Synthetic library item; keys are derived from [index] and never resemble real ones. */
 export function fakeItem(index: number, opts: Partial<Pick<InventoryItem, 'isFavourite' | 'isArchived' | 'isOwned' | 'mediaType'>> = {}): InventoryItem {
   return {
     mediaKey: `lib-${index}`,
-    dedupKey: `dedup-${index}`,
+    dedupKey: fakeDedupKey(index),
     takenAtMs: 10_000_000 - index * 1_000,
     mediaType: 'mediaType' in opts ? opts.mediaType! : 'PHOTO',
     isFavourite: 'isFavourite' in opts ? opts.isFavourite! : false,
@@ -45,7 +53,7 @@ export function fakeAlbum(key: string, memberIndexes: number[], opts: { reported
       reportedItemCount: 'reportedCount' in opts ? opts.reportedCount! : memberIndexes.length,
       authKey: null,
     },
-    members: memberIndexes.map((i) => ({ mediaKey: `${key}-entry-${i}`, dedupKey: `dedup-${i}` })),
+    members: memberIndexes.map((i) => ({ mediaKey: `${key}-entry-${i}`, dedupKey: fakeDedupKey(i) })),
   };
 }
 

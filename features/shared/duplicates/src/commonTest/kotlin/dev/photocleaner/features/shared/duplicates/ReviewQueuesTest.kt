@@ -117,7 +117,7 @@ class ReviewQueuesTest {
         assertEquals("b", group.keeper.photo.item.mediaKey) // a favourite keeps the moment
         assertFailsWith<IllegalArgumentException> { group.decisionItems(DecisionKind.APPROVED, emptySet()) }
         assertFailsWith<IllegalArgumentException> { group.decisionItems(DecisionKind.APPROVED, setOf("b")) }
-        assertEquals(listOf(DecisionItem("a", "d-a"), DecisionItem("c", "d-c")), group.decisionItems(DecisionKind.APPROVED, setOf("c", "a")))
+        assertEquals(listOf(DecisionItem("a", dedupKey("a")), DecisionItem("c", dedupKey("c"))), group.decisionItems(DecisionKind.APPROVED, setOf("c", "a")))
         assertEquals(emptyList(), group.decisionItems(DecisionKind.KEPT, setOf("a")))
     }
 
@@ -129,7 +129,7 @@ class ReviewQueuesTest {
     }
 
     private fun member(key: String, role: MemberRole, eligibility: Eligibility = Eligibility.ELIGIBLE) = GroupMember(
-        PhotoFacts(InventoryItem(key, "d-$key", 1_000, StoredMediaType.PHOTO, false, false, true, 1, 1, null), eligibility, emptySet(), 1.0, 0.0, 1, null),
+        PhotoFacts(InventoryItem(key, dedupKey(key), 1_000, StoredMediaType.PHOTO, false, false, true, 1, 1, null), eligibility, emptySet(), 1.0, 0.0, 1, null),
         role, 0.97, emptyList(),
     )
 
@@ -149,7 +149,7 @@ class ReviewQueuesTest {
         )
         assertEquals(setOf("k", "a"), withReference.selectableMembers().map { it.photo.item.mediaKey }.toSet())
         assertFailsWith<IllegalArgumentException> { withReference.decisionItems(DecisionKind.APPROVED, setOf("k", "a", "p")) }
-        assertEquals(listOf(DecisionItem("a", "d-a"), DecisionItem("k", "d-k")), withReference.decisionItems(DecisionKind.APPROVED, setOf("k", "a")))
+        assertEquals(listOf(DecisionItem("a", dedupKey("a")), DecisionItem("k", dedupKey("k"))), withReference.decisionItems(DecisionKind.APPROVED, setOf("k", "a")))
 
         for (keeper in listOf(Eligibility.PROTECTED, Eligibility.UNKNOWN)) {
             val group = DuplicateGroup("g2", listOf(member("k", MemberRole.KEEPER, keeper), member("a", MemberRole.PROPOSED)), 1_000)

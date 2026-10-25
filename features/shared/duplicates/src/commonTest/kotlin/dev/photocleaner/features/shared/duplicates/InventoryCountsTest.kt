@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
 class InventoryCountsTest {
 
     private fun item(key: String, type: StoredMediaType?, favourite: Boolean? = false, archived: Boolean = false, owned: Boolean? = true) =
-        InventoryItem(key, "d-$key", 1_000, type, favourite, archived, owned, 1, 1, null)
+        InventoryItem(key, dedupKey(key), 1_000, type, favourite, archived, owned, 1, 1, null)
 
     @Test
     fun photos_videos_and_items_of_unknown_type_are_counted_apart() {
@@ -40,10 +40,10 @@ class InventoryCountsTest {
             run = ScanRun(1, "acc", NOW - 60_000, NOW, RunStatus.COMPLETED, null),
             cursors = listOf(ScanPhase.LIBRARY, ScanPhase.FAVOURITES, ScanPhase.ARCHIVE, ScanPhase.ALBUM_LIST).map { PhaseCursor(it, "", null, 1, 0, 0, true) },
             items = items,
-            favouriteDedupKeys = setOf("d-favourite", "d-favouriteInAlbum"),
-            archivedDedupKeys = setOf("d-archived"),
+            favouriteDedupKeys = setOf(dedupKey("favourite"), dedupKey("favouriteInAlbum")),
+            archivedDedupKeys = setOf(dedupKey("archived")),
             albums = listOf(AlbumStatus(AlbumRecord("a1", "Trip", null, false, 1, 3, null), 3, true, null, null)),
-            albumMembership = listOf("d-inAlbum", "d-favouriteInAlbum", "d-clipInAlbum").associateWith { setOf("a1") },
+            albumMembership = listOf(dedupKey("inAlbum"), dedupKey("favouriteInAlbum"), dedupKey("clipInAlbum")).associateWith { setOf("a1") },
         )
 
         val counts = InventoryClassifier.classify(snapshot, NOW).report.counts.associateBy { it.mediaType }

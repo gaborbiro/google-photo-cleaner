@@ -18,6 +18,9 @@ enum class UnknownReason {
     FAVOURITE_FLAG_MISSING,
     ARCHIVE_FLAG_MISSING,
     MEDIA_TYPE_UNKNOWN,
+
+    /** Its dedup key, which trash requests name, isn't of the usual form. */
+    DEDUP_KEY_UNUSUAL,
 }
 
 data class ClassifiedItem(
@@ -35,6 +38,13 @@ enum class AlbumIssueKind(
     NOT_FINISHED(true),
     COUNT_MISMATCH(true),
     COUNT_MISSING(true),
+
+    /**
+     * An entry has a dedup key of an unusual form that no library item has. A library item with
+     * the same unusual key is matched as any other; one without suggests that the album's entries
+     * weren't read as Google meant, so they may not protect what they should.
+     */
+    UNUSUAL_KEY_NOT_IN_LIBRARY(true),
 
     /**
      * The entries don't add up to Google's count, but the album was read to the end twice with the

@@ -41,7 +41,8 @@ class EligibilityInvariantTest {
             val library = (0 until size).map { i ->
                 InventoryItem(
                     mediaKey = "m$i",
-                    dedupKey = "d$i",
+                    // Now and then a key of another form, as Google sends for some old items.
+                    dedupKey = if (random.nextInt(10) == 0) "$UNUSUAL_KEY$i" else dedupKey("$i"),
                     takenAtMs = 1_000L + i,
                     mediaType = random.pick(StoredMediaType.PHOTO, StoredMediaType.PHOTO, StoredMediaType.VIDEO, null),
                     isFavourite = random.pick(false, false, false, true, null),
@@ -116,7 +117,8 @@ class EligibilityInvariantTest {
                     it.isArchived == true || it.dedupKey in trueArchive
             }.map { it.mediaKey }.toSet()
             val trulyLoose = library.filter {
-                it.mediaKey !in trulyProtected && it.isFavourite == false && it.isArchived == false && it.mediaType != null
+                it.mediaKey !in trulyProtected && it.isFavourite == false && it.isArchived == false && it.mediaType != null &&
+                    !it.dedupKey.startsWith(UNUSUAL_KEY)
             }.map { it.mediaKey }.toSet()
             val clean = status == RunStatus.COMPLETED && unfinished.isEmpty() &&
                 fates.values.all { it == AlbumFate.READ || it == AlbumFate.MISMATCH_READ_TWICE_SAME }
@@ -148,5 +150,8 @@ class EligibilityInvariantTest {
     private companion object {
         const val SCENARIOS = 300
         const val DAY_MS = 24L * 60 * 60 * 1000
+
+        /** The start of a dedup key of an unusual form, with characters the usual form never has. */
+        const val UNUSUAL_KEY = "odd+key/form:"
     }
 }

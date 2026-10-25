@@ -16,6 +16,9 @@ import kotlin.math.sin
 
 internal const val NOW = 5_000_000_000L
 
+/** A dedup key of the usual form (27 characters) made from [label], as Google sends them. */
+internal fun dedupKey(label: String): String = "d-$label".padEnd(27, 'x').also { require(it.length == 27) { "label too long: $label" } }
+
 /** A synthetic photo: [angleDeg] places its unit vector, so photos 10° apart score cos(10°) ≈ 0.985. */
 internal data class Spec(
     val key: String,
@@ -41,9 +44,9 @@ internal fun classification(specs: List<Spec>, complete: Boolean = true, finishe
             PhaseCursor(it, "", null, 1, 0, 0, completed = complete)
         },
         items = specs.map {
-            InventoryItem(it.key, "d-${it.key}", it.takenAtMs, it.mediaType, it.favourite, it.archived, true, it.width, it.height, null)
+            InventoryItem(it.key, dedupKey(it.key), it.takenAtMs, it.mediaType, it.favourite, it.archived, true, it.width, it.height, null)
         },
-        favouriteDedupKeys = specs.filter { it.favourite }.map { "d-${it.key}" }.toSet(),
+        favouriteDedupKeys = specs.filter { it.favourite }.map { dedupKey(it.key) }.toSet(),
         archivedDedupKeys = emptySet(),
         albums = emptyList(),
         albumMembership = emptyMap(),

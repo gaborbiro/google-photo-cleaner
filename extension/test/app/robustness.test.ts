@@ -9,7 +9,7 @@ import { processTrashQueue } from '../../src/app/duplicates/trash';
 import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
 import { SourceError } from '../../src/app/scan/source';
 import { committed, openDatabase, STORES } from '../../src/app/shared/db';
-import { classifyLatest, fakeAlbum, fakeItem, FakePhotos, FakeTrash, NOW, scan } from './fakes';
+import { classifyLatest, fakeAlbum, fakeDedupKey, fakeItem, FakePhotos, FakeTrash, NOW, scan } from './fakes';
 
 async function queued() {
   const factory = new IDBFactory();
@@ -18,7 +18,7 @@ async function queued() {
   const trash = new FakeTrash();
   const source = new FakePhotos([fakeItem(0), fakeItem(1)]);
   await scan(source, inventory);
-  await review.recordDecision('account-a', 'group', 'APPROVED', [{ mediaKey: 'lib-1', dedupKey: 'dedup-1' }], ['lib-0', 'lib-1'], NOW);
+  await review.recordDecision('account-a', 'group', 'APPROVED', [{ mediaKey: 'lib-1', dedupKey: fakeDedupKey(1) }], ['lib-0', 'lib-1'], NOW);
   const send = vi.spyOn(trash, 'moveToTrash');
   const deps = { account: 'account-a', review, trash, now: () => NOW, classify: () => classifyLatest(inventory) };
   return { inventory, review, source, trash, send, deps };
@@ -41,13 +41,13 @@ describe('trash queue safety at the service boundary', () => {
       await processTrashQueue(deps);
       expect(await review.jobs('account-a', ['BLOCKED'])).toHaveLength(1);
       expect(send).not.toHaveBeenCalled();
-      expect(await trash.inTrash('account-a', ['dedup-1'])).toEqual(new Map([['dedup-1', false]]));
+      expect(await trash.inTrash('account-a', [fakeDedupKey(1)])).toEqual(new Map([[fakeDedupKey(1), false]]));
     },
   );
 
   it('does not send an approval whose dedup identity no longer matches the enumerated photo', async () => {
     const { inventory, source, review, send, deps } = await queued();
-    source.library[1] = { ...fakeItem(1), dedupKey: 'different-photo-identity' };
+    source.library[1] = { ...fakeItem(1), dedupKey: 'different-photo-identity'.padEnd(27, 'x') };
     await scan(source, inventory);
     await processTrashQueue(deps);
     expect(send).not.toHaveBeenCalled();
@@ -87,7 +87,7 @@ describe('trash queue safety at the service boundary', () => {
     expect(await review.jobs('account-a', ['RESTORE_REQUESTED'])).toHaveLength(1);
     await processTrashQueue(deps);
     expect(await review.jobs('account-a', ['RESTORED'])).toHaveLength(1);
-    expect(await trash.inTrash('account-a', ['dedup-1'])).toEqual(new Map([['dedup-1', false]]));
+    expect(await trash.inTrash('account-a', [fakeDedupKey(1)])).toEqual(new Map([[fakeDedupKey(1), false]]));
     expect(send).toHaveBeenCalledTimes(1);
   });
 });

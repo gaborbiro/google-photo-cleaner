@@ -10,11 +10,11 @@ import type { IndexedDbInventoryStore } from './inventoryStore';
 import type { InventorySnapshot, StoredMediaType } from './model';
 
 export type Eligibility = 'PROTECTED' | 'ELIGIBLE' | 'UNKNOWN';
-export type UnknownReason = 'INVENTORY_INCOMPLETE' | 'INVENTORY_STALE' | 'FAVOURITE_FLAG_MISSING' | 'ARCHIVE_FLAG_MISSING' | 'MEDIA_TYPE_UNKNOWN';
+export type UnknownReason = 'INVENTORY_INCOMPLETE' | 'INVENTORY_STALE' | 'FAVOURITE_FLAG_MISSING' | 'ARCHIVE_FLAG_MISSING' | 'MEDIA_TYPE_UNKNOWN' | 'DEDUP_KEY_UNUSUAL';
 
 interface Agreement { listed: number; flagged: number; flaggedButNotListed: number; listedButNotFlagged: number }
 
-type AlbumIssueKind = 'FAILED' | 'NOT_FINISHED' | 'COUNT_MISMATCH' | 'COUNT_MISSING' | 'COUNT_MISMATCH_READ_TWICE';
+type AlbumIssueKind = 'FAILED' | 'NOT_FINISHED' | 'COUNT_MISMATCH' | 'COUNT_MISSING' | 'UNUSUAL_KEY_NOT_IN_LIBRARY' | 'COUNT_MISMATCH_READ_TWICE';
 /** An album as numbers and flags, without its title (for problem reports). */
 interface AlbumFacts { reportedCount: number | null; entriesRead: number; reread: 'SAME_ENTRIES' | 'DIFFERENT_ENTRIES' | null; isShared: boolean | null; kindCode: number | null }
 interface AlbumIssue { albumTitle: string | null; kind: AlbumIssueKind; detail: string; facts: AlbumFacts }
@@ -102,6 +102,7 @@ const REASON_LABELS: Record<UnknownReason, string> = {
   FAVOURITE_FLAG_MISSING: 'favourite flag missing',
   ARCHIVE_FLAG_MISSING: 'archive flag missing',
   MEDIA_TYPE_UNKNOWN: 'media type unknown',
+  DEDUP_KEY_UNUSUAL: 'unusual Google ID',
 };
 
 function agreementLine(name: string, a: Agreement): string {
@@ -152,6 +153,9 @@ export function blockers(coverage: Coverage): string[] {
   if (of('NOT_FINISHED') > 0) out.push(albums(of('NOT_FINISHED'), "wasn't read to the end", "weren't read to the end"));
   if (of('COUNT_MISMATCH') > 0) out.push(albums(of('COUNT_MISMATCH'), "doesn't match Google's count", "don't match Google's count"));
   if (of('COUNT_MISSING') > 0) out.push(albums(of('COUNT_MISSING'), 'had no count from Google', 'had no count from Google'));
+  if (of('UNUSUAL_KEY_NOT_IN_LIBRARY') > 0) {
+    out.push(albums(of('UNUSUAL_KEY_NOT_IN_LIBRARY'), "has a photo Photo Cleaner can't match to your library", "have photos Photo Cleaner can't match to your library"));
+  }
   return out;
 }
 
@@ -211,6 +215,7 @@ export function reportView(classification: Classification): ReportView {
     NOT_FINISHED: 'not finished',
     COUNT_MISMATCH: 'count mismatch',
     COUNT_MISSING: 'no count from Google',
+    UNUSUAL_KEY_NOT_IN_LIBRARY: 'unusual Google ID',
     COUNT_MISMATCH_READ_TWICE: 'count mismatch, not blocking',
   };
   const albumLine = (i: AlbumIssue) => `Album “${i.albumTitle ?? 'untitled'}” ${issueKinds[i.kind]}: ${i.detail}`;

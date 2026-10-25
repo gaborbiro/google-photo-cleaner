@@ -21,7 +21,7 @@ import { ALL_PROTECTED, IndexedDbPreferences } from '../../src/app/shared/prefer
 import { IndexedDbProblemLog } from '../../src/app/shared/problemLog';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
 import type { PageOp } from '../../src/shared/protocol';
-import { fakeAlbum, fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fakes';
+import { fakeAlbum, fakeDedupKey, fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fakes';
 
 /** Every root a page creates, so each test can take its page down again. */
 const roots = vi.hoisted(() => [] as Root[]);
@@ -285,7 +285,7 @@ describe('clicks and keys reach what they should', () => {
     press('d');
     await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(0));
     expect(await decisions()).toMatchObject([{ kind: 'APPROVED', items: [{ mediaKey: 'lib-1' }] }]);
-    await vi.waitFor(() => expect([...google.trash]).toEqual(['dedup-1']), { timeout: 6_000 });
+    await vi.waitFor(() => expect([...google.trash]).toEqual([fakeDedupKey(1)]), { timeout: 6_000 });
 
     press('z');
     await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(3));

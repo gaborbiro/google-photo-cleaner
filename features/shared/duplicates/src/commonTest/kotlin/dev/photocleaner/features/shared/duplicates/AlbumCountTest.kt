@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 /** An album whose entries don't add up to Google's count: when that blocks trashing and when it doesn't. */
 class AlbumCountTest {
 
-    private fun item(key: String) = InventoryItem(key, "d-$key", 1_000, StoredMediaType.PHOTO, false, false, true, 1, 1, null)
+    private fun item(key: String) = InventoryItem(key, dedupKey(key), 1_000, StoredMediaType.PHOTO, false, false, true, 1, 1, null)
 
     /** A finished scan with one photo in album "a1" and one loose photo; Google says the album holds [reported] entries. */
     private fun snapshot(reported: Int?, seen: Int = 1, reread: AlbumReread? = null) = InventorySnapshot(
@@ -41,7 +41,7 @@ class AlbumCountTest {
                 reread = reread,
             ),
         ),
-        albumMembership = mapOf("d-inAlbum" to setOf("a1")),
+        albumMembership = mapOf(dedupKey("inAlbum") to setOf("a1")),
     )
 
     private fun classify(snapshot: InventorySnapshot) = InventoryClassifier.classify(snapshot, NOW)

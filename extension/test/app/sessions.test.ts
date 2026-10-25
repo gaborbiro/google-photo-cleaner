@@ -10,7 +10,7 @@ import { duplicatesStores, refreshReviewSummary, reviewDeps, trashQueueDeps, tra
 import { processTrashQueue } from '../../src/app/duplicates/trash';
 import { searchDeps, searchStores } from '../../src/app/search/session';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
-import { fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fakes';
+import { fakeDedupKey, fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fakes';
 
 /** A unit vector at [degrees]: photos 3° apart are 99.9% similar. */
 const at = (degrees: number) => Float32Array.from([Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)]);
@@ -53,7 +53,7 @@ describe('Search sweeps: checked again just before anything is queued', () => {
     const { search, stores } = await library();
     expect(await search.sweep(['lib-4', 'lib-3'])).toEqual({ queued: ['lib-4', 'lib-3'], leftOut: [] });
     expect(await stores.review.activeDecisions('account-a')).toMatchObject([
-      { groupId: `sweep:${NOW}`, kind: 'APPROVED', items: [{ mediaKey: 'lib-3', dedupKey: 'dedup-3' }, { mediaKey: 'lib-4', dedupKey: 'dedup-4' }] },
+      { groupId: `sweep:${NOW}`, kind: 'APPROVED', items: [{ mediaKey: 'lib-3', dedupKey: fakeDedupKey(3) }, { mediaKey: 'lib-4', dedupKey: fakeDedupKey(4) }] },
     ]);
   });
 
@@ -109,7 +109,7 @@ describe('protection choices reach every check', () => {
     await stores.preferences.setProtection('account-a', ALL_PROTECTED);
     await processTrashQueue(queue);
     expect(await stores.review.jobs('account-a', ['BLOCKED'])).toMatchObject([{ mediaKey: 'lib-0', lastError: 'No longer eligible (PROTECTED)' }]);
-    expect(await queue.trash.inTrash('account-a', ['dedup-0', 'dedup-3'])).toEqual(new Map([['dedup-0', false], ['dedup-3', true]]));
+    expect(await queue.trash.inTrash('account-a', [fakeDedupKey(0), fakeDedupKey(3)])).toEqual(new Map([[fakeDedupKey(0), false], [fakeDedupKey(3), true]]));
   });
 });
 
@@ -130,12 +130,12 @@ describe("Google Photos' trash", () => {
     const { search, review, queuePass, google } = await library();
     await search.sweep(['lib-3', 'lib-4']);
     expect(await queuePass()).toMatchObject({ counts: { COMPLETED: 2 } });
-    expect(google.changes()).toEqual(['moveToTrash: dedup-3,dedup-4']);
-    expect([...google.trash].sort()).toEqual(['dedup-3', 'dedup-4']);
+    expect(google.changes()).toEqual([`moveToTrash: ${fakeDedupKey(3)},${fakeDedupKey(4)}`]);
+    expect([...google.trash].sort()).toEqual([fakeDedupKey(3), fakeDedupKey(4)]);
 
     await review.undo();
     expect(await queuePass()).toMatchObject({ counts: { RESTORED: 2 } });
     expect(google.trash.size).toBe(0);
-    expect(google.changes()).toEqual(['moveToTrash: dedup-3,dedup-4', 'restoreFromTrash: dedup-3,dedup-4']);
+    expect(google.changes()).toEqual([`moveToTrash: ${fakeDedupKey(3)},${fakeDedupKey(4)}`, `restoreFromTrash: ${fakeDedupKey(3)},${fakeDedupKey(4)}`]);
   });
 });

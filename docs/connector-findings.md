@@ -191,6 +191,7 @@ Page wrappers:
 
 ### Field-by-field answers
 - **mediaKey / dedupKey:** both are present for every item.
+  - dedupKey is usually 27 characters (letters, digits, `-`, `_`), rarely followed by `:` and 11 to 16 more. A user's library (October 2026) also had an item from 2012 whose dedupKey was 18 characters with others among them. The same item had a 17-field row, a 320×240 preview, a caption and video details (`76647426`) without a duration. Photo Cleaner reads any key without spaces, but the shared rules keep items with an unusual key out of the trash (`DedupKeys.kt`).
 - **Timestamps:** taken (`[2]`), tz offset (`[4]`) and upload (`[5]`), all in ms.
 - **isFavorite:** yes, at `ext[163238866][0]` (see §4).
 - **isArchived:** yes, at `[13]`.

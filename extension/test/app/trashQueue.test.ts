@@ -7,9 +7,9 @@ import { describe, expect, it } from 'vitest';
 import { IndexedDbReviewStore } from '../../src/app/duplicates/reviewStore';
 import { processTrashQueue, recoverInterrupted, type TrashQueueDeps, type TrashTarget } from '../../src/app/duplicates/trash';
 import type { Classification } from '../../src/app/scan/report';
-import { classifyLatest, fakeItem, FakePhotos, FakeTrash, newStore, NOW, scan } from './fakes';
+import { classifyLatest, fakeDedupKey, fakeItem, FakePhotos, FakeTrash, newStore, NOW, scan } from './fakes';
 
-const item = (i: number) => ({ mediaKey: `lib-${i}`, dedupKey: `dedup-${i}` });
+const item = (i: number) => ({ mediaKey: `lib-${i}`, dedupKey: fakeDedupKey(i) });
 const members = (...indexes: number[]) => indexes.map((i) => `lib-${i}`);
 
 /** A trash that fails for chosen photos. */
@@ -49,7 +49,7 @@ describe('review decisions and the trash queue', () => {
     await review.recordDecision('account-a', 'g1', 'APPROVED', [item(1), item(2)], members(0, 1, 2), NOW);
     const status = await processTrashQueue(deps);
     expect(status).toMatchObject({ counts: { COMPLETED: 2 }, waitingReason: null });
-    expect(await trash.inTrash('account-a', ['dedup-0', 'dedup-1', 'dedup-2'])).toEqual(new Map([['dedup-0', false], ['dedup-1', true], ['dedup-2', true]]));
+    expect(await trash.inTrash('account-a', [fakeDedupKey(0), fakeDedupKey(1), fakeDedupKey(2)])).toEqual(new Map([[fakeDedupKey(0), false], [fakeDedupKey(1), true], [fakeDedupKey(2), true]]));
   });
 
   it('an approval needs a selection from among the photos shown, and only approvals carry one', async () => {
@@ -67,7 +67,7 @@ describe('review decisions and the trash queue', () => {
     await rescan();
     await processTrashQueue(deps);
     expect(await review.jobs('account-a', ['BLOCKED'])).toMatchObject([{ mediaKey: 'lib-1', lastError: 'No longer eligible (PROTECTED)' }]);
-    expect(await trash.inTrash('account-a', ['dedup-1'])).toEqual(new Map([['dedup-1', false]]));
+    expect(await trash.inTrash('account-a', [fakeDedupKey(1)])).toEqual(new Map([[fakeDedupKey(1), false]]));
   });
 
   it('a video that reached the queue is blocked, never sent', async () => {
@@ -75,7 +75,7 @@ describe('review decisions and the trash queue', () => {
     await review.recordDecision('account-a', 'g1', 'APPROVED', [item(1), item(2)], members(0, 1, 2), NOW);
     await processTrashQueue(deps);
     expect(await review.jobs('account-a', ['BLOCKED'])).toMatchObject([{ mediaKey: 'lib-2', lastError: 'Not a photo: only photos are trashed' }]);
-    expect(await trash.inTrash('account-a', ['dedup-1', 'dedup-2'])).toEqual(new Map([['dedup-1', true], ['dedup-2', false]]));
+    expect(await trash.inTrash('account-a', [fakeDedupKey(1), fakeDedupKey(2)])).toEqual(new Map([[fakeDedupKey(1), true], [fakeDedupKey(2), false]]));
   });
 
   it('a photo gone from the library is blocked', async () => {
@@ -95,10 +95,10 @@ describe('review decisions and the trash queue', () => {
 
     await review.recordDecision('account-a', 'g2', 'APPROVED', [item(2)], members(2, 3), NOW);
     await processTrashQueue(deps);
-    expect((await trash.inTrash('account-a', ['dedup-2'])).get('dedup-2')).toBe(true);
+    expect((await trash.inTrash('account-a', [fakeDedupKey(2)])).get(fakeDedupKey(2))).toBe(true);
     await review.undoLast('account-a', NOW);
     expect(await processTrashQueue(deps)).toMatchObject({ counts: { CANCELLED: 1, RESTORED: 1 } });
-    expect((await trash.inTrash('account-a', ['dedup-2'])).get('dedup-2')).toBe(false);
+    expect((await trash.inTrash('account-a', [fakeDedupKey(2)])).get(fakeDedupKey(2))).toBe(false);
   });
 
   it('a page closed mid-send is reconciled: nothing is sent twice', async () => {
@@ -123,7 +123,7 @@ describe('review decisions and the trash queue', () => {
     await rescan();
     await processTrashQueue(deps);
     expect(await review.jobs('account-a', ['BLOCKED'])).toMatchObject([{ mediaKey: 'lib-1', lastError: 'No longer eligible (UNKNOWN)' }]);
-    expect(await trash.inTrash('account-a', ['dedup-1'])).toEqual(new Map([['dedup-1', false]]));
+    expect(await trash.inTrash('account-a', [fakeDedupKey(1)])).toEqual(new Map([[fakeDedupKey(1), false]]));
   });
 
   it('an unfinished library scan holds the queue', async () => {
@@ -144,7 +144,7 @@ describe('review decisions and the trash queue', () => {
 
   it('failures are recorded per photo', async () => {
     const { review, trash, deps } = await setup();
-    trash.failing.add('dedup-2');
+    trash.failing.add(fakeDedupKey(2));
     await review.recordDecision('account-a', 'g1', 'APPROVED', [item(1), item(2)], members(0, 1, 2), NOW);
     expect((await processTrashQueue(deps)).counts).toEqual({ COMPLETED: 1, FAILED: 1 });
     expect(await review.jobs('account-a', ['FAILED'])).toMatchObject([{ mediaKey: 'lib-2', lastError: 'Simulated failure' }]);

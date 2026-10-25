@@ -24,7 +24,7 @@ import dev.photocleaner.repositories.inventory.domain.ScanPhase
  * - Positive evidence protects on its own: favourite flag, favourites listing,
  *   any album entry with the same dedupKey, archived flag, or archive listing.
  * - Eligibility needs proof of the negative: a complete, fresh inventory and
- *   explicit `false` flags on the item.
+ *   explicit `false` flags on the item, and a dedup key of the usual form ([DedupKeys]).
  * - Anything else is UNKNOWN, with every reason recorded.
  * - Who uploaded a photo doesn't matter: one saved from someone else's share is in the
  *   library by the user's own act, like one they took, and judged the same way.
@@ -45,7 +45,12 @@ internal object EligibilityRules {
                 duplicates = cursor?.duplicateEntries ?: 0,
             )
         }
-        val (issues, warnings) = snapshot.albums.mapNotNull(::albumIssue).partition { it.kind.blocksTrashing }
+        val libraryKeys = snapshot.items.mapTo(HashSet()) { it.dedupKey }
+        val unmatchedUnusualByAlbum = snapshot.albumMembership
+            .filterKeys { !DedupKeys.isUsual(it) && it !in libraryKeys }
+            .values.flatten().groupingBy { it }.eachCount()
+        val albumIssues = snapshot.albums.mapNotNull { albumIssue(it, unmatchedUnusualByAlbum[it.album.albumKey] ?: 0) }
+        val (issues, warnings) = albumIssues.partition { it.kind.blocksTrashing }
         val finishedAt = run.finishedAtMs
         // A scan that finished "in the future" means the clock moved back: its age is unknown, so it proves nothing.
         val stale = finishedAt == null || finishedAt > nowMs || nowMs - finishedAt > maxAgeMs
@@ -73,7 +78,7 @@ internal object EligibilityRules {
             finishedAtMs = finishedAt,
             phases = phases,
             albumsListed = snapshot.albums.size,
-            albumsFullyRead = snapshot.albums.count { albumIssue(it) == null },
+            albumsFullyRead = snapshot.albums.size - albumIssues.size,
             albumIssues = issues,
             albumWarnings = warnings,
             isStale = stale,
@@ -99,6 +104,7 @@ internal object EligibilityRules {
             if (item.isFavourite == null) add(UnknownReason.FAVOURITE_FLAG_MISSING)
             if (item.isArchived == null) add(UnknownReason.ARCHIVE_FLAG_MISSING)
             if (item.mediaType == null) add(UnknownReason.MEDIA_TYPE_UNKNOWN)
+            if (!DedupKeys.isUsual(item.dedupKey)) add(UnknownReason.DEDUP_KEY_UNUSUAL)
         }
         return if (unknown.isEmpty()) {
             ClassifiedItem(item, Eligibility.ELIGIBLE, emptySet(), emptySet())
@@ -107,7 +113,8 @@ internal object EligibilityRules {
         }
     }
 
-    private fun albumIssue(status: AlbumStatus): AlbumIssue? {
+    /** [unmatchedUnusualKeys]: the album's entries with a dedup key of an unusual form that no library item has. */
+    private fun albumIssue(status: AlbumStatus, unmatchedUnusualKeys: Int): AlbumIssue? {
         val reported = status.album.reportedItemCount
         val failure = status.failureReason
         val issue = { kind: AlbumIssueKind, detail: String ->
@@ -119,6 +126,8 @@ internal object EligibilityRules {
         return when {
             failure != null -> issue(AlbumIssueKind.FAILED, failure)
             !status.membersComplete -> issue(AlbumIssueKind.NOT_FINISHED, "${status.membersSeen} entries read so far")
+            unmatchedUnusualKeys > 0 ->
+                issue(AlbumIssueKind.UNUSUAL_KEY_NOT_IN_LIBRARY, "$unmatchedUnusualKeys entries with an unusual Google ID that no library item has")
             reported == null -> issue(AlbumIssueKind.COUNT_MISSING, "Google reported no item count; ${status.membersSeen} entries read")
             reported == status.membersSeen -> null
             status.reread == AlbumReread.SAME_ENTRIES ->

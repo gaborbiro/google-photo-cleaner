@@ -6,6 +6,7 @@ import type { StoredDecision } from '../../src/app/duplicates/reviewStore';
 import { SearchModel, searchIntroText, type LibraryPhoto, type SearchDeps, type SearchLibrary } from '../../src/app/search/searchModel';
 import { SourceError } from '../../src/app/scan/source';
 import { memorySizeMemory } from '../../src/app/shared/photoSize';
+import { ROTATED_TEXT } from '../../src/app/shared/viewRotation';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
 const at = (degrees: number) => Float32Array.from([Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)]);
@@ -410,6 +411,24 @@ describe('Search & sweep', () => {
     model.viewerStep(2);
     model.viewerClose();
     expect(view().tiles.findIndex((t) => t.current)).toBe(2);
+  });
+
+  it('the viewer turns a result for viewing only; it keeps its turn, and nothing is selected or swept', async () => {
+    const { model, view, fakes } = await searched();
+    model.enter();
+    model.viewerRotate(1);
+    expect(view().viewer).toMatchObject({ rotationDeg: 90, sideways: true, rotationText: ROTATED_TEXT });
+    model.viewerStep(1);
+    expect(view().viewer).toMatchObject({ rotationDeg: 0, rotationText: null });
+    model.viewerStep(-1);
+    model.viewerRotate(-1);
+    model.viewerRotate(-1);
+    expect(view().viewer).toMatchObject({ rotationDeg: 270, sideways: true });
+    model.viewerClose();
+    model.enter();
+    expect(view().viewer!.rotationDeg).toBe(270);
+    expect(view().resultText).toBe('4 best matches · 0 selected for the trash');
+    expect(fakes.swept).toEqual([]);
   });
 
   it('thumbnails are fetched as tiles come into view', async () => {

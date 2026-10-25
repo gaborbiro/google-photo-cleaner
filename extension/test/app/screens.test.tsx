@@ -269,6 +269,14 @@ describe('clicks and keys reach what they should', () => {
     await shows(root, '3 of 3 · Proposed for the trash');
     press(' ');
     await shows(root, 'Kept (not selected)');
+    const turn = () => root.querySelector<HTMLElement>('.viewer-photo img')!.style.transform;
+    press('r');
+    await vi.waitFor(() => expect(turn()).toBe('rotate(90deg)'));
+    await shows(root, 'Turned for viewing only');
+    await click(root, '↺ Rotate left');
+    await vi.waitFor(() => expect(turn()).toBe('rotate(0deg)'));
+    await click(root, 'R · Rotate right');
+    await vi.waitFor(() => expect(turn()).toBe('rotate(90deg)'));
     press('Escape');
     await vi.waitFor(() => expect(root.querySelector('.viewer')).toBeNull());
     expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'TRASH', 'KEEP (your choice)']);

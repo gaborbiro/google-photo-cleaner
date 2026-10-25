@@ -8,6 +8,7 @@ import type { StoredDecision } from '../duplicates/reviewStore';
 import type { Blocked } from '../duplicates/rules';
 import { previewProblem } from '../shared/googleProblems';
 import { PhotoSize, type SizeMemory, type SizeStep } from '../shared/photoSize';
+import { ViewRotations } from '../shared/viewRotation';
 import type { ProtectionChoices } from '../shared/preferences';
 import { rankSearch, type SearchHit } from './rules';
 
@@ -98,6 +99,10 @@ export interface ViewerView {
   selectionText: string;
   tone: Tone;
   link: string;
+  /** The photo's turn for viewing (0, 90, 180 or 270 degrees clockwise); on its side at 90 and 270. */
+  rotationDeg: number;
+  sideways: boolean;
+  rotationText: string | null;
 }
 
 export interface SearchView {
@@ -225,6 +230,7 @@ export class SearchModel {
   private fetching = 0;
   private readonly large = new Map<string, string | null>();
   private viewerIndex: number | null = null;
+  private readonly rotations = new ViewRotations();
 
   constructor(private readonly deps: SearchDeps) {
     this.size = new PhotoSize(TILE_SIZES, DEFAULT_SIZE, deps.sizeMemory);
@@ -702,6 +708,13 @@ export class SearchModel {
     this.publish();
   }
 
+  /** R and the rotate buttons: the photo shown a quarter turn clockwise (1) or back (−1), for viewing only. */
+  viewerRotate(delta: 1 | -1): void {
+    if (this.viewerIndex === null) return;
+    this.rotations.turn(this.shown[this.viewerIndex]!.mediaKey, delta);
+    this.publish();
+  }
+
   private loadLarge(): void {
     for (const offset of [0, 1, -1, 2]) {
       const hit = this.shown[this.viewerIndex! + offset];
@@ -783,6 +796,7 @@ export class SearchModel {
       selectionText: selected ? 'Selected for the trash' : 'Kept (not selected)',
       tone: selected ? 'negative' : 'positive',
       link: `https://photos.google.com/photo/${hit.mediaKey}`,
+      ...this.rotations.of(hit.mediaKey),
     };
   }
 }

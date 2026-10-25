@@ -4,6 +4,7 @@
 import { count, n } from '../shared/format';
 import { previewProblem, previewProblemText } from '../shared/googleProblems';
 import { PhotoSize, type SizeMemory, type SizeStep } from '../shared/photoSize';
+import { ViewRotations } from '../shared/viewRotation';
 import type { StoredDecision } from './reviewStore';
 import { decisionItems, type Blocked, type DecisionKind, type DuplicateGroup, type GroupMember, type ReviewQueue } from './rules';
 import type { TrashQueueStatus } from './trash';
@@ -86,6 +87,10 @@ export interface ViewerView {
   selectionText: string;
   tone: Tone;
   link: string;
+  /** The photo's turn for viewing (0, 90, 180 or 270 degrees clockwise); on its side at 90 and 270. */
+  rotationDeg: number;
+  sideways: boolean;
+  rotationText: string | null;
 }
 
 export interface DuplicatesView {
@@ -169,6 +174,7 @@ export class DuplicatesReview {
   private readonly loading = new Set<string>();
   private readonly large = new Map<string, string | null>();
   private viewerIndex: number | null = null;
+  private readonly rotations = new ViewRotations();
 
   // Keyboard focus in the group grid: one photo is always outlined, the first when a group comes on.
   private focusedIndex = 0;
@@ -600,6 +606,14 @@ export class DuplicatesReview {
     if (member) this.toggleOrExplain(member.mediaKey);
   }
 
+  /** R and the rotate buttons: the photo shown a quarter turn clockwise (1) or back (−1), for viewing only. */
+  viewerRotate(delta: 1 | -1): void {
+    const member = this.viewerIndex === null ? undefined : this.pending[0]?.members[this.viewerIndex];
+    if (!member) return;
+    this.rotations.turn(member.mediaKey, delta);
+    this.publish();
+  }
+
   /** The photo shown and its neighbours, large; kept for the last few. */
   private loadLarge(group: DuplicateGroup): void {
     for (const offset of [0, 1, -1, 2]) {
@@ -716,6 +730,7 @@ export class DuplicatesReview {
       selectionText,
       tone,
       link: `https://photos.google.com/photo/${m.mediaKey}`,
+      ...this.rotations.of(m.mediaKey),
     };
   }
 

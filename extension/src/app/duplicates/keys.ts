@@ -4,7 +4,7 @@
 // held key counts once, so holding D or Space never decides or toggles more than intended.
 
 export type GridAction = 'approve' | 'keep' | 'defer' | 'focusAll' | 'undo' | 'left' | 'right' | 'up' | 'down' | 'open' | 'toggle' | 'smaller' | 'larger';
-export type ViewerAction = 'close' | 'previous' | 'next' | 'toggle';
+export type ViewerAction = 'close' | 'previous' | 'next' | 'toggle' | 'rotate';
 
 export interface KeyPress {
   key: string;
@@ -27,7 +27,8 @@ const GRID_KEYS: Record<string, GridAction> = {
   ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', Enter: 'open', ' ': 'toggle', ...SIZE_KEYS,
 };
 
-const VIEWER_KEYS: Record<string, ViewerAction> = { Escape: 'close', ArrowLeft: 'previous', ArrowRight: 'next', ' ': 'toggle' };
+/** R turns the photo a quarter clockwise, for viewing only. */
+const VIEWER_KEYS: Record<string, ViewerAction> = { Escape: 'close', ArrowLeft: 'previous', ArrowRight: 'next', ' ': 'toggle', r: 'rotate', R: 'rotate' };
 
 const ARROWS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
 

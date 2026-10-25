@@ -130,7 +130,10 @@ export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
       smaller: () => review.resize(-1), larger: () => review.resize(1),
       left: (h) => review.focusMove(-1, 0, h), right: (h) => review.focusMove(1, 0, h), up: (h) => review.focusMove(0, -1, h), down: (h) => review.focusMove(0, 1, h),
     },
-    onViewer: { close: () => review.viewerClose(), previous: () => review.viewerStep(-1), next: () => review.viewerStep(1), toggle: () => review.viewerToggle() },
+    onViewer: {
+      close: () => review.viewerClose(), previous: () => review.viewerStep(-1), next: () => review.viewerStep(1), toggle: () => review.viewerToggle(),
+      rotate: () => review.viewerRotate(1),
+    },
   });
 
   const grid = useRef<HTMLDivElement>(null);
@@ -183,7 +186,7 @@ export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
         )}
       </div>
       {view.viewer && (
-        <Viewer viewer={view.viewer} onPrevious={() => review.viewerStep(-1)} onNext={() => review.viewerStep(1)} onToggle={() => review.viewerToggle()} onClose={() => review.viewerClose()} />
+        <Viewer viewer={view.viewer} onPrevious={() => review.viewerStep(-1)} onNext={() => review.viewerStep(1)} onToggle={() => review.viewerToggle()} onRotate={(d) => review.viewerRotate(d)} onClose={() => review.viewerClose()} />
       )}
       <Toast notice={view.notice} />
     </div>

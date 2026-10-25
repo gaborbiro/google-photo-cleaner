@@ -6,6 +6,7 @@ import { ACTION_FAILED, DuplicatesReview, type ReviewDeps } from '../../src/app/
 import type { StoredDecision } from '../../src/app/duplicates/reviewStore';
 import type { DecisionKind, DuplicateGroup, GroupMember, ReviewQueue } from '../../src/app/duplicates/rules';
 import { memorySizeMemory } from '../../src/app/shared/photoSize';
+import { ROTATED_TEXT } from '../../src/app/shared/viewRotation';
 import { SourceError } from '../../src/app/scan/source';
 
 function member(key: string, role: GroupMember['role'], opts: Partial<GroupMember> = {}): GroupMember {
@@ -416,6 +417,30 @@ describe('the Duplicates review', () => {
     review.viewerClose();
     expect(view().viewer).toBeNull();
     expect(view().group!.tiles[2]!.focused).toBe(true);
+  });
+
+  it('the viewer turns a photo for viewing only: each photo keeps its turn, nothing is saved or decided', async () => {
+    const { review, view, fakes } = await opened();
+    review.openViewer('a');
+    expect(view().viewer).toMatchObject({ rotationDeg: 0, sideways: false, rotationText: null });
+    review.viewerRotate(1);
+    expect(view().viewer).toMatchObject({ rotationDeg: 90, sideways: true, rotationText: ROTATED_TEXT });
+    review.viewerStep(1);
+    expect(view().viewer).toMatchObject({ rotationDeg: 0, sideways: false, rotationText: null }); // another photo: as it is
+    review.viewerRotate(-1);
+    expect(view().viewer).toMatchObject({ rotationDeg: 270, sideways: true });
+    review.viewerStep(-1);
+    review.viewerRotate(1);
+    expect(view().viewer).toMatchObject({ rotationDeg: 180, sideways: false, rotationText: ROTATED_TEXT });
+    review.viewerRotate(1);
+    review.viewerRotate(1);
+    expect(view().viewer).toMatchObject({ rotationDeg: 0, rotationText: null }); // a full turn: as it is
+    review.viewerClose();
+    review.viewerRotate(1); // closed: nothing to turn
+    review.openViewer('b');
+    expect(view().viewer!.rotationDeg).toBe(270);
+    expect(fakes.decisions).toEqual([]);
+    expect(view().group!.selectionText).toBe('1 of 3 photos selected for the trash');
   });
 
   it('a blocked review says why, also when a key is pressed', async () => {

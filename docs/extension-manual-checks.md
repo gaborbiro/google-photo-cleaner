@@ -115,6 +115,12 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
    the folded toolbars.
 6. Switch to Scan and back: the groups are still there, not rebuilt.
 7. **Enter** opens the large viewer; arrows go through the group; **Esc** closes it.
+8. In the viewer, **R** (or **Rotate right**) turns the photo a quarter clockwise and **Rotate left**
+   turns it back, with a note that it is for viewing only. A photo turned on its side fits the
+   screen without being cut off. Step to another photo and back: it is still turned. Open the photo
+   in Google Photos: it is not turned there.
+9. **−** and **+** (keys or buttons) make the photos smaller and larger; the outlined photo stays
+   in view and larger photos sharpen after a moment. Reload the tab: the size is kept.
 
 ## 5. Search
 
@@ -126,6 +132,8 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
 3. **D** asks to confirm; **Enter** moves them to the trash queue, **Esc** cancels.
    **Z** undoes it.
 4. From Duplicates, **Search more like these** opens Search with that group as examples.
+5. **M** keeps the selected photos selected. **−** / **+** and the viewer's rotate work as in
+   Duplicates (section 4, items 8 and 9).
 
 ## 5b. Real trashing (Google Photos changes: start small)
 

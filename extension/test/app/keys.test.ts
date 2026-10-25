@@ -88,6 +88,9 @@ describe('Duplicates keys', () => {
     expect(viewerKey(press('Escape'))).toEqual({ kind: 'act', action: 'close' });
     expect(viewerKey(press('ArrowRight'))).toEqual({ kind: 'act', action: 'next' });
     expect(viewerKey(press(' '))).toEqual({ kind: 'act', action: 'toggle' });
+    expect(viewerKey(press('r'))).toEqual({ kind: 'act', action: 'rotate' });
+    expect(viewerKey(press('R'))).toEqual({ kind: 'act', action: 'rotate' });
+    expect(viewerKey(press('r', { repeat: true }))).toEqual({ kind: 'swallow' });
     expect(viewerKey(press('d'))).toEqual({ kind: 'swallow' });
     expect(viewerKey(press('Enter'))).toEqual({ kind: 'swallow' });
   });

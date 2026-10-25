@@ -115,30 +115,39 @@ export function SizeButtons({ canShrink, canGrow, onResize }: { canShrink: boole
 }
 
 export interface ViewerProps {
-  viewer: { imageUrl: string | null; loading: boolean; statusText: string | null; infoText: string; selectionText: string; tone: string; link: string };
+  viewer: {
+    imageUrl: string | null; loading: boolean; statusText: string | null; infoText: string; selectionText: string; tone: string; link: string;
+    rotationDeg: number; sideways: boolean; rotationText: string | null;
+  };
   onPrevious: () => void;
   onNext: () => void;
   onToggle: () => void;
+  onRotate: (delta: 1 | -1) => void;
   onClose: () => void;
 }
 
-/** One photo large, framed in what will happen to it. */
-export function Viewer({ viewer, onPrevious, onNext, onToggle, onClose }: ViewerProps) {
+/** One photo large, framed in what will happen to it; turned for viewing when asked (nothing is saved). */
+export function Viewer({ viewer, onPrevious, onNext, onToggle, onRotate, onClose }: ViewerProps) {
   return (
     <div className="viewer" role="dialog" aria-modal="true" aria-label="Photo" onContextMenu={(e) => { e.preventDefault(); onClose(); }}>
       <div className={`viewer-photo tone-${viewer.tone}`}>
-        {viewer.imageUrl ? <img src={viewer.imageUrl} alt="" /> : <span className="muted">Loading…</span>}
+        {viewer.imageUrl
+          ? <img src={viewer.imageUrl} alt="" className={viewer.sideways ? 'sideways' : ''} style={{ transform: `rotate(${viewer.rotationDeg}deg)` }} />
+          : <span className="muted">Loading…</span>}
         {viewer.loading && viewer.imageUrl && <div className="spinner" />}
       </div>
       <div className="viewer-info">
         <span className="mono">{viewer.infoText}</span>
         <strong className={`tone-text-${viewer.tone}`}>{viewer.selectionText}</strong>
         {viewer.statusText && <span className="muted">{viewer.statusText}</span>}
+        {viewer.rotationText && <span className="muted">{viewer.rotationText}</span>}
       </div>
       <div className="viewer-buttons">
         <button tabIndex={-1} onClick={onPrevious}>← Previous</button>
         <button tabIndex={-1} onClick={onNext}>Next →</button>
         <button tabIndex={-1} onClick={onToggle}><kbd>Space</kbd> · Toggle trash</button>
+        <button tabIndex={-1} title="Turn anticlockwise, for viewing only" onClick={() => onRotate(-1)}>↺ Rotate left</button>
+        <button tabIndex={-1} title="Turn clockwise, for viewing only" onClick={() => onRotate(1)}><kbd>R</kbd> · Rotate right</button>
         <a href={viewer.link} target="_blank" rel="noreferrer"><button tabIndex={-1}>Open in Google Photos <span aria-hidden="true">↗</span></button></a>
         <button tabIndex={-1} onClick={onClose}><kbd>Esc</kbd> · Close</button>
       </div>

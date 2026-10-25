@@ -63,7 +63,10 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
       smaller: () => model.resize(-1), larger: () => model.resize(1),
       left: (h) => model.focusMove(-1, 0, h), right: (h) => model.focusMove(1, 0, h), up: (h) => model.focusMove(0, -1, h), down: (h) => model.focusMove(0, 1, h),
     },
-    onViewer: { close: () => model.viewerClose(), previous: () => model.viewerStep(-1), next: () => model.viewerStep(1), toggle: () => model.viewerToggle() },
+    onViewer: {
+      close: () => model.viewerClose(), previous: () => model.viewerStep(-1), next: () => model.viewerStep(1), toggle: () => model.viewerToggle(),
+      rotate: () => model.viewerRotate(1),
+    },
   });
 
   // New results: the keys work the grid, not the search field.
@@ -149,7 +152,7 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
         {view.showMoreVisible && <div className="show-more"><button disabled={view.searching} onClick={() => model.showMore()}>Show more</button></div>}
       </div>
       {view.viewer && (
-        <Viewer viewer={view.viewer} onPrevious={() => model.viewerStep(-1)} onNext={() => model.viewerStep(1)} onToggle={() => model.viewerToggle()} onClose={() => model.viewerClose()} />
+        <Viewer viewer={view.viewer} onPrevious={() => model.viewerStep(-1)} onNext={() => model.viewerStep(1)} onToggle={() => model.viewerToggle()} onRotate={(d) => model.viewerRotate(d)} onClose={() => model.viewerClose()} />
       )}
       <Toast notice={view.notice} />
     </div>

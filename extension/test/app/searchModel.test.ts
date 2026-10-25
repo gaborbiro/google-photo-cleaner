@@ -5,6 +5,7 @@ import { ACTION_FAILED } from '../../src/app/duplicates/reviewModel';
 import type { StoredDecision } from '../../src/app/duplicates/reviewStore';
 import { SearchModel, searchIntroText, type LibraryPhoto, type SearchDeps, type SearchLibrary } from '../../src/app/search/searchModel';
 import { SourceError } from '../../src/app/scan/source';
+import { memorySizeMemory } from '../../src/app/shared/photoSize';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
 const at = (degrees: number) => Float32Array.from([Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)]);
@@ -26,6 +27,9 @@ class Fakes implements SearchDeps {
   /** Photos the sweep's re-check finds changed since the search (protected now, or queued elsewhere). */
   changedSince = new Set<string>();
   loads = 0;
+  sizeMemory = memorySizeMemory();
+  /** Every thumbnail asked for, with its size. */
+  previews: string[] = [];
 
   async loadLibrary() {
     this.loads++;
@@ -49,7 +53,8 @@ class Fakes implements SearchDeps {
   }
   /** Thumbnails that fail, and how. */
   failingPreviews = new Map<string, SourceError>();
-  async preview(thumbUrl: string) {
+  async preview(thumbUrl: string, sizePx: number) {
+    this.previews.push(`${thumbUrl}@${sizePx}`);
     const failure = this.failingPreviews.get(thumbUrl);
     if (failure) throw failure;
     return `data:${thumbUrl}`;
@@ -105,17 +110,82 @@ describe('Search & sweep', () => {
     model.addExamples('more');
     await settle();
     expect(view().more.map((e) => e.mediaKey)).toEqual(['cat']);
-    expect(view().tiles.find((t) => t.mediaKey === 'cat')!.selected).toBe(false); // selection cleared
+    // Photos to find more of are usually ones to trash too: they stay selected.
+    expect(view().tiles.filter((t) => t.selected).map((t) => t.mediaKey)).toEqual(['cat']);
+    expect(view().resultText).toBe('4 best matches · 1 selected for the trash');
+    model.tileClicked(keys(model).indexOf('cat'), false); // cat no longer for the trash
     const tub = keys(model).indexOf('tub');
     model.tileClicked(tub, false);
     model.addExamples('less');
     await settle();
     expect(view().less.map((e) => e.mediaKey)).toEqual(['tub']);
     expect(keys(model)).not.toContain('tub');
+    expect(view().tiles.filter((t) => t.selected)).toEqual([]); // they were only examples
     expect(view().hiddenText).toContain('more like the unwanted examples hidden');
     model.removeExample('tub');
     await settle();
     expect(keys(model)).toContain('tub');
+  });
+
+  it('more like the selected: the selection stays, except photos no longer among the results, which the user is told of', async () => {
+    const { model, view, fakes } = await searched();
+    model.tileClicked(keys(model).indexOf('box2'), false);
+    model.tileClicked(keys(model).indexOf('tub'), false);
+    // Meanwhile tub became a favourite: the next search reads the library again and leaves it out.
+    fakes.library.photos.get('tub')!.eligible = false;
+    model.libraryChanged();
+    model.addExamples('more');
+    await settle();
+    expect(view().more.map((e) => e.mediaKey)).toEqual(['box2', 'tub']);
+    expect(keys(model)).not.toContain('tub');
+    expect(view().tiles.filter((t) => t.selected).map((t) => t.mediaKey)).toEqual(['box2']);
+    expect(view().notice).toMatchObject({ text: '1 selected photo is no longer among the best matches, so it is not selected now.', tone: 'caution' });
+    // What the trash question counts and the sweep moves is what is shown as selected.
+    model.approve();
+    expect(view().confirmText).toContain('Move 1 photo to the trash?');
+    model.enter();
+    await settle();
+    expect(fakes.swept).toEqual([['box2']]);
+  });
+
+  it('a new description starts a new selection', async () => {
+    const { model, view } = await searched();
+    model.tileClicked(0, false);
+    model.searchText();
+    await settle();
+    expect(view().tiles.filter((t) => t.selected)).toEqual([]);
+  });
+
+  it('- and + make the results smaller and larger: the rows follow, sharper thumbnails come into view, the size is remembered', async () => {
+    const { model, view, fakes } = await searched();
+    expect(view()).toMatchObject({ tilePx: 160, canShrink: true, canGrow: true });
+    model.tileVisible('box1');
+    await settle();
+    expect(view().tiles[0]).toMatchObject({ imageUrl: 'data:thumb-box1', imageWanted: false });
+    expect(fakes.previews).toEqual(['thumb-box1@200']);
+    model.gridWidthMeasured(3 * 220 + 2 * 16); // three of the next size; all four results of this one
+    model.focusMove(0, 1); // one row: nowhere to go
+    expect(view().tiles.findIndex((t) => t.current)).toBe(0);
+
+    const pulse = view().focusPulse;
+    model.resize(1);
+    expect(view()).toMatchObject({ tilePx: 220, focusPulse: pulse + 1 });
+    model.focusMove(0, 1);
+    expect(view().tiles.findIndex((t) => t.current)).toBe(3); // three a row now
+    // The thumbnail there stays until the sharper one, fetched once the tile is in view, comes.
+    expect(view().tiles[0]).toMatchObject({ imageUrl: 'data:thumb-box1', imageWanted: true });
+    model.tileVisible('box1');
+    await settle();
+    expect(fakes.previews).toEqual(['thumb-box1@200', 'thumb-box1@300']);
+    expect(view().tiles[0]!.imageWanted).toBe(false);
+    expect(fakes.sizeMemory.load()).toBe(2);
+
+    model.resize(-1);
+    expect(view().tiles[0]!.imageWanted).toBe(false); // sharp enough already
+    model.resize(-1);
+    model.resize(-1);
+    expect(view()).toMatchObject({ tilePx: 120, canShrink: false, notice: { text: 'The photos are at their smallest.', tone: 'caution' } });
+    expect(new SearchModel(fakes).getView().tilePx).toBe(120); // remembered for the next review tab
   });
 
   it('Start over clears the description, the examples and the results', async () => {
@@ -226,11 +296,11 @@ describe('Search & sweep', () => {
 
   it("the grid's measured width sets how far up and down move; a hidden grid keeps the last width", async () => {
     const { model, view } = await searched();
-    model.gridWidthMeasured(3 * 160 + 2 * 6 - 1); // just too narrow for 3 tiles
+    model.gridWidthMeasured(3 * 160 + 2 * 16 - 1); // just too narrow for 3 tiles
     model.focusMove(0, 1, false);
     expect(view().tiles.findIndex((t) => t.current)).toBe(2);
     model.focusMove(0, -1, false);
-    model.gridWidthMeasured(3 * 160 + 2 * 6); // exactly 3
+    model.gridWidthMeasured(3 * 160 + 2 * 16); // exactly 3
     model.gridWidthMeasured(0);
     model.focusMove(0, 1, false);
     expect(view().tiles.findIndex((t) => t.current)).toBe(3);

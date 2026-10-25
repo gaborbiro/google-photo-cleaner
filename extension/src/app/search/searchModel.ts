@@ -7,12 +7,18 @@ import { ACTION_FAILED } from '../duplicates/reviewModel';
 import type { StoredDecision } from '../duplicates/reviewStore';
 import type { Blocked } from '../duplicates/rules';
 import { previewProblem } from '../shared/googleProblems';
+import { PhotoSize, type SizeMemory, type SizeStep } from '../shared/photoSize';
 import type { ProtectionChoices } from '../shared/preferences';
 import { rankSearch, type SearchHit } from './rules';
 
-/** A result tile's size and the gap between tiles, as `.search-grid` in app.css lays them out. */
-const TILE_PX = 160;
-const TILE_GAP_PX = 6;
+/** The result sizes − and + step through; 160 px at first. */
+export const TILE_SIZES: readonly SizeStep[] = [
+  { tilePx: 120, previewPx: 200 }, { tilePx: 160, previewPx: 200 }, { tilePx: 220, previewPx: 300 },
+  { tilePx: 300, previewPx: 400 }, { tilePx: 400, previewPx: 600 }, { tilePx: 520, previewPx: 800 },
+];
+const DEFAULT_SIZE = 1;
+/** The space between tiles in a row, as `.search-grid` in app.css lays them out (var(--space-4)). */
+const TILE_GAP_PX = 16;
 
 /** What Search knows about one analysed photo of the latest library scan. */
 export interface LibraryPhoto {
@@ -49,6 +55,8 @@ export interface SearchDeps {
   undo(): Promise<StoredDecision | null>;
   /** A preview as an image address, fetched through Google Photos; throws when it can't be had. */
   preview(thumbUrl: string, sizePx: number): Promise<string>;
+  /** Where the chosen photo size is remembered. */
+  sizeMemory: SizeMemory;
 }
 
 export type Tone = 'positive' | 'caution' | 'negative' | 'neutral';
@@ -65,6 +73,8 @@ export interface Notice {
 export interface SearchTile {
   mediaKey: string;
   imageUrl: string | null;
+  /** A thumbnail (or a sharper one, after the photos were made larger) is to be fetched once the tile is in view. */
+  imageWanted: boolean;
   selected: boolean;
   focused: boolean;
   /** The one photo the keys act on (not when A outlines them all). */
@@ -103,6 +113,10 @@ export interface SearchView {
   hiddenText: string | null;
   blockedText: string | null;
   sort: Sort;
+  /** How large the results are shown, and whether − and + can change it. */
+  tilePx: number;
+  canShrink: boolean;
+  canGrow: boolean;
   more: ExampleView[];
   less: ExampleView[];
   tiles: SearchTile[];
@@ -116,7 +130,6 @@ export interface SearchView {
 }
 
 const PAGE = 300;
-export const THUMB_PX = 200;
 const THUMB_CACHE = 900;
 const FETCH_CONCURRENCY = 6;
 const VIEWER_PX = 1024;
@@ -198,10 +211,14 @@ export class SearchModel {
   /** After a Shift-click: where the outlined range starts; it ends at [focusedIndex]. */
   private rangeStart: number | null = null;
   private columns = 1;
+  /** The width the grid last measured; the columns follow it and the photo size. */
+  private gridWidthPx: number | null = null;
   private allFocused = false;
   private focusPulse = 0;
+  private readonly size: PhotoSize;
 
-  private readonly thumbs = new Map<string, string>();
+  /** Each photo's thumbnail, with the size it was fetched at (a larger photo size fetches a sharper one). */
+  private readonly thumbs = new Map<string, { url: string; px: number }>();
   private readonly thumbErrors = new Map<string, string>();
   private readonly loading = new Set<string>();
   private readonly waiting: LibraryPhoto[] = [];
@@ -210,6 +227,7 @@ export class SearchModel {
   private viewerIndex: number | null = null;
 
   constructor(private readonly deps: SearchDeps) {
+    this.size = new PhotoSize(TILE_SIZES, DEFAULT_SIZE, deps.sizeMemory);
     this.current = this.view();
   }
 
@@ -270,7 +288,9 @@ export class SearchModel {
       ? { ...base, more: [...new Set([...base.more, ...keys])], less: base.less.filter((k) => !this.selected.has(k)) }
       : { ...base, less: [...new Set([...base.less, ...keys])], more: base.more.filter((k) => !this.selected.has(k)) };
     if (next.text === null && next.more.length === 0) return this.sayAndPublish('“Less like these” needs something to search for: a description or photos to find more of.', 'caution');
-    void this.run(next);
+    // The photos to find more of are usually ones to trash too, so they stay selected; those to find
+    // fewer of were only examples.
+    void this.run(next, kind === 'more');
   }
 
   /** The × on an example: it no longer counts; the search runs again (unless nothing is left to look for). */
@@ -312,7 +332,8 @@ export class SearchModel {
     this.publish();
   }
 
-  private async run(query: Query): Promise<void> {
+  /** Runs [query]; [keepSelection]: the selected photos still among the results stay selected. */
+  private async run(query: Query, keepSelection = false): Promise<void> {
     if (this.searching) return;
     this.searching = true;
     this.notice = this.notice?.tone === 'neutral' ? this.notice : null;
@@ -341,7 +362,7 @@ export class SearchModel {
       this.query = { ...query, textVector };
       this.limit = PAGE;
       this.rank();
-      this.selected.clear();
+      this.keepSelectedResults(keepSelection);
       this.confirming = false;
       this.resetFocus();
       this.resultsVersion++;
@@ -352,6 +373,20 @@ export class SearchModel {
       this.loadingModel = false;
       this.modelPercent = null;
       this.publish();
+    }
+  }
+
+  /**
+   * After a new search: what is selected for the trash is only ever among the results on screen, so a
+   * selected photo no longer among them is no longer selected (and the user is told).
+   */
+  private keepSelectedResults(keep: boolean): void {
+    if (!keep) return this.selected.clear();
+    const results = new Set(this.ranked.map((h) => h.mediaKey));
+    const dropped = [...this.selected].filter((key) => !results.has(key));
+    for (const key of dropped) this.selected.delete(key);
+    if (dropped.length > 0) {
+      this.say(`${count(dropped.length, 'selected photo is', 'selected photos are')} no longer among the best matches, so ${dropped.length === 1 ? 'it is' : 'they are'} not selected now.`, 'caution');
     }
   }
 
@@ -416,7 +451,23 @@ export class SearchModel {
 
   /** The grid's width in pixels, as the screen measured it; a hidden grid (0) keeps the last real width. */
   gridWidthMeasured(widthPx: number): void {
-    if (widthPx > 0) this.gridMeasured(Math.floor((widthPx + TILE_GAP_PX) / (TILE_PX + TILE_GAP_PX)));
+    if (widthPx <= 0) return;
+    this.gridWidthPx = widthPx;
+    this.measureColumns();
+  }
+
+  private measureColumns(): void {
+    if (this.gridWidthPx !== null) this.gridMeasured(Math.floor((this.gridWidthPx + TILE_GAP_PX) / (this.size.current.tilePx + TILE_GAP_PX)));
+  }
+
+  /** − and +: the results one size smaller or larger; the outlined photo stays in view. */
+  resize(delta: 1 | -1): void {
+    if (!this.size.change(delta)) {
+      return this.sayAndPublish(delta > 0 ? 'The photos are at their largest.' : 'The photos are at their smallest.', 'caution');
+    }
+    this.measureColumns();
+    this.focusPulse++;
+    this.publish();
   }
 
   /** The examples' thumbnails, for those not fetched yet. */
@@ -424,6 +475,11 @@ export class SearchModel {
     for (const mediaKey of [...(this.query?.more ?? []), ...(this.query?.less ?? [])]) {
       if (!this.thumbs.has(mediaKey)) this.tileVisible(mediaKey);
     }
+  }
+
+  /** Whether [mediaKey]'s thumbnail is missing, or smaller than the photo size now wants. */
+  private thumbWanted(mediaKey: string): boolean {
+    return (this.thumbs.get(mediaKey)?.px ?? 0) < this.size.current.previewPx;
   }
 
   private resultsOrSay(): boolean {
@@ -585,9 +641,9 @@ export class SearchModel {
 
   // --- thumbnails and the viewer ---
 
-  /** A tile came into view: its thumbnail is fetched (a few at a time). */
+  /** A tile came into view: its thumbnail (or a sharper one) is fetched, a few at a time. */
   tileVisible(mediaKey: string): void {
-    if (this.thumbs.has(mediaKey) || this.loading.has(mediaKey)) return;
+    if (!this.thumbWanted(mediaKey) || this.loading.has(mediaKey)) return;
     const photo = this.library?.photos.get(mediaKey);
     if (!photo?.thumbUrl) return;
     this.loading.add(mediaKey);
@@ -598,11 +654,13 @@ export class SearchModel {
   private pump(): void {
     while (this.fetching < FETCH_CONCURRENCY && this.waiting.length > 0) {
       const photo = this.waiting.shift()!;
+      const px = this.size.current.previewPx;
       this.fetching++;
-      void this.deps.preview(photo.thumbUrl!, THUMB_PX).then(
+      void this.deps.preview(photo.thumbUrl!, px).then(
         (url) => {
           this.thumbErrors.delete(photo.mediaKey);
-          this.thumbs.set(photo.mediaKey, url);
+          this.thumbs.delete(photo.mediaKey);
+          this.thumbs.set(photo.mediaKey, { url, px });
           while (this.thumbs.size > THUMB_CACHE) this.thumbs.delete(this.thumbs.keys().next().value!);
         },
         (e: unknown) => void this.thumbErrors.set(photo.mediaKey, previewProblem('Search', e)),
@@ -670,7 +728,7 @@ export class SearchModel {
       ...(this.hidden.alreadyApproved > 0 ? [`${n(this.hidden.alreadyApproved)} already in the trash queue hidden`] : []),
       ...(this.hidden.lessLike > 0 ? [`${n(this.hidden.lessLike)} more like the unwanted examples hidden`] : []),
     ];
-    const example = (mediaKey: string): ExampleView => ({ mediaKey, imageUrl: this.thumbs.get(mediaKey) ?? null });
+    const example = (mediaKey: string): ExampleView => ({ mediaKey, imageUrl: this.thumbs.get(mediaKey)?.url ?? null });
     const outlined = new Set(this.focusedIndices());
     return {
       introText: searchIntroText(this.library?.protection ?? null),
@@ -685,11 +743,15 @@ export class SearchModel {
       hiddenText: this.query && hiddenParts.length > 0 ? hiddenParts.join(' · ') : null,
       blockedText: this.library?.blocked ? BLOCKED_TEXT[this.library.blocked] : null,
       sort: this.sort,
+      tilePx: this.size.current.tilePx,
+      canShrink: this.size.canShrink,
+      canGrow: this.size.canGrow,
       more: (this.query?.more ?? []).map(example),
       less: (this.query?.less ?? []).map(example),
       tiles: this.shown.map((h, index) => ({
         mediaKey: h.mediaKey,
-        imageUrl: this.thumbs.get(h.mediaKey) ?? null,
+        imageUrl: this.thumbs.get(h.mediaKey)?.url ?? null,
+        imageWanted: this.thumbWanted(h.mediaKey),
         selected: this.selected.has(h.mediaKey),
         focused: outlined.has(index),
         current: !this.allFocused && index === this.focusedIndex,
@@ -714,7 +776,7 @@ export class SearchModel {
     const failed = large === 'failed';
     const selected = this.selected.has(hit.mediaKey);
     return {
-      imageUrl: (large && !failed ? large : null) ?? this.thumbs.get(hit.mediaKey) ?? null,
+      imageUrl: (large && !failed ? large : null) ?? this.thumbs.get(hit.mediaKey)?.url ?? null,
       loading: large === null || large === undefined,
       statusText: failed ? 'The large preview could not be loaded; showing the thumbnail.' : large ? null : 'Loading the large preview…',
       infoText: `${index + 1} of ${n(this.shown.length)} · ${caption(hit)}`,

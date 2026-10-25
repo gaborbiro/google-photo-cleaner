@@ -6,6 +6,7 @@ import { IndexedDbReviewStore } from '../duplicates/reviewStore';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { classify } from '../scan/report';
 import { IndexedDbPreferences } from '../shared/preferences';
+import { browserSizeMemory } from '../shared/photoSize';
 import { previewDataUrl } from '../shared/previews';
 import type { LibraryPhoto, SearchDeps, SearchLibrary, SweepResult } from './searchModel';
 
@@ -93,5 +94,6 @@ export function searchDeps(account: string, stores: SearchStores = (shared ??= s
     sweep: (mediaKeys) => sweep(stores, account, mediaKeys, now()),
     undo: () => stores.review.undoLast(account, now()),
     preview: (thumbUrl, sizePx) => previewDataUrl(account, thumbUrl, sizePx),
+    sizeMemory: browserSizeMemory('photo-cleaner.search-photo-size'),
   };
 }

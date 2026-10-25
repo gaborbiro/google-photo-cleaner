@@ -300,11 +300,12 @@ button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-b
 /* --- Duplicates: 300 px photo stages, framed in what will happen to each photo --- */
 
 .group { padding-bottom: var(--space-6); }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, 300px); gap: 28px var(--space-6); align-items: start; }
+/* --tile-px: the photo size chosen with − and + (set by the workbench). */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, var(--tile-px, 300px)); gap: 28px var(--space-6); align-items: start; }
 /* Scrolling a photo into view keeps it clear of the pinned tabs and action bar. */
-.tile { width: 300px; max-width: 100%; margin: 0; scroll-margin-top: calc(var(--tabs-h) + var(--bar-h) + 16px); scroll-margin-bottom: 16px; }
+.tile { width: var(--tile-px, 300px); max-width: 100%; margin: 0; scroll-margin-top: calc(var(--tabs-h) + var(--bar-h) + 16px); scroll-margin-bottom: 16px; }
 .tile-image {
-  position: relative; width: 300px; max-width: 100%; height: 300px; padding: 3px;
+  position: relative; width: var(--tile-px, 300px); max-width: 100%; height: var(--tile-px, 300px); padding: 3px;
   border: 3px solid var(--tone); border-radius: 8px; background: var(--pc-mat); cursor: pointer; user-select: none;
   display: flex; align-items: center; justify-content: center;
   outline: 2px solid transparent; outline-offset: 3px;
@@ -347,6 +348,9 @@ button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-b
   font-size: 14px; line-height: 20px;
 }
 .segmented { display: inline-flex; }
+/* The photo size's − and +: large signs, easy to hit, at the end of the buttons. */
+.size-buttons { margin-left: auto; }
+.buttons .size-buttons button { min-width: 44px; padding: 2px 12px; font-size: 22px; line-height: 28px; font-weight: 600; }
 .segmented button { border-radius: 0; margin-left: -1px; }
 .segmented button:first-child { border-radius: var(--radius-control) 0 0 var(--radius-control); margin-left: 0; }
 .segmented button:last-child { border-radius: 0 var(--radius-control) var(--radius-control) 0; }
@@ -354,10 +358,10 @@ button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-b
 /* The question before a sweep: inside the pinned bar, soft red with a red start edge. */
 .confirm { display: flex; flex-direction: column; gap: var(--space-3); padding: 14px; background: var(--pc-trash-fill); border-left: 3px solid var(--pc-trash); border-radius: 5px; }
 .confirm strong { color: var(--pc-trash); }
-.search-grid { display: grid; grid-template-columns: repeat(auto-fill, 160px); gap: var(--space-5) var(--space-4); }
-.search-tile { margin: 0; width: 160px; scroll-margin-top: calc(var(--tabs-h) + var(--bar-h) + 16px); scroll-margin-bottom: 16px; }
+.search-grid { display: grid; grid-template-columns: repeat(auto-fill, var(--tile-px, 160px)); gap: var(--space-5) var(--space-4); }
+.search-tile { margin: 0; width: var(--tile-px, 160px); scroll-margin-top: calc(var(--tabs-h) + var(--bar-h) + 16px); scroll-margin-bottom: 16px; }
 .search-tile-image {
-  position: relative; width: 160px; height: 160px; padding: 2px; border: 4px solid transparent; border-radius: 7px;
+  position: relative; width: var(--tile-px, 160px); height: var(--tile-px, 160px); padding: 2px; border: 4px solid transparent; border-radius: 7px;
   background: var(--pc-mat); display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none;
   outline: 2px solid transparent; outline-offset: 3px;
 }
@@ -436,7 +440,7 @@ details[open]:has(> .clutter-sample-title) { padding-bottom: var(--space-6); }
   .tabs { gap: 0; }
   button.tab { padding: 12px 10px; }
   .tables { grid-template-columns: minmax(0, 1fr); }
-  .tiles { grid-template-columns: minmax(0, 300px); justify-content: center; }
+  .tiles { grid-template-columns: minmax(0, var(--tile-px, 300px)); justify-content: center; }
   .tile, .tile-image { width: 100%; }
   .tile-image { height: auto; aspect-ratio: 1; }
   .search-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }

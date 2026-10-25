@@ -3,6 +3,7 @@
 
 import { count, n } from '../shared/format';
 import { previewProblem, previewProblemText } from '../shared/googleProblems';
+import { PhotoSize, type SizeMemory, type SizeStep } from '../shared/photoSize';
 import type { StoredDecision } from './reviewStore';
 import { decisionItems, type Blocked, type DecisionKind, type DuplicateGroup, type GroupMember, type ReviewQueue } from './rules';
 import type { TrashQueueStatus } from './trash';
@@ -32,11 +33,18 @@ export interface ReviewDeps {
   preview(thumbUrl: string, sizePx: number): Promise<string>;
   /** How many groups are left to review now (skipped ones included), for the popup to say. */
   groupsLeft(count: number): Promise<void>;
+  /** Where the chosen photo size is remembered. */
+  sizeMemory: SizeMemory;
 }
 
-export const TILE_PX = 300;
-export const TILE_GAP_PX = 12;
-const PREVIEW_PX = 400;
+/** The photo sizes − and + step through; 300 px at first. */
+export const TILE_SIZES: readonly SizeStep[] = [
+  { tilePx: 200, previewPx: 400 }, { tilePx: 300, previewPx: 400 }, { tilePx: 400, previewPx: 600 },
+  { tilePx: 520, previewPx: 800 }, { tilePx: 680, previewPx: 1024 }, { tilePx: 880, previewPx: 1024 },
+];
+const DEFAULT_SIZE = 1;
+/** The space between photos in a row, as `.tiles` in app.css lays them out (var(--space-6)). */
+export const TILE_GAP_PX = 24;
 const PREVIEW_CACHE = 60;
 const VIEWER_PX = 1024;
 const VIEWER_CACHE = 12;
@@ -94,6 +102,10 @@ export interface DuplicatesView {
   problemText: string | null;
   queueText: string | null;
   queueWaitingText: string | null;
+  /** How large the photos are shown, and whether − and + can change it. */
+  tilePx: number;
+  canShrink: boolean;
+  canGrow: boolean;
   group: GroupView | null;
   notice: Notice | null;
   viewer: ViewerView | null;
@@ -151,7 +163,8 @@ export class DuplicatesReview {
   private sequence = 0;
   private queue: TrashQueueStatus | null = null;
   private readonly selections = new Map<string, Set<string>>();
-  private readonly previews = new Map<string, string>();
+  /** Each photo's preview, with the size it was fetched at (a larger photo size fetches a sharper one). */
+  private readonly previews = new Map<string, { url: string; px: number }>();
   private readonly previewErrors = new Map<string, string>();
   private readonly loading = new Set<string>();
   private readonly large = new Map<string, string | null>();
@@ -163,8 +176,12 @@ export class DuplicatesReview {
   /** After A, the whole group is focused (outline on every photo) until A again, an arrow or a click. */
   private allFocused = false;
   private focusPulse = 0;
+  /** The width the grid last measured; the columns follow it and the photo size. */
+  private gridWidthPx = 0;
+  private readonly size: PhotoSize;
 
   constructor(private readonly deps: ReviewDeps) {
+    this.size = new PhotoSize(TILE_SIZES, DEFAULT_SIZE, deps.sizeMemory);
     this.current = this.view();
   }
 
@@ -277,16 +294,19 @@ export class DuplicatesReview {
     for (const group of this.pending.slice(0, 3)) for (const m of group.members) void this.loadPreview(m);
   }
 
+  /** Fetches [m]'s preview, or a sharper one when the photos were made larger; the one shown stays until it comes. */
   private async loadPreview(m: GroupMember): Promise<void> {
-    if (this.previews.has(m.mediaKey) || this.previewErrors.has(m.mediaKey) || this.loading.has(m.mediaKey)) return;
+    const px = this.size.current.previewPx;
+    if ((this.previews.get(m.mediaKey)?.px ?? 0) >= px || this.previewErrors.has(m.mediaKey) || this.loading.has(m.mediaKey)) return;
     if (m.thumbUrl === null) {
       this.previewErrors.set(m.mediaKey, previewProblemText(null));
       return this.publish();
     }
     this.loading.add(m.mediaKey);
     try {
-      const url = await this.deps.preview(m.thumbUrl, PREVIEW_PX);
-      this.previews.set(m.mediaKey, url);
+      const url = await this.deps.preview(m.thumbUrl, px);
+      this.previews.delete(m.mediaKey);
+      this.previews.set(m.mediaKey, { url, px });
       while (this.previews.size > PREVIEW_CACHE) this.previews.delete(this.previews.keys().next().value!);
     } catch (e) {
       this.previewErrors.set(m.mediaKey, previewProblem('Duplicates', e));
@@ -294,6 +314,8 @@ export class DuplicatesReview {
       this.loading.delete(m.mediaKey);
       this.publish();
     }
+    // The photos were made larger while this one was on its way: a sharper one follows.
+    if (px < this.size.current.previewPx && this.pending.slice(0, 3).some((g) => g.members.includes(m))) void this.loadPreview(m);
   }
 
   // --- focus and selection ---
@@ -305,7 +327,28 @@ export class DuplicatesReview {
 
   /** The grid reports its width so up and down can move by a whole row. */
   gridWidthMeasured(widthPx: number): void {
-    this.columns = Math.max(1, Math.floor((widthPx + TILE_GAP_PX) / (TILE_PX + TILE_GAP_PX)));
+    this.gridWidthPx = widthPx;
+    this.measureColumns();
+  }
+
+  private measureColumns(): void {
+    this.columns = Math.max(1, Math.floor((this.gridWidthPx + TILE_GAP_PX) / (this.size.current.tilePx + TILE_GAP_PX)));
+  }
+
+  /** − and +: the photos one size smaller or larger; the outlined photo stays in view. */
+  resize(delta: 1 | -1): void {
+    if (!this.size.change(delta)) {
+      return this.sayAndPublish(delta > 0 ? 'The photos are at their largest.' : 'The photos are at their smallest.', 'caution');
+    }
+    this.measureColumns();
+    this.focusPulse++;
+    this.publish();
+    if (delta > 0) this.preload();
+  }
+
+  private sayAndPublish(text: string, tone: Tone): void {
+    this.say(text, tone);
+    this.publish();
   }
 
   /** The group on screen; when there is none, says why, so a key press is not met with silence. */
@@ -606,6 +649,9 @@ export class DuplicatesReview {
       problemText: this.problem,
       queueText: this.queueText(),
       queueWaitingText: this.queue?.waitingReason ?? null,
+      tilePx: this.size.current.tilePx,
+      canShrink: this.size.canShrink,
+      canGrow: this.size.canGrow,
       group: group ? this.groupView(group) : null,
       notice: this.notice,
       viewer: group && this.viewerIndex !== null ? this.viewerView(group, this.viewerIndex) : null,
@@ -639,7 +685,7 @@ export class DuplicatesReview {
                 : ['KEEP (your choice)', 'positive'];
     return {
       mediaKey: m.mediaKey,
-      imageUrl: this.previews.get(m.mediaKey) ?? null,
+      imageUrl: this.previews.get(m.mediaKey)?.url ?? null,
       error: this.previewErrors.get(m.mediaKey) ?? null,
       label,
       tone,
@@ -663,7 +709,7 @@ export class DuplicatesReview {
       ? ['Selected for the trash', 'negative']
       : m.selectable ? ['Kept (not selected)', 'positive'] : ['Always kept', 'neutral'];
     return {
-      imageUrl: (large && !failed ? large : null) ?? this.previews.get(m.mediaKey) ?? null,
+      imageUrl: (large && !failed ? large : null) ?? this.previews.get(m.mediaKey)?.url ?? null,
       loading: large === null || large === undefined,
       statusText: failed ? 'The large preview could not be loaded; showing the thumbnail.' : large ? null : 'Loading the large preview…',
       infoText: `${index + 1} of ${group.members.length} · ${role} · ${photoTime(m.takenAtMs)}`,

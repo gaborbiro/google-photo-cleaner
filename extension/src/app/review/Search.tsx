@@ -4,21 +4,21 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { searchKey } from '../duplicates/keys';
 import { SORTS, type ExampleView, type SearchModel, type SearchTile } from '../search/searchModel';
-import { Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
+import { SizeButtons, tileSizeStyle, Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
 
 
 function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: number; focusPulse: number; model: SearchModel }) {
   const ref = useRef<HTMLElement>(null);
   const image = useRef<HTMLDivElement>(null);
   useFocusFeedback(ref, image, tile.focused, tile.current, focusPulse);
-  // The thumbnail is fetched once the tile comes near the screen.
+  // The thumbnail (or a sharper one, after the photos were made larger) is fetched once the tile comes near the screen.
   useEffect(() => {
     const el = ref.current;
-    if (!el || tile.imageUrl) return;
+    if (!el || !tile.imageWanted) return;
     const observer = new IntersectionObserver(([entry]) => entry!.isIntersecting && model.tileVisible(tile.mediaKey), { rootMargin: '400px' });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [model, tile.mediaKey, tile.imageUrl]);
+  }, [model, tile.mediaKey, tile.imageWanted]);
   return (
     <figure ref={ref} className={`search-tile${tile.selected ? ' selected' : ''}${tile.focused ? ' focused' : ''}`}>
       <div className="search-tile-image" ref={image} onClick={(e) => model.tileClicked(index, e.shiftKey)}>
@@ -60,6 +60,7 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
     onGrid: {
       approve: () => model.approve(), focusAll: () => model.focusAll(), toggle: () => model.toggleFocused(), enter: () => model.enter(),
       cancel: () => model.cancel(), more: () => model.addExamples('more'), less: () => model.addExamples('less'), undo: () => model.undo(),
+      smaller: () => model.resize(-1), larger: () => model.resize(1),
       left: (h) => model.focusMove(-1, 0, h), right: (h) => model.focusMove(1, 0, h), up: (h) => model.focusMove(0, -1, h), down: (h) => model.focusMove(0, 1, h),
     },
     onViewer: { close: () => model.viewerClose(), previous: () => model.viewerStep(-1), next: () => model.viewerStep(1), toggle: () => model.viewerToggle() },
@@ -85,7 +86,7 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
   }, [model, view.more, view.less]);
 
   return (
-    <div className="search" hidden={!active}>
+    <div className="search" hidden={!active} style={tileSizeStyle(view.tilePx)}>
       <section className="collapsing search-head">
         <label htmlFor="search-query">Describe the photos</label>
         <p className="muted">{view.introText}</p>
@@ -130,6 +131,7 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
             <button tabIndex={-1} onClick={() => model.focusAll()}><kbd>A</kbd> · Focus all</button>
             <button tabIndex={-1} onClick={() => model.toggleFocused()}><kbd>Space</kbd> · Toggle trash</button>
             <button tabIndex={-1} onClick={() => model.undo()}><kbd>Z</kbd> · Undo</button>
+            <SizeButtons canShrink={view.canShrink} canGrow={view.canGrow} onResize={(d) => model.resize(d)} />
           </div>
           {view.confirmText && (
             <div className="confirm" role="alertdialog" aria-label="Move to the trash?">

@@ -1,9 +1,9 @@
 // The Duplicates keys: the left hand rests on A S D F with Z below; arrows,
-// Space and Enter work the grid. Shortcuts work wherever the focus is, except while typing or with
+// Space and Enter work the grid; - and + make the photos smaller or larger (Ctrl with them still zooms the page). Shortcuts work wherever the focus is, except while typing or with
 // Ctrl/Alt/Cmd held. A held arrow keeps moving, as in a file manager (at our own pace); any other
 // held key counts once, so holding D or Space never decides or toggles more than intended.
 
-export type GridAction = 'approve' | 'keep' | 'defer' | 'focusAll' | 'undo' | 'left' | 'right' | 'up' | 'down' | 'open' | 'toggle';
+export type GridAction = 'approve' | 'keep' | 'defer' | 'focusAll' | 'undo' | 'left' | 'right' | 'up' | 'down' | 'open' | 'toggle' | 'smaller' | 'larger';
 export type ViewerAction = 'close' | 'previous' | 'next' | 'toggle';
 
 export interface KeyPress {
@@ -19,9 +19,12 @@ export interface KeyPress {
 /** What a key press does; `ignore` lets the browser have it, `swallow` stops it doing anything. */
 export type KeyResult<A> = { kind: 'act'; action: A } | { kind: 'swallow' } | { kind: 'ignore' };
 
+/** - and + (= is + without Shift); the number pad's too. */
+const SIZE_KEYS = { '-': 'smaller', '+': 'larger', '=': 'larger' } as const;
+
 const GRID_KEYS: Record<string, GridAction> = {
   d: 'approve', f: 'keep', k: 'keep', s: 'defer', a: 'focusAll', z: 'undo', u: 'undo',
-  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', Enter: 'open', ' ': 'toggle',
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', Enter: 'open', ' ': 'toggle', ...SIZE_KEYS,
 };
 
 const VIEWER_KEYS: Record<string, ViewerAction> = { Escape: 'close', ArrowLeft: 'previous', ArrowRight: 'next', ' ': 'toggle' };
@@ -94,11 +97,11 @@ export function gridKey(press: KeyPress): KeyResult<GridAction> {
   return { kind: 'act', action };
 }
 
-export type SearchAction = 'approve' | 'focusAll' | 'toggle' | 'enter' | 'cancel' | 'more' | 'less' | 'undo' | 'left' | 'right' | 'up' | 'down';
+export type SearchAction = 'approve' | 'focusAll' | 'toggle' | 'enter' | 'cancel' | 'more' | 'less' | 'undo' | 'left' | 'right' | 'up' | 'down' | 'smaller' | 'larger';
 
 const SEARCH_KEYS: Record<string, SearchAction> = {
   d: 'approve', a: 'focusAll', ' ': 'toggle', Enter: 'enter', Escape: 'cancel', m: 'more', l: 'less', z: 'undo', u: 'undo',
-  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', ...SIZE_KEYS,
 };
 
 /** Search's keys: as in Duplicates, plus M / L (more / less like the selected photos), Enter and Esc for the trash question. */

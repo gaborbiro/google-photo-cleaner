@@ -10,6 +10,14 @@ describe('Duplicates keys', () => {
     );
   });
 
+  it('- and + (or =, + without Shift) make the photos smaller and larger, in Duplicates and Search; Ctrl with them still zooms the page', () => {
+    for (const keyMap of [gridKey, searchKey]) {
+      expect(['-', '+', '='].map((k) => keyMap(press(k)))).toEqual(['smaller', 'larger', 'larger'].map((action) => ({ kind: 'act', action })));
+      expect(keyMap(press('+', { ctrlKey: true }))).toEqual({ kind: 'ignore' });
+      expect(keyMap(press('-', { inTextField: true }))).toEqual({ kind: 'ignore' });
+    }
+  });
+
   it('arrows, Enter and Space work the grid', () => {
     expect(gridKey(press('ArrowUp'))).toEqual({ kind: 'act', action: 'up' });
     expect(gridKey(press('Enter'))).toEqual({ kind: 'act', action: 'open' });

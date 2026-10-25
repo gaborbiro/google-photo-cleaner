@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ACTION_FAILED, DuplicatesReview, type ReviewDeps } from '../../src/app/duplicates/reviewModel';
 import type { StoredDecision } from '../../src/app/duplicates/reviewStore';
 import type { DecisionKind, DuplicateGroup, GroupMember, ReviewQueue } from '../../src/app/duplicates/rules';
+import { memorySizeMemory } from '../../src/app/shared/photoSize';
 import { SourceError } from '../../src/app/scan/source';
 
 function member(key: string, role: GroupMember['role'], opts: Partial<GroupMember> = {}): GroupMember {
@@ -33,6 +34,9 @@ class Fakes implements ReviewDeps {
   undoGate: Promise<void> | null = null;
   /** Every "groups left" the review reported, oldest first. */
   groupsLeftReported: number[] = [];
+  sizeMemory = memorySizeMemory();
+  /** The size of every preview asked for, in order. */
+  previewSizes: number[] = [];
 
   async groupsLeft(count: number) {
     this.groupsLeftReported.push(count);
@@ -60,6 +64,7 @@ class Fakes implements ReviewDeps {
   }
 
   async preview(thumbUrl: string, sizePx: number) {
+    this.previewSizes.push(sizePx);
     if (thumbUrl === 'thumb-no-tab') throw new SourceError('NO_PHOTOS_TAB', 'no Photos tab');
     if (thumbUrl === 'thumb-changed') throw new SourceError('BAD_REQUEST', 'Preview host not allowed');
     return `data:${thumbUrl}@${sizePx}`;
@@ -71,7 +76,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 async function opened(fakes = new Fakes()) {
   const review = new DuplicatesReview(fakes);
-  review.gridWidthMeasured(3 * 300 + 2 * 12); // as the screen reports it: three photos a row
+  review.gridWidthMeasured(3 * 300 + 2 * 24); // as the screen reports it: three photos a row
   review.show();
   await settle();
   return { review, fakes, view: () => review.getView() };
@@ -215,7 +220,7 @@ describe('the Duplicates review', () => {
     const fakes = new Fakes();
     fakes.pending = [group('big', member('k', 'KEEPER'), ...['p1', 'p2', 'p3', 'p4'].map((k) => member(k, 'PROPOSED')))];
     const { review, view } = await opened(fakes);
-    review.gridWidthMeasured(2 * 300 + 12); // two columns: [k p1] [p2 p3] [p4]
+    review.gridWidthMeasured(2 * 300 + 24); // two columns: [k p1] [p2 p3] [p4]
     const at = () => view().group!.tiles.findIndex((t) => t.current);
     review.focusMove(-1, 0); // start of the first row
     expect(at()).toBe(0);
@@ -275,7 +280,7 @@ describe('the Duplicates review', () => {
     const fakes = new Fakes();
     fakes.pending = [group('big', member('k', 'KEEPER'), ...['p1', 'p2', 'p3', 'p4'].map((k) => member(k, 'PROPOSED')))];
     const { review, view } = await opened(fakes);
-    review.gridWidthMeasured(2 * 300 + 12); // two columns: [k p1] [p2 p3] [p4]
+    review.gridWidthMeasured(2 * 300 + 24); // two columns: [k p1] [p2 p3] [p4]
     const at = () => view().group!.tiles.findIndex((t) => t.current);
     review.focusMove(0, -1); // top row: stays
     expect(at()).toBe(0);
@@ -289,6 +294,48 @@ describe('the Duplicates review', () => {
     review.focusMove(1, 0);
     review.focusMove(0, 1); // nothing directly below p3 on the short last row: stays in its column
     expect(at()).toBe(3);
+  });
+
+  it('- and + make the photos smaller and larger, step by step: the rows follow, sharper previews come, the size is remembered', async () => {
+    const fakes = new Fakes();
+    fakes.pending = [group('big', member('k', 'KEEPER'), ...['p1', 'p2', 'p3', 'p4'].map((k) => member(k, 'PROPOSED')))];
+    const { review, view } = await opened(fakes);
+    expect(view()).toMatchObject({ tilePx: 300, canShrink: true, canGrow: true });
+    expect(view().group!.tiles[0]!.imageUrl).toBe('data:thumb-k@400');
+    // The grid fits three photos a row of this size, two of the next: [k p1 p2] [p3 p4].
+    review.focusMove(0, 1);
+    expect(view().group!.tiles.findIndex((t) => t.current)).toBe(3);
+    review.focusMove(0, -1);
+
+    const pulse = view().group!.focusPulse;
+    review.resize(1);
+    expect(view()).toMatchObject({ tilePx: 400, canShrink: true, canGrow: true });
+    expect(view().group!.focusPulse).toBe(pulse + 1); // the outlined photo is brought into view
+    review.focusMove(0, 1);
+    expect(view().group!.tiles.findIndex((t) => t.current)).toBe(2); // two a row now
+    // Until the sharper preview comes, the one there is stays.
+    expect(view().group!.tiles[0]!.imageUrl).toBe('data:thumb-k@400');
+    await settle();
+    expect(view().group!.tiles[0]!.imageUrl).toBe('data:thumb-k@600');
+    expect(fakes.sizeMemory.load()).toBe(2);
+
+    // Smaller again: what is fetched already is sharp enough.
+    const asked = fakes.previewSizes.length;
+    review.resize(-1);
+    review.resize(-1);
+    await settle();
+    expect(view()).toMatchObject({ tilePx: 200, canShrink: false, canGrow: true });
+    expect(fakes.previewSizes.length).toBe(asked);
+    review.resize(-1);
+    expect(view()).toMatchObject({ tilePx: 200, notice: { text: 'The photos are at their smallest.', tone: 'caution' } });
+
+    // A new review tab starts at the size chosen last.
+    const again = new DuplicatesReview(fakes);
+    expect(again.getView().tilePx).toBe(200);
+    for (let i = 0; i < 5; i++) again.resize(1);
+    expect(again.getView()).toMatchObject({ tilePx: 880, canGrow: false });
+    again.resize(1);
+    expect(again.getView().notice).toMatchObject({ text: 'The photos are at their largest.' });
   });
 
   it('S skips: the group goes to the end and says so when it comes round', async () => {

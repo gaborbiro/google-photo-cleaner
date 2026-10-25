@@ -6,7 +6,7 @@ import { gridKey } from '../duplicates/keys';
 import { DuplicatesReview, type DuplicatesView, type TileView } from '../duplicates/reviewModel';
 import { recoverInterrupted } from '../duplicates/trash';
 import { trashQueueDeps, trashQueuePass } from '../duplicates/session';
-import { Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
+import { SizeButtons, tileSizeStyle, Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
 
 const TRASH_QUEUE_EVERY_MS = 2_000;
 /** The space between the pinned bar and the group (the gap in .duplicates-body). */
@@ -127,6 +127,7 @@ export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
     onGrid: {
       approve: () => review.approve(), keep: () => review.keep(), defer: () => review.defer(), focusAll: () => review.focusAll(),
       undo: () => review.undo(), open: () => review.openFocused(), toggle: () => review.toggleFocused(),
+      smaller: () => review.resize(-1), larger: () => review.resize(1),
       left: (h) => review.focusMove(-1, 0, h), right: (h) => review.focusMove(1, 0, h), up: (h) => review.focusMove(0, -1, h), down: (h) => review.focusMove(0, 1, h),
     },
     onViewer: { close: () => review.viewerClose(), previous: () => review.viewerStep(-1), next: () => review.viewerStep(1), toggle: () => review.viewerToggle() },
@@ -147,7 +148,7 @@ export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
   }, [review, view.group !== null]);
 
   return (
-    <div className="duplicates" hidden={!active}>
+    <div className="duplicates" hidden={!active} style={tileSizeStyle(view.tilePx)}>
       <Status view={view} openScan={openScan} />
       <div className="duplicates-body">
         <section className="pinned-bar" ref={bar}>
@@ -168,6 +169,7 @@ export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
               <button key={b.key} tabIndex={-1} className={b.trash ? 'danger' : ''} onClick={() => b.act(review)}><kbd>{b.key}</kbd> · {b.label}</button>
             ))}
             <button tabIndex={-1} onClick={() => { const keys = review.groupKeysOrSay(); if (keys) onSearchLike(keys); }}>Search more like these</button>
+            <SizeButtons canShrink={view.canShrink} canGrow={view.canGrow} onResize={(d) => review.resize(d)} />
           </div>
         </section>
         {view.loadingText && <p className="working" role="status"><span className="spinner-inline" />{view.loadingText}</p>}

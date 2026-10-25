@@ -7,6 +7,7 @@ import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { classify, type Classification } from '../scan/report';
 import { runPageOp } from '../shared/pageOps';
 import { IndexedDbPreferences } from '../shared/preferences';
+import { browserSizeMemory } from '../shared/photoSize';
 import { previewDataUrl } from '../shared/previews';
 import { GoogleTrash, type RunPageOp } from './googleTrash';
 import type { ReviewDeps } from './reviewModel';
@@ -68,6 +69,7 @@ export function reviewDeps(account: string, stores: DuplicatesStores = sharedSto
     undo: () => stores.review.undoLast(account, now()),
     preview: (thumbUrl, sizePx) => previewDataUrl(account, thumbUrl, sizePx),
     groupsLeft: async (count) => stores.review.saveSummary({ account, groupsToReview: count, atMs: now(), protection: await stores.preferences.protection(account) }),
+    sizeMemory: browserSizeMemory('photo-cleaner.duplicates-photo-size'),
   };
 }
 

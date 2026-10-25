@@ -346,6 +346,44 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(0), { timeout: 3_000 });
   });
 
+  it('Search: M keeps the selected photos selected as they become examples', async () => {
+    const root = await duplicatesShown();
+    await click(root, 'Search more like these');
+    await vi.waitFor(() => expect(searchTiles(root).length).toBeGreaterThanOrEqual(3), { timeout: 3_000 });
+    searchTiles(root)[0]!.querySelector<HTMLElement>('.search-tile-image')!.click();
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
+    const before = root.querySelectorAll('.search .examples').length;
+    press('m');
+    await shows(root, '1 selected for the trash');
+    expect(root.querySelectorAll('.search .examples').length).toBe(before);
+    expect(selectedCount(root)).toBe(1);
+  });
+
+  it('Duplicates and Search: the − and + buttons and the - and + keys change the photo size, each tab its own', async () => {
+    const root = await duplicatesShown();
+    const size = (tab: string) => root.querySelector<HTMLElement>(`.${tab}`)!.style.getPropertyValue('--tile-px');
+    const sizeButton = (tab: string, label: string) => root.querySelector<HTMLButtonElement>(`.${tab}:not([hidden]) [aria-label="${label}"]`)!;
+    expect(size('duplicates')).toBe('300px');
+    sizeButton('duplicates', 'Larger photos').click();
+    await vi.waitFor(() => expect(size('duplicates')).toBe('400px'));
+    press('+');
+    await vi.waitFor(() => expect(size('duplicates')).toBe('520px'));
+    press('-');
+    press('-');
+    press('-');
+    await vi.waitFor(() => expect(size('duplicates')).toBe('200px'));
+    expect(sizeButton('duplicates', 'Smaller photos').disabled).toBe(true);
+
+    await click(root, 'Search more like these');
+    await vi.waitFor(() => expect(searchTiles(root).length).toBeGreaterThanOrEqual(3), { timeout: 3_000 });
+    expect(size('search')).toBe('160px');
+    press('=');
+    await vi.waitFor(() => expect(size('search')).toBe('220px'));
+    sizeButton('search', 'Smaller photos').click();
+    await vi.waitFor(() => expect(size('search')).toBe('160px'));
+    expect(size('duplicates')).toBe('200px');
+  });
+
   it('Search: L adds a less-like example, its × removes it, Start over clears everything', async () => {
     const root = await duplicatesShown();
     await click(root, 'Search more like these');

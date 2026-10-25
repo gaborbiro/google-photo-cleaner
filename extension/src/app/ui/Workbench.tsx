@@ -1,7 +1,7 @@
 // What the review tab's workbenches (Duplicates and Search) share: the keyboard (with held arrows
 // that slide), the outline's bounce, the large photo viewer and the toast.
 
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type RefObject, useEffect, useRef, useState } from 'react';
 import { HeldArrow, repeatsWhenHeld, viewerKey, type KeyPress, type KeyResult, type ViewerAction } from '../duplicates/keys';
 
 function pressOf(e: KeyboardEvent): KeyPress {
@@ -97,6 +97,21 @@ export function usePinnedHeight(element: RefObject<HTMLElement | null>, name: st
     observer.observe(el);
     return () => observer.disconnect();
   }, [element, name]);
+}
+
+/** The photos' size for the stylesheet (`--tile-px`), on the workbench that holds them. */
+export function tileSizeStyle(tilePx: number): CSSProperties {
+  return { '--tile-px': `${tilePx}px` } as CSSProperties;
+}
+
+/** − and +: the photos one size smaller or larger (the - and + keys do the same). */
+export function SizeButtons({ canShrink, canGrow, onResize }: { canShrink: boolean; canGrow: boolean; onResize: (delta: 1 | -1) => void }) {
+  return (
+    <span className="segmented size-buttons" role="group" aria-label="Photo size">
+      <button tabIndex={-1} disabled={!canShrink} title="Smaller photos (-)" aria-label="Smaller photos" onClick={() => onResize(-1)}>−</button>
+      <button tabIndex={-1} disabled={!canGrow} title="Larger photos (+)" aria-label="Larger photos" onClick={() => onResize(1)}>+</button>
+    </span>
+  );
 }
 
 export interface ViewerProps {

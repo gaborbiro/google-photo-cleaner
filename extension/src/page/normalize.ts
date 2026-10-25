@@ -239,8 +239,12 @@ const LIBRARY_ROW_LENGTHS = [16, 17];
  * with no archive flag (seen October 2026, in an archive of 20 photos).
  */
 const ARCHIVE_ROW_LENGTHS = [10];
-/** Album entry rows: 10 fields, sometimes 11 (one more number before the details). */
-const ALBUM_ENTRY_ROW_LENGTHS = [10, 11];
+/**
+ * Album entry rows: 10 fields, sometimes 11 (one more number before the details), or 16, as long
+ * as library rows (null, null, null, [20], null and a number before the details; seen October 2026
+ * in a shared album, among rows of 10).
+ */
+const ALBUM_ENTRY_ROW_LENGTHS = [10, 11, 16];
 /** Album list rows: 9 fields for regular albums, 12 for newer shared ones. */
 const ALBUM_ROW_LENGTHS = [9, 12];
 /** Trash rows: 15 fields. */

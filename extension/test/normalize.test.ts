@@ -300,6 +300,17 @@ describe('album contents', () => {
     protocolFailure(() => normalizeAlbumItemsPage(albumItemsPayload([[...entry.slice(0, -1)]], null)));
     protocolFailure(() => normalizeAlbumItemsPage(albumItemsPayload([[...entry.slice(0, -1), null, null, entry.at(-1)]], null)));
     expect(normalizeAlbumItemsPage(albumItemsPayload([[...entry.slice(0, -1), 1, entry.at(-1)]], null)).items).toHaveLength(1);
+    // As long as a library row: seen in a shared album, among rows of 10 (October 2026).
+    const long = [...entry.slice(0, -1), null, null, null, [20], null, 1_700_000_300_000, entry.at(-1)];
+    expect(long).toHaveLength(16);
+    expect(normalizeAlbumItemsPage(albumItemsPayload([entry, long], null)).items.map((i) => [i.mediaKey, i.dedupKey])).toEqual([
+      [mediaKey('k'), dedupKey('k')],
+      [mediaKey('k'), dedupKey('k')],
+    ]);
+    for (const length of [12, 15, 17]) {
+      const other = [...entry.slice(0, -1), ...new Array(length - entry.length).fill(null), entry.at(-1)];
+      protocolFailure(() => normalizeAlbumItemsPage(albumItemsPayload([other], null)));
+    }
   });
 });
 

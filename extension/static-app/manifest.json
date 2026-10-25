@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Photo Cleaner: Clean Up Duplicates in Google Photos",
   "description": "Clean up Google Photos: trash duplicates and free up storage. Free, private on-device AI: your photos never leave your computer.",
-  "version": "0.4.41",
+  "version": "0.4.42",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs7FnvF1KSb3bj8NKKdYdc3l7ptpzrus2fF6I5vYPL3CS8yP758UNK8MyRy5C4kjTePa+rz2pYDuG0AV73p0/y+P5rgCgNcmcOt9kVTh1wGEQ9M3ScAibQbxjVhEIy2jrg4mB9XCIEf2NXFzXAyBd5/ebMQR07LUOZ0bV0DLvRvfbnEK/Aw97J0L4Y1BXlXuEXAjGT9iqnA9t3loQuSMWE/kGJyzTOuBtD3jCg+qcYm7li5vuHUS/z7qqz1NtpWvBtWW80S5Zx6TlzgOIi7hVIfhDsy3PACnXtbyXw0h1MDTsirOwuMYNm28TXIDnpceWx2CYcR302ROyJhlEjZtqIwIDAQAB",
   "minimum_chrome_version": "116",
   "icons": {

@@ -15,7 +15,7 @@ desktop app, the original prototype, was removed on 2026-10-18; it is in the git
 
 ## Verify every change
 
-Run this before you call a change done. It must pass, and it is what CI runs (`.github/workflows/test.yml`):
+Run this before you call a change done. It must pass, and it is what CI runs (`.github/workflows/build-and-release.yml`):
 
 ```
 cd extension

@@ -1,5 +1,5 @@
 # Every push is checked. Successful master pushes also publish the configured extension ZIP.
-name: Test
+name: Build and Release
 
 on:
   push:
@@ -50,7 +50,7 @@ jobs:
         if: steps.version.outputs.version != ''
         working-directory: extension
         env:
-          PHOTO_CLEANER_GA4_MEASUREMENT_ID: ${{ vars.GA4_MEASUREMENT_ID }}
+          PHOTO_CLEANER_GA4_MEASUREMENT_ID: ${{ vars.GA4_MEASUREMENT_ID || secrets.GA4_MEASUREMENT_ID }}
           PHOTO_CLEANER_GA4_API_SECRET: ${{ secrets.GA4_API_SECRET }}
         run: npm run package
 

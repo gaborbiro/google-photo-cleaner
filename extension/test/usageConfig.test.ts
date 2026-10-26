@@ -14,7 +14,7 @@ it('never enables reporting merely because a credentials file exists, and refuse
   expect(usageConfig(false, file)).toBeNull();
   expect(usageConfig(true, file)).toMatchObject({ measurementId: 'G-TEST123', debug: false });
   writeFileSync(file, JSON.stringify({ measurementId: 'G-TEST123', apiSecret: 'test_secret_only', debug: true }));
-  expect(() => usageConfig(true, file, true, {})).toThrow('Actions variable');
+  expect(() => usageConfig(true, file, true, {})).toThrow('Actions setting');
   writeFileSync(file, JSON.stringify({ measurementId: 'bad', apiSecret: 'private-value-should-not-be-printed' }));
   expect(() => usageConfig(true, file)).toThrow('Invalid usage configuration');
 });

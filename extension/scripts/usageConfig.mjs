@@ -7,7 +7,7 @@ export function usageConfig(enabled, path, production = false, environment = pro
   if (production) {
     const measurementId = environment.PHOTO_CLEANER_GA4_MEASUREMENT_ID;
     const apiSecret = environment.PHOTO_CLEANER_GA4_API_SECRET;
-    if (!measurementId || !apiSecret) throw new Error('Release builds need the GA4_MEASUREMENT_ID Actions variable and GA4_API_SECRET Actions secret. See docs/github-releases.md.');
+    if (!measurementId || !apiSecret) throw new Error('Release builds need the GA4_MEASUREMENT_ID Actions setting (variable or secret) and GA4_API_SECRET Actions secret. See docs/github-releases.md.');
     config = { measurementId, apiSecret, debug: false };
   } else {
     try { config = JSON.parse(readFileSync(path, 'utf8')); }

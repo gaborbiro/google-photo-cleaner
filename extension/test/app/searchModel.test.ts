@@ -524,6 +524,48 @@ describe('Search & sweep', () => {
     expect(fakes.swept).toEqual([]);
   });
 
+  it('fetches a sharper thumbnail when photos grow while the smaller request is pending', async () => {
+    const fakes = new Fakes();
+    let finishSmall!: (url: string) => void;
+    let finishLarge!: (url: string) => void;
+    const preview = vi.spyOn(fakes, 'preview')
+      .mockImplementationOnce(() => new Promise<string>((resolve) => { finishSmall = resolve; }))
+      .mockImplementationOnce(() => new Promise<string>((resolve) => { finishLarge = resolve; }));
+    const { model, view } = await searched('boxes', fakes);
+    model.tileVisible('box1');
+    model.resize(1);
+    expect(preview.mock.calls).toEqual([['thumb-box1', 200]]);
+    finishSmall('data:small');
+    await settle();
+    expect(preview.mock.calls).toEqual([['thumb-box1', 200], ['thumb-box1', 300]]);
+    expect(view().tiles.find((t) => t.mediaKey === 'box1')).toMatchObject({ imageUrl: 'data:small', imageWanted: true });
+    finishLarge('data:large');
+    await settle();
+    expect(view().tiles.find((t) => t.mediaKey === 'box1')).toMatchObject({ imageUrl: 'data:large', imageWanted: false });
+    expect(preview).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['failed', 'hidden'] as const)('does not automatically replace a %s thumbnail after resizing', async (outcome) => {
+    const fakes = new Fakes();
+    let finish!: (url: string) => void;
+    let fail!: (error: Error) => void;
+    const preview = vi.spyOn(fakes, 'preview').mockImplementationOnce(() => new Promise<string>((resolve, reject) => {
+      finish = resolve;
+      fail = reject;
+    }));
+    const { model } = await searched('boxes', fakes);
+    model.tileVisible('box1');
+    model.resize(1);
+    if (outcome === 'hidden') {
+      model.hideResult('box1');
+      finish('data:small');
+    } else {
+      fail(new SourceError('TRANSIENT', 'Offline'));
+    }
+    await settle();
+    expect(preview.mock.calls).toEqual([['thumb-box1', 200]]);
+  });
+
   it('thumbnails are fetched as tiles come into view', async () => {
     const { model, view } = await searched();
     model.tileVisible('box1');

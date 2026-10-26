@@ -771,6 +771,9 @@ export class SearchModel {
         this.fetching--;
         this.loading.delete(photo.mediaKey);
         this.publish();
+        // Resizing during the fetch leaves imageWanted true, so the tile's observer does not restart.
+        if (px < this.size.current.previewPx && !this.thumbErrors.has(photo.mediaKey) &&
+          this.shown.some((hit) => hit.mediaKey === photo.mediaKey)) this.tileVisible(photo.mediaKey);
         this.pump();
       });
     }

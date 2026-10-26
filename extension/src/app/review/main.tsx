@@ -15,6 +15,7 @@ import { searchDeps } from '../search/session';
 import { Duplicates, useTrashQueue } from './Duplicates';
 import { Search } from './Search';
 import { usePinnedHeight } from '../ui/Workbench';
+import { UsageCard, useUsageSurface } from '../ui/UsageCard';
 
 type Tab = ReviewTab;
 const TABS = REVIEW_TABS;
@@ -59,6 +60,7 @@ function Review() {
   const analysis = useAnalysisJob(selected);
   const page = reviewPageView({ selected, signedIn, jobs, scan: job, analysis, choices, nowMs: Date.now(), version: extensionVersion() });
   const [tab, setTab] = useState<Tab>(() => requestedReviewTab(location.hash) ?? rememberedTab());
+  useUsageSurface(tab, 'review');
   // A tab, once opened, stays alive while hidden: its groups, selections and place are kept.
   const [opened, setOpened] = useState<ReadonlySet<Tab>>(() => new Set([tab]));
   const scrollOf = useRef(new Map<Tab, number>());
@@ -152,6 +154,7 @@ function Review() {
           {/* Diagnostics and erasing cover every account, so they are here even when none is signed in. */}
           <DiagnosticsCard scan={null} analysis={null} report={null} />
           <EraseCard />
+          <UsageCard />
         </div>
       ) : (
         <>
@@ -161,6 +164,7 @@ function Review() {
           {opened.has('search') && search && <Search model={search} active={tab === 'search'} openScan={() => open('scan')} />}
           {opened.has('scan') && (
             <div className="scan-tab" hidden={tab !== 'scan'}>
+              <UsageCard />
               {job !== undefined && analysis !== undefined && <ScanCard account={selected} scan={job} analysis={analysis} report={report} surface="tab" />}
               {choices !== undefined && <ProtectionCard account={selected} choices={choices} />}
               {job !== undefined && analysis !== undefined && <DiagnosticsCard scan={job} analysis={analysis} report={report ?? null} />}

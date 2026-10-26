@@ -120,6 +120,7 @@ export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
   review: DuplicatesReview; active: boolean; openScan: () => void; onSearchLike: (mediaKeys: string[]) => void;
 }) {
   const view = useSyncExternalStore(review.subscribe, review.getView);
+  useEffect(() => { review.setUsageActive(active); return () => review.setUsageActive(false); }, [review, active]);
   useWorkbenchKeys({
     active,
     viewerOpen: view.viewer !== null,

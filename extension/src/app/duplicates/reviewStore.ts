@@ -2,6 +2,7 @@
 // one trash job per photo in the same transaction; undoing is one transaction too.
 
 import { CHANGES_CHANNEL } from '../shared/constants';
+import { decisionSource, emitUsage } from '../shared/usageClient';
 import { committed, openDatabase, request, STORES } from '../shared/db';
 import type { ProtectionChoices } from '../shared/preferences';
 import type { ActiveDecision, DecisionKind } from './rules';
@@ -109,6 +110,7 @@ export class IndexedDbReviewStore {
     }
     await committed(tx);
     this.announce(account);
+    if (kind === 'APPROVED') emitUsage({ name: 'trash_approved', params: { source: decisionSource(groupId) } }, `decision:${id}:approved`);
     return id;
   }
 
@@ -131,13 +133,17 @@ export class IndexedDbReviewStore {
     if (!latest) return null;
     decisions.put({ ...latest, undoneAtMs: atMs });
     const jobs = tx.objectStore(STORES.trashJobs);
+    let cancelled = false;
     for (const job of await request(jobs.index('decisionId').getAll(latest.id) as IDBRequest<TrashJob[]>)) {
       const to: TrashJobState | null =
         job.state === 'QUEUED' || job.state === 'FAILED' || job.state === 'BLOCKED' ? 'CANCELLED' : job.state === 'COMPLETED' ? 'RESTORE_REQUESTED' : null;
       if (to) jobs.put({ ...job, state: to, updatedAtMs: atMs });
+      if (to === 'CANCELLED') cancelled = true;
     }
     await committed(tx);
     this.announce(account);
+    emitUsage({ name: 'undo_used', params: { source: decisionSource(latest.groupId) } });
+    if (cancelled) emitUsage({ name: 'trash_result', params: { source: decisionSource(latest.groupId), result: 'cancelled' } }, `decision:${latest.id}:CANCELLED`);
     return latest;
   }
 
@@ -150,13 +156,17 @@ export class IndexedDbReviewStore {
 
   /** Moves a job to [to] only if it is still in [from]; returns whether it moved. Sending counts an attempt. */
   async transition(jobId: number, from: TrashJobState, to: TrashJobState, error: string | null, atMs: number): Promise<boolean> {
-    const tx = await this.tx([STORES.trashJobs], 'readwrite');
+    const tx = await this.tx([STORES.trashJobs, STORES.decisions], 'readwrite');
     const jobs = tx.objectStore(STORES.trashJobs);
     const job = (await request(jobs.get(jobId) as IDBRequest<TrashJob | undefined>)) ?? null;
     if (job === null || job.state !== from) return false;
+    const decision = await request(tx.objectStore(STORES.decisions).get(job.decisionId) as IDBRequest<StoredDecision | undefined>);
     jobs.put({ ...job, state: to, lastError: error, updatedAtMs: atMs, attempts: job.attempts + (to === 'SENDING' ? 1 : 0) });
     await committed(tx);
     this.announce(job.account);
+    const results: Partial<Record<TrashJobState, 'confirmed' | 'failed' | 'uncertain' | 'blocked' | 'cancelled' | 'restored'>> = { COMPLETED: 'confirmed', FAILED: 'failed', UNCERTAIN: 'uncertain', BLOCKED: 'blocked', CANCELLED: 'cancelled', RESTORED: 'restored' };
+    const result = results[to];
+    if (decision && result && to !== from) emitUsage({ name: 'trash_result', params: { source: decisionSource(decision.groupId), result } }, `decision:${job.decisionId}:${to}`);
     return true;
   }
 

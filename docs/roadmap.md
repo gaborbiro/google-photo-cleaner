@@ -272,10 +272,11 @@ Testing
       One competitor: US$9.99 once
 - [ ] Before each release: go through `docs/extension-manual-checks.md` (on the extension branch
       until merged) in Chrome, Edge and Brave
-- [ ] Error reports with Firebase (I know it best). Chrome extensions may not load code from the
-      internet, so not the usual Firebase Analytics web script: send events to the Firebase
-      project's Google Analytics property with the Measurement Protocol (a plain web request,
-      Chrome's documented way for extensions). Crashlytics is phones only. Errors to report:
+- [~] Optional usage reporting, direct to GA4 Measurement Protocol (no relay). Code added in
+      0.4.49: consent in popup/panel/review, launch observations, scan/analysis/review/Search/trash
+      milestones and fixed failure categories. No photos, searches or account details. Silent
+      development builds; real GA setup, report verification and disclosure publication remain.
+      See `docs/usage-events.md` and `docs/usage-events-setup.md`. Further error coverage:
   - [ ] Google changed something: where (scan: library / favourites / archive / album list /
         album contents; analysis: library / previews; account check; previews in review), kind,
         Google's request name, the fixed message (e.g. "Parser item count differs"), extension version
@@ -287,8 +288,8 @@ Testing
         computers are too slow)
   - [ ] M6: trash requests that fail or don't take effect
   - [ ] Never: photo keys, addresses, album titles, account or email, anything about the photos.
-        A random install ID only. Changes "nothing leaves the computer" (see Data privacy): say
-        it in the privacy policy, and consider letting users turn it off
+        A random install ID only. Reporting requires opt-in and can be turned off. Publish the
+        updated privacy policy and live store disclosures before releasing a configured build
 
 ## 4. Launch
 
@@ -304,7 +305,8 @@ Kept up to date as we go; reviewed in full before publishing (phase 3).
 
 - Everything stays on the user's computer, in the browser's private area for the extension
   (inside Chrome's profile folder, under scrambled folder names, e.g.
-  `Default\Service Worker\CacheStorage\<hash>\` for the model). No server, no account, no upload.
+  `Default\Service Worker\CacheStorage\<hash>\` for the model). No server operated by us, no app
+  account and no photo uploads. Optional usage events go directly to Google only after agreement.
 - Per photo: an embedding (768 numbers describing the content), quality measurements, when it was
   taken, whether it's protected (favourite, in an album, archived), and the user's decisions.
   Also album titles, the Google account, and the trash queue / undo history.
@@ -313,7 +315,7 @@ Kept up to date as we go; reviewed in full before publishing (phase 3).
 
 ### Already in our favour
 
-- Nothing leaves the computer: there's no database of ours that could leak.
+- Library data stays on the computer; optional fixed usage events are separate from library data.
 - Other extensions and websites can't read our storage; it belongs to the extension alone.
 - Uninstalling the extension makes Chrome delete all of it.
 
@@ -350,8 +352,8 @@ Kept up to date as we go; reviewed in full before publishing (phase 3).
 - [ ] The goodbye page's address carries nothing that identifies the user
 - [ ] No analytics or crash reports containing photo data, keys or addresses (the desktop app already
       strips them from errors)
-- [ ] Error reports (Firebase, phase 3) are the one thing that leaves the computer: decide whether
-      they're on by default, and update "Already in our favour" and the store disclosure
+- [~] Optional fixed usage/failure events are off until consent. Policy source updated; publish it
+      and the store disclosure with the configured analytics release (see usage reporting setup)
 - [ ] Chrome Web Store: privacy policy + data-use disclosure (reads website content on
       photos.google.com, kept on the computer), "Limited Use" rules
 

@@ -1,10 +1,13 @@
 import type { PageOp } from '../../shared/protocol';
+import type { UsageEnvelope } from './usageSender';
 
 // Messages from the surfaces (popup, panel, review tab) and the background page to the
 // service worker. The service worker starts and stops the background page and talks to
 // the Photos tabs; job state itself goes through the job store.
 
 export type AppRequest =
+  | { kind: 'app-usage-event'; input: UsageEnvelope }
+  | { kind: 'app-usage-consent'; answer: 'yes' | 'no' }
   /** Which Google account a Photos tab is signed in to: the panel's tab [tabId], or else the best Photos tab. */
   | { kind: 'app-account'; tabId?: number }
   /** A job was started or resumed: make sure the background page is running. */

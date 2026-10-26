@@ -1,7 +1,8 @@
 // The AI analysis, scenario by scenario, with a fake model and a fake clock against the real
 // IndexedDB stores (in memory).
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as usage from '../../src/app/shared/usageClient';
 import { IDBFactory } from 'fake-indexeddb';
 import { MODEL_FAILED_TEXT, runAnalysis, type AnalysisProgress, type Embedder } from '../../src/app/ai/analysis';
 import { PlainError } from '../../src/app/shared/errors';
@@ -35,6 +36,7 @@ class FakeEmbedder implements Embedder {
 }
 
 const decode = async (p: { bytes: Uint8Array }): Promise<RgbaImage> => ({ data: Uint8ClampedArray.from([p.bytes[0]!, 100, 100, 255]), width: 1, height: 1 });
+afterEach(() => { vi.restoreAllMocks(); });
 
 async function setup(library = Array.from({ length: 10 }, (_, i) => fakeItem(i))) {
   const factory = new IDBFactory();
@@ -72,6 +74,26 @@ async function analyse(
 }
 
 describe('AI analysis', () => {
+  it('usage follows successful model/progress/completion outcomes and identifies the no-work shortcut', async () => {
+    const env = await setup();
+    const events = vi.spyOn(usage, 'emitUsage').mockImplementation(() => {});
+    const clock = { now: 1000 };
+    await analyse(env, new FakeEmbedder(clock, 100), clock);
+    expect(events.mock.calls.map(([event]) => event.name)).toEqual([
+      'analysis_started', 'model_load_started', 'model_ready',
+      'analysis_progress', 'analysis_progress', 'analysis_progress', 'analysis_progress', 'analysis_finished',
+    ]);
+    expect(events.mock.calls.filter(([event]) => event.name === 'analysis_progress').map(([event]) => event.params)).toEqual([
+      { milestone: 'first' }, { milestone: '25' }, { milestone: '50' }, { milestone: '75' },
+    ]);
+    events.mockClear();
+    await analyse(env, new FakeEmbedder(clock, 100), clock);
+    expect(events.mock.calls.map(([event]) => event)).toEqual([
+      { name: 'analysis_started', params: { work_kind: 'no_work' } },
+      { name: 'analysis_finished', params: { result: 'no_work', duration_bucket: 'under_10s' } },
+    ]);
+  });
+
   it('needs a finished library scan first', async () => {
     const factory = new IDBFactory();
     const clock = { now: 0 };

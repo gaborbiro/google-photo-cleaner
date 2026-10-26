@@ -2,6 +2,7 @@
 // re-read whenever any surface or the background page saves a change.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { emitUsage } from '../shared/usageClient';
 import { jobId, type AnalysisJob, type Job, type JobKind, type ScanJob } from '../shared/job';
 import { accountAnswer, panelOptions, photosTabOf, type AccountAnswer, type AppRequest } from '../shared/messages';
 import { openDatabase, storageProblemText } from '../shared/db';
@@ -137,11 +138,14 @@ export function send(request: AppRequest): Promise<unknown> {
  * straight from a click, so it is asked here, at once, rather than by the service worker after a message.
  */
 export async function showPanel(tabId: number): Promise<void> {
+  emitUsage({ name: 'surface_open_requested', params: { source_surface: 'popup', target_surface: 'panel' } });
   try {
     const offered = chrome.sidePanel.setOptions(panelOptions(tabId)); // in case this tab has not been given it yet
     const opened = chrome.sidePanel.open({ tabId });
     await Promise.all([offered, opened, send({ kind: 'app-show-panel', tabId })]);
+    emitUsage({ name: 'surface_open_result', params: { source_surface: 'popup', target_surface: 'panel', result: 'accepted' } });
   } catch (error) {
+    emitUsage({ name: 'surface_open_result', params: { source_surface: 'popup', target_surface: 'panel', result: 'failed' } });
     console.error('Photo Cleaner: could not open the panel', error);
   }
 }

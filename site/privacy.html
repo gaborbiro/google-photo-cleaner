@@ -22,11 +22,13 @@
 <main>
   <header><img src="icon-128.png" alt=""><strong>Photo Cleaner</strong></header>
   <h1>Privacy policy</h1>
-  <p class="updated">Last updated 17 October 2026</p>
+  <p class="updated">Last updated 26 October 2026</p>
 
   <p>Photo Cleaner is a browser extension that finds duplicate and unwanted photos in your Google Photos
   library and moves the ones you choose to Google Photos' trash. It works entirely on your computer.
-  We, the makers of Photo Cleaner, have no server and receive nothing about you or your photos.</p>
+  We, the makers of Photo Cleaner, operate no collection server. Your photos and library data stay on
+  your computer. If you agree, optional usage statistics go directly to Google Analytics, where we
+  can see how the extension's features are used.</p>
 
   <h2>What Photo Cleaner reads</h2>
   <p>While you use it in a signed-in photos.google.com tab, Photo Cleaner reads your library through that
@@ -34,7 +36,7 @@
   archived or in albums, your album names, and small previews of your photos so its AI can look at them.</p>
 
   <h2>What it keeps, and where</h2>
-  <p>Everything is kept in your browser's private storage for the extension, on your computer only:</p>
+  <p>Your library data is kept in your browser's private storage for the extension, on your computer:</p>
   <ul>
     <li>for each photo: Google's identifier for it, when it was taken, whether it is protected (favourite,
       in an album, archived), and numbers the AI works out from it (a "fingerprint" of what the photo
@@ -43,6 +45,8 @@
     <li>your choices: what you kept, what you trashed, and the list for undo;</li>
     <li>your Google account as a scrambled code, not your email address;</li>
     <li>the AI model's files;</li>
+    <li>your usage-reporting choice and, only if allowed, a random installation identifier and a
+      bounded list of local milestones to avoid counting the same work twice;</li>
     <li>for 30 days, a log of what went wrong lately and how recent scans went: times, counts, how
       Google's answers were built when they didn't fit (never what they held), and which kind of
       graphics card your browser offers. It holds no photos, album names or account details. "Copy
@@ -59,11 +63,31 @@
       and again if its files were removed. Like any download, Hugging Face sees your IP address. Nothing
       about your photos is sent.</li>
   </ul>
-  <p>Nothing else. Photo Cleaner has no analytics, no crash reports, no ads and no accounts, and it does
-  not sell or share any data with anyone.</p>
+  <p>Optional usage statistics, described below, are the only other requests. Photo Cleaner has no
+  advertising, user accounts or automatic crash reports. We do not sell your data.</p>
+
+  <h2 id="usage">Optional usage statistics</h2>
+  <p>Reporting is off until you choose Allow usage statistics. You can decline without losing any
+  feature, or change Send optional usage statistics in the popup, panel or review tab's Scan page.</p>
+  <p>If allowed, the extension sends Google Analytics fixed event names and categories: which screen
+  opened, whether opening a panel or tab succeeded, whether scans, AI model loading, searches and
+  reviews progressed or failed, whether you approved photos for the trash, and whether Google Photos
+  confirmed trashing or restoring them. Durations are grouped into ranges. We also send the extension
+  version, whether setup already existed when you agreed, session information and focused-visible
+  time. A random identifier links events from this browser installation; it is not your Google account.</p>
+  <p>Never sent: photos or previews, photo identifiers or addresses, dates taken, album names,
+  search words or example photos, fingerprints, Google account identifiers, email addresses, or
+  the contents of diagnostic logs and error messages. Like any network recipient, Google receives
+  connection information such as your IP address. We do not send Google account IDs or enable
+  advertising personalization. The random identifier means these events are not truly anonymous.</p>
+  <p>Event and user history is configured to expire after two months, without extending that period
+  when you return. Aggregate reports may remain longer. Turning reporting off stops future events,
+  cancels pending sends where possible and resets the identifier. Erasing local data or uninstalling
+  does not remove statistics already sent to Google; those remain subject to this retention period.</p>
 
   <h2>Erasing your data</h2>
-  <p>"Erase Photo Cleaner's data from this computer" in the review tab removes everything listed above.
+  <p>"Erase Photo Cleaner's data from this computer" in the review tab removes the local data listed above,
+  including the usage choice and identifier; you will be asked again before any new usage reporting.
   Uninstalling the extension does the same. Neither touches your photos in Google Photos: photos you
   already trashed stay in Google Photos' trash, where Google keeps them for 60 days.</p>
 

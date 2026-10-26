@@ -3,6 +3,8 @@
 // state machine lives here, and view() works out every text the screen shows.
 
 import { count, n } from '../shared/format';
+import { emitUsage } from '../shared/usageClient';
+import { durationBucket } from '../shared/usage';
 import { ACTION_FAILED } from '../duplicates/reviewModel';
 import type { StoredDecision } from '../duplicates/reviewStore';
 import type { Blocked } from '../duplicates/rules';
@@ -191,6 +193,8 @@ interface Query {
 }
 
 export class SearchModel {
+  private usageSelectionRecorded = false;
+  private usageSelectionEnabled = true;
   private readonly listeners = new Set<() => void>();
   private readonly decisionListeners = new Set<() => void>();
   private current: SearchView;
@@ -263,6 +267,10 @@ export class SearchModel {
   }
 
   private publish(): void {
+    if (this.usageSelectionEnabled && !this.usageSelectionRecorded && !this.searching && this.selected.size > 0) {
+      this.usageSelectionRecorded = true;
+      emitUsage({ name: 'search_selected', params: {} });
+    }
     this.current = this.view();
     for (const l of this.listeners) l();
   }
@@ -303,7 +311,7 @@ export class SearchModel {
       : { ...base, less: [...new Set([...base.less, ...keys])], more: base.more.filter((k) => !this.selected.has(k)) };
     if (next.text === null && next.more.length === 0) return this.sayAndPublish('“Less like these” needs something to search for: a description or photos to find more of.', 'caution');
     // Keep the selection for more-like refinements; the less-like examples are no longer selected.
-    void this.run(next, { keepSelection: kind === 'more' });
+    void this.run(next, { keepSelection: kind === 'more', usageKind: 'examples' });
   }
 
   /** The × on an example: it no longer counts; the search runs again (unless nothing is left to look for). */
@@ -351,8 +359,15 @@ export class SearchModel {
   }
 
   /** Runs [query]; [keepSelection]: the selected photos still among the results stay selected. */
-  private async run(query: Query, { keepSelection = false, resetHidden = false } = {}): Promise<void> {
+  private async run(query: Query, { keepSelection = false, resetHidden = false, trackUsage = true, usageKind }: {
+    keepSelection?: boolean; resetHidden?: boolean; trackUsage?: boolean; usageKind?: 'text' | 'like' | 'examples';
+  } = {}): Promise<void> {
     if (this.searching) return;
+    const startedAt = Date.now();
+    const searchKind = usageKind ?? (query.text !== null ? (query.more.length || query.less.length ? 'examples' : 'text') : query.less.length ? 'examples' : 'like');
+    this.usageSelectionEnabled = trackUsage;
+    this.usageSelectionRecorded = false;
+    if (trackUsage) emitUsage({ name: 'search_submitted', params: { search_kind: searchKind } });
     this.searching = true;
     this.notice = this.notice?.tone === 'neutral' ? this.notice : null;
     this.publish();
@@ -368,16 +383,20 @@ export class SearchModel {
         this.hasMore = false;
         this.selected.clear();
         this.confirming = null;
+        if (trackUsage) emitUsage({ name: 'search_results', params: { search_kind: searchKind, state: 'blocked', duration_bucket: durationBucket(Date.now() - startedAt) } });
         return;
       }
       let textVector = query.textVector;
       if (query.text !== null && textVector === null) {
+        const modelStart = Date.now();
+        if (!this.modelReady) emitUsage({ name: 'model_load_started', params: { feature: 'search' } });
         this.loadingModel = !this.modelReady;
         this.publish();
         textVector = await this.deps.embedQuery(query.text, (fraction) => {
           this.modelPercent = fraction < 1 ? Math.floor(fraction * 100) : null;
           this.publish();
         });
+        if (!this.modelReady) emitUsage({ name: 'model_ready', params: { feature: 'search', duration_bucket: durationBucket(Date.now() - modelStart) } });
         this.modelReady = true;
       }
       this.query = { ...query, textVector };
@@ -388,7 +407,9 @@ export class SearchModel {
       this.confirming = null;
       this.resetFocus();
       this.resultsVersion++;
+      if (trackUsage) emitUsage({ name: 'search_results', params: { search_kind: searchKind, state: this.shown.length ? 'usable' : 'empty', duration_bucket: durationBucket(Date.now() - startedAt) } });
     } catch (error) {
+      emitUsage({ name: 'feature_failed', params: { feature: 'search', reason: this.loadingModel ? 'model' : 'unknown' } });
       this.say(error instanceof Error ? error.message : String(error), 'negative');
     } finally {
       this.searching = false;
@@ -650,6 +671,7 @@ export class SearchModel {
     if (this.selected.size === 0) return this.sayAndPublish('Select photos to trash first.', 'caution');
     if (this.confirming === 'trash') return this.sayAndPublish('Press Enter to move them to the trash, or Esc to cancel.', 'caution');
     this.confirming = 'trash';
+    emitUsage({ name: 'trash_confirmation', params: { action: 'shown' } });
     this.publish();
   }
 
@@ -664,6 +686,7 @@ export class SearchModel {
   /** Esc: cancels the question. */
   cancel(): void {
     if (!this.confirming) return;
+    if (this.confirming === 'trash') emitUsage({ name: 'trash_confirmation', params: { action: 'cancelled' } });
     this.confirming = null;
     this.publish();
   }
@@ -678,6 +701,7 @@ export class SearchModel {
       return this.sayAndPublish(error instanceof Error ? error.message : 'Moving to the trash failed.', 'negative');
     }
     const { queued, leftOut } = result;
+    if (queued.length === 0) emitUsage({ name: 'feature_blocked', params: { feature: 'search', reason: 'protection' } });
     if (queued.length > 0) this.decisionsChanged();
     // The queued ones are in the trash queue now: gone from the results, and from future searches.
     for (const key of queued) {
@@ -709,7 +733,7 @@ export class SearchModel {
       if (undone === null) return this.sayAndPublish('Nothing to undo.', 'caution');
       this.decisionsChanged();
       this.libraryStale = true;
-      if (this.query) await this.run(this.query);
+      if (this.query) await this.run(this.query, { trackUsage: false });
       this.say(undone.kind === 'APPROVED' ? 'Undid the trashing: photos not yet sent are cancelled and any already trashed are restored' : 'Undid the last decision in Duplicates', 'positive');
       this.publish();
     })().catch((error: unknown) => {

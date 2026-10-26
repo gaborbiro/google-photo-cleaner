@@ -259,9 +259,9 @@ The one that would feel like the app knows you, and the riskiest for memories.
 
 ## How we learn
 
-There is no telemetry, by choice. Evidence comes from my own library, one or two other libraries, and
-early testers ("which suggestions did you use, how many photos did you sweep"). If counts from users
-are ever wanted, they would be opt-in, and the privacy policy would say so.
+Evidence comes from my own library, other test libraries and early testers. Optional usage reporting
+was implemented in 0.4.49, off until agreement and silent in ordinary developer builds. Live GA setup,
+report checks and disclosure publication remain before release; see `usage-events-setup.md`.
 
 ## Also open from the same conversation
 

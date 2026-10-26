@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { build } from 'esbuild';
 import { LICENCE_NAMES, LICENCE_TEXTS, kotlinVersion, noticesText, shippedLibraries, type PackageInfo, type Packages } from '../scripts/notices.mjs';
 
 /** Pretend node_modules: package directory → its package.json and licence files. */
@@ -22,6 +23,16 @@ function packages(installed: Record<string, Partial<PackageInfo> & { name: strin
 const names = (libraries: { name: string }[]) => libraries.map((library) => library.name);
 
 describe('the third-party notices', () => {
+  it('handles a configured analytics build using the real bundler metafile', async () => {
+    const result = await build({
+      stdin: { contents: 'console.log(__PHOTO_CLEANER_USAGE__);', sourcefile: 'src/app/config-test.ts' },
+      define: { __PHOTO_CLEANER_USAGE__: JSON.stringify({ measurementId: 'G-TEST123', apiSecret: 'test_secret_only', debug: true }) },
+      bundle: true, write: false, metafile: true,
+    });
+    expect(shippedLibraries(Object.keys(result.metafile!.inputs), packages({}), '2.4.21')).toEqual([]);
+    expect(() => shippedLibraries(['<define:UNREVIEWED_CODE>'], packages({}), '2.4.21')).toThrow(/UNREVIEWED_CODE/);
+  });
+
   it('lists every library the bundles read, once, and not our own code', () => {
     const libraries = shippedLibraries(
       [

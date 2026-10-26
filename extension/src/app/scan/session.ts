@@ -4,6 +4,8 @@
 // is one.
 
 import type { IndexedDbInventoryStore } from './inventoryStore';
+import { emitUsage } from '../shared/usageClient';
+import { durationBucket } from '../shared/usage';
 import type { AlbumStatus, ScanPhase, ScanRun } from './model';
 import { INCOMPATIBLE_TEXT, logGoogleProblem, refusedText, type GoogleProblem } from '../shared/googleProblems';
 import { ScanStats } from '../shared/runStats';
@@ -127,6 +129,7 @@ class ScanSession {
     const unfinished = latest && (latest.status === 'RUNNING' || latest.status === 'PAUSED') ? latest : null;
     this.run = unfinished ?? (await store.createRun(account, this.now()));
     await store.updateRunStatus(this.run.id, 'RUNNING', null, null);
+    emitUsage({ name: 'scan_started', params: {} }, `scan:${this.run.id}:started`);
     if (unfinished) this.libraryReachedMs = await store.oldestTakenAtMs(this.run.id);
 
     try {
@@ -142,6 +145,7 @@ class ScanSession {
       await store.updateRunStatus(this.run.id, 'COMPLETED', null, this.now());
       await store.deleteOtherRuns(account, this.run.id);
       await this.emitProgress();
+      emitUsage({ name: 'scan_finished', params: { duration_bucket: durationBucket(this.now() - this.run.startedAtMs) } }, `scan:${this.run.id}:finished`);
       return { kind: 'completed' };
     } catch (e) {
       if (e instanceof UserStop) {

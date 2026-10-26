@@ -7,12 +7,15 @@ import type { AppRequest } from './messages';
 import type { ScanView } from './jobView';
 import { recordProblem } from './problemLog';
 import type { JobStore } from './store';
+import { emitUsage } from './usageClient';
 
 export type Send = (request: AppRequest) => Promise<unknown>;
 
 /** Scan: reads the library, then the analysis follows by itself. */
 export async function startScan(store: JobStore, send: Send, account: string, nowMs: number): Promise<Job | null> {
+  const previous = await store.get(jobId('library-scan', account));
   const saved = await store.update(jobId('library-scan', account), () => startScanJob(account, nowMs));
+  if (saved) emitUsage({ name: 'scan_requested', params: { attempt_kind: previous ? 'refresh' : 'initial' } });
   await send({ kind: 'app-wake-engine' });
   return saved;
 }
@@ -40,12 +43,15 @@ export function scanButton(view: Pick<ScanView, 'action' | 'target'>, store: Job
   }
 }
 
-export function pause(store: JobStore, kind: JobKind, account: string, nowMs: number): Promise<Job | null> {
-  return store.update(jobId(kind, account), (job) => (job ? pauseJob(job, nowMs) : null));
+export async function pause(store: JobStore, kind: JobKind, account: string, nowMs: number): Promise<Job | null> {
+  const saved = await store.update(jobId(kind, account), (job) => (job ? pauseJob(job, nowMs) : null));
+  if (saved) emitUsage({ name: 'job_paused', params: { feature: kind === 'analysis' ? 'analysis' : 'scan', reason: 'user', actor: 'user' } });
+  return saved;
 }
 
 export async function resume(store: JobStore, send: Send, kind: JobKind, account: string, nowMs: number): Promise<Job | null> {
   const saved = await store.update(jobId(kind, account), (job) => (job ? resumeJob(job, nowMs) : null));
+  if (saved) emitUsage({ name: 'job_resumed', params: { feature: kind === 'analysis' ? 'analysis' : 'scan', actor: 'user' } });
   await send({ kind: 'app-wake-engine' });
   return saved;
 }
@@ -57,12 +63,14 @@ export async function resume(store: JobStore, send: Send, kind: JobKind, account
 export async function resumeWaitingForPhotos(store: JobStore, account: string, nowMs: number): Promise<boolean> {
   let resumed = false;
   for (const kind of ['library-scan', 'analysis'] as const) {
+    let changed = false;
     await store.update(jobId(kind, account), (job) => {
       if (!job) return null;
       const next = resumeIfWaitingForPhotos(job, account, nowMs);
-      if (next !== job) resumed = true;
+      if (next !== job) { resumed = true; changed = true; }
       return next;
     });
+    if (changed) emitUsage({ name: 'job_resumed', params: { feature: kind === 'analysis' ? 'analysis' : 'scan', actor: 'automatic' } });
   }
   return resumed;
 }

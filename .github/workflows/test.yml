@@ -1,16 +1,24 @@
-# Everything must pass on every push and pull request: the same `npm run check` as on a laptop.
+# Every push is checked. Successful master pushes also publish the configured extension ZIP.
 name: Test
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   check:
     runs-on: windows-latest
     timeout-minutes: 45
+    outputs:
+      release-version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
@@ -28,6 +36,54 @@ jobs:
         working-directory: extension
         run: npm ci
 
+      - name: Assign automatic release version
+        id: version
+        if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        working-directory: extension
+        run: node scripts/releaseVersion.mjs
+
       - name: Kotlin and extension checks (npm run check)
         working-directory: extension
         run: npm run check
+
+      - name: Build release ZIP with production Analytics settings
+        if: steps.version.outputs.version != ''
+        working-directory: extension
+        env:
+          PHOTO_CLEANER_GA4_MEASUREMENT_ID: ${{ vars.GA4_MEASUREMENT_ID }}
+          PHOTO_CLEANER_GA4_API_SECRET: ${{ secrets.GA4_API_SECRET }}
+        run: npm run package
+
+      - name: Save checked release ZIP
+        if: steps.version.outputs.version != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: photo-cleaner-${{ steps.version.outputs.version }}
+          path: extension/release/photo-cleaner-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: check
+    if: github.ref == 'refs/heads/master' && needs.check.outputs.release-version != '' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: photo-cleaner-${{ needs.check.outputs.release-version }}
+          path: release
+      - name: Publish GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.check.outputs.release-version }}
+          RELEASE_ASSET_PATH: release/photo-cleaner-${{ needs.check.outputs.release-version }}.zip
+        run: node extension/scripts/githubRelease.mjs

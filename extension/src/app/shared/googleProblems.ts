@@ -8,6 +8,7 @@ import type { ErrorKind, OpError } from '../../shared/protocol';
 import { scrubbed } from '../../shared/scrub';
 import { SourceError } from '../scan/source';
 import { checkedDiagnostic, recordProblem } from './problemLog';
+import { emitUsage } from './usageClient';
 
 /**
  * Google's answer didn't have the shape this version expects (PROTOCOL), or a request no longer fits
@@ -83,6 +84,7 @@ export interface GoogleProblem {
  * saving with the job.
  */
 export function logGoogleProblem(where: string, error: SourceError | OpError): GoogleProblem {
+  emitUsage({ name: 'feature_failed', params: { feature: where.startsWith('scan') ? 'scan' : where.startsWith('analysis') ? 'analysis' : where.startsWith('Search') ? 'search' : where.startsWith('Duplicates') ? 'duplicates' : 'trash', reason: isIncompatible(error.kind) ? 'google_changed' : error.kind === 'RATE_LIMIT' ? 'rate_limit' : 'unknown' } });
   const problem: GoogleProblem = {
     where,
     kind: error.kind,

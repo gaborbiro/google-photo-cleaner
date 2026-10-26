@@ -6,6 +6,8 @@
 
 import type { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { plainMessage } from '../shared/errors';
+import { emitUsage } from '../shared/usageClient';
+import { durationBucket } from '../shared/usage';
 import { AnalysisStats } from '../shared/runStats';
 import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, PREVIEWS_STOPPED_TEXT, refusedText, type GoogleProblem } from '../shared/googleProblems';
 import { SourceError, waitingForPhotosText, waitsForPhotos, type AnalysisSource, type LibraryPhoto, type Preview } from '../scan/source';
@@ -62,6 +64,9 @@ export type AnalysisOutcome =
   | { kind: 'not-started'; reason: string };
 
 export interface AnalysisDeps {
+  /** Local-only run identity for suppressing milestones after a background-page restart. */
+  usageKey?: string;
+  usageStartedAt?: number;
   account: string;
   source: AnalysisSource;
   inventory: IndexedDbInventoryStore;
@@ -115,6 +120,10 @@ export async function runAnalysis(deps: AnalysisDeps): Promise<AnalysisOutcome> 
 }
 
 class AnalysisSession {
+  private readonly usageKey: string;
+  private readonly startedAt: number;
+  private readonly milestones = new Set<string>();
+  private usageTotal = 0;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private progress: AnalysisProgress = NO_ANALYSIS;
@@ -125,7 +134,9 @@ class AnalysisSession {
   private readonly stats: AnalysisStats;
 
   constructor(private readonly deps: AnalysisDeps) {
+    this.usageKey = deps.usageKey ?? crypto.randomUUID();
     this.now = deps.now ?? Date.now;
+    this.startedAt = deps.usageStartedAt ?? this.now();
     this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.stats = deps.stats ?? new AnalysisStats();
   }
@@ -138,24 +149,32 @@ class AnalysisSession {
     }
     const snapshot = await inventory.snapshot(run.id);
     this.photoKeys = new Set(snapshot.items.filter((i) => i.mediaType === 'PHOTO').map((i) => i.mediaKey));
+    this.usageTotal = this.photoKeys.size;
     this.progress = { ...NO_ANALYSIS, photos: this.photoKeys.size };
     if (this.photoKeys.size === 0) {
+      emitUsage({ name: 'analysis_started', params: { work_kind: 'no_work' } }, `${this.usageKey}:started`);
       await this.emit(true);
+      emitUsage({ name: 'analysis_finished', params: { result: 'no_work', duration_bucket: 'under_10s' } }, `${this.usageKey}:finished`);
       return { kind: 'completed' };
     }
     try {
       let settings = await this.deps.store.settings(account);
       if (settings) {
         this.analysed = intersect(await this.deps.store.analysedKeys(settings.modelKey, this.deps.account), this.photoKeys);
+        this.usageTotal = Math.max(this.deps.newPhotosThisJob ?? 0, this.photoKeys.size - this.analysed.size);
         // Nothing new since the last run: no model to start, no library to read again.
         if (this.analysed.size === this.photoKeys.size) {
+          emitUsage({ name: 'analysis_started', params: { work_kind: 'no_work' } }, `${this.usageKey}:started`);
           this.stats.begin(this.photoKeys.size, this.analysed.size, settings.detail, settings.measuredPhotosPerSecond);
           this.progress = { ...this.progress, detail: settings.detail, newPhotos: 0 };
           await this.emit(true);
+          emitUsage({ name: 'analysis_finished', params: { result: 'no_work', duration_bucket: 'under_10s' } }, `${this.usageKey}:finished`);
           return { kind: 'completed' };
         }
+        emitUsage({ name: 'analysis_started', params: { work_kind: 'new_work' } }, `${this.usageKey}:started`);
         await this.loadModel();
       } else {
+        emitUsage({ name: 'analysis_started', params: { work_kind: 'new_work' } }, `${this.usageKey}:started`);
         await this.loadModel();
         const checking = this.now();
         settings = await this.speedCheck();
@@ -172,6 +191,7 @@ class AnalysisSession {
       await this.analyseLibrary(settings.detail, settings.modelKey);
       this.progress = { ...this.progress, stage: null, waiting: null, etaSeconds: null };
       await this.emit(true);
+      emitUsage({ name: 'analysis_finished', params: { result: this.progress.failed > 0 ? 'with_skips' : 'complete', duration_bucket: durationBucket(this.now() - this.startedAt) } }, `${this.usageKey}:finished`);
       return { kind: 'completed' };
     } catch (e) {
       if (e instanceof UserStop) return { kind: 'stopped' };
@@ -185,6 +205,7 @@ class AnalysisSession {
   }
 
   private async loadModel(): Promise<void> {
+    emitUsage({ name: 'model_load_started', params: { feature: 'analysis' } });
     this.progress = { ...this.progress, stage: 'model', modelPercent: 0 };
     await this.emit(true);
     const loading = this.now();
@@ -194,12 +215,14 @@ class AnalysisSession {
         void this.emit(false);
       });
     } catch (e) {
+      emitUsage({ name: 'feature_failed', params: { feature: 'analysis', reason: 'model' } });
       // No graphics card access, no disk space, no network for the download: say why, resumable.
       throw new Pause(plainMessage(e, MODEL_FAILED_TEXT));
     } finally {
       this.stats.add('modelMs', this.now() - loading);
     }
     this.progress = { ...this.progress, modelPercent: null };
+    emitUsage({ name: 'model_ready', params: { feature: 'analysis', duration_bucket: durationBucket(this.now() - loading) } });
   }
 
   /**
@@ -402,6 +425,15 @@ class AnalysisSession {
       perPhotoMs: recent?.perPhoto ?? null,
     };
     await this.deps.onProgress(this.progress);
+    const done = this.usageTotal - (this.photoKeys.size - this.analysed.size);
+    if (this.usageTotal > 0 && done > 0) {
+      for (const [label, reached] of [['first', true], ['25', done / this.usageTotal >= .25], ['50', done / this.usageTotal >= .5], ['75', done / this.usageTotal >= .75]] as const) {
+        if (reached && !this.milestones.has(label)) {
+          this.milestones.add(label);
+          emitUsage({ name: 'analysis_progress', params: { milestone: label } }, `${this.usageKey}:progress:${label}`);
+        }
+      }
+    }
   }
 }
 

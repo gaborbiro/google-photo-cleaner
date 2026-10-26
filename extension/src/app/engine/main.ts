@@ -18,6 +18,7 @@ import { IndexedDbProblemLog, keepProblemsHere, problemsSaved, recordUnexpected,
 import { AnalysisStats, ScanStats, type RunStats } from '../shared/runStats';
 import { IndexedDbJobStore, onJobsChanged } from '../shared/store';
 import { BUILT_VERSION } from '../shared/version';
+import { emitUsage } from '../shared/usageClient';
 
 keepProblemsHere();
 
@@ -109,6 +110,7 @@ async function finish(job: Job, outcome: { kind: string; reason?: string; untilP
   if (outcome.kind === 'stopped') return; // the user's pause is already saved
   const result = outcome.kind === 'completed' ? 'completed' : outcome.kind === 'failed' ? 'failed' : 'paused';
   await jobs.update(job.id, (j) => (j ? endJob(j, result, outcome.reason ?? null, Date.now(), outcome.untilPhotosOpen === true) : null));
+  if (result !== 'completed') emitUsage({ name: 'job_paused', params: { feature: job.kind === 'analysis' ? 'analysis' : 'scan', reason: outcome.untilPhotosOpen ? 'photos_closed' : 'unknown', actor: 'automatic' } });
   if (outcome.untilPhotosOpen) console.info(`Photo Cleaner: ${job.kind} paused until Google Photos is back: ${outcome.reason}`);
 }
 
@@ -174,6 +176,8 @@ async function runAnalysisJob(job: AnalysisJob): Promise<void> {
     stats.stats.fullSpeedNow = now?.kind === 'analysis' ? now.fullSpeed : null;
   };
   const outcome = await withRunSummary(keepRun(job, stats, fullSpeedNow), () => runAnalysis({
+    usageKey: `analysis:${job.account}:${job.startedAtMs}`,
+    usageStartedAt: job.startedAtMs,
     account: job.account,
     source: sourceFor(job.account),
     inventory,
@@ -203,6 +207,7 @@ async function check(): Promise<void> {
     active.add(job.id);
     (job.kind === 'library-scan' ? runScanJob(job) : runAnalysisJob(job))
       .catch(async (error: unknown) => {
+        emitUsage({ name: 'feature_failed', params: { feature: job.kind === 'analysis' ? 'analysis' : 'scan', reason: 'unknown' } });
         // A bug or something truly unexpected: the details go to the console and the problem log (Copy diagnostics).
         console.error('Photo Cleaner: the scan stopped because of an unexpected error', error);
         recordUnexpected(`${job.kind === 'library-scan' ? 'scan' : 'analysis'}: stopped unexpectedly`, error);

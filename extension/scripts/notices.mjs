@@ -44,6 +44,9 @@ export function shippedLibraries(inputs, packages, kotlinVersion) {
   const libraries = new Map();
   const packageDirs = new Set();
   for (const input of inputs) {
+    // esbuild represents an object-valued define as a virtual input. This is our build config,
+    // not a library; keep rejecting every other unknown input so notices cannot miss real code.
+    if (input === '<define:__PHOTO_CLEANER_USAGE__>') continue;
     if (input.startsWith('src/') || OWN_KOTLIN.test(input)) continue;
     if (input === KOTLIN_STDLIB) {
       libraries.set('Kotlin standard library', {

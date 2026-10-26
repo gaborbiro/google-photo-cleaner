@@ -11,6 +11,9 @@ import { IDBFactory } from 'fake-indexeddb';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
+import { IndexedDbUsageStore } from '../../src/app/shared/usageStore';
+import { UsageSender } from '../../src/app/shared/usageSender';
+import { eraseAllData } from '../../src/app/shared/erase';
 import { IndexedDbAnalysisStore } from '../../src/app/ai/analysisStore';
 import { modelKey } from '../../src/app/ai/model';
 import { IndexedDbReviewStore } from '../../src/app/duplicates/reviewStore';
@@ -48,10 +51,15 @@ let errors: MockInstance;
 
 /** Chrome's side of the extension: the background page answers who is signed in, previews, and Google Photos' trash. */
 function pretendExtension() {
+  const usage = new UsageSender(new IndexedDbUsageStore(indexedDB), null);
   vi.stubGlobal('chrome', {
     runtime: {
-      sendMessage: async (request: { kind: string; op?: PageOp; account?: string; params?: Record<string, unknown> }) => {
+      sendMessage: async (request: { kind: string; op?: PageOp; account?: string; params?: Record<string, unknown>; answer?: 'yes' | 'no' }) => {
         sent.push(request);
+        if (request.kind === 'app-usage-consent') {
+          await usage.consent(request.answer!);
+          return { ok: true };
+        }
         if (request.kind === 'app-account') return typeof account === 'function' ? account() : account;
         if (request.kind === 'app-erase-all') return eraseAnswer;
         if (request.kind === 'app-open-photos') return { tabId: PHOTOS_TAB };
@@ -172,6 +180,57 @@ afterEach(() => {
 });
 
 describe('the pages draw', () => {
+  it('launch tracking distinguishes the popup, a successful Chrome request, and a destination that actually renders', async () => {
+    const { bindUsageEmitter } = await import('../../src/app/shared/usageClient');
+    const events: import('../../src/app/shared/usage').UsageEvent[] = [];
+    bindUsageEmitter((event) => { events.push(event); });
+    const popup = await open('popup');
+    await shows(popup, 'Open panel in Google Photos');
+    await click(popup, 'Open panel in Google Photos');
+    await vi.waitFor(() => expect(events).toContainEqual({ name: 'surface_open_result', params: { source_surface: 'popup', target_surface: 'panel', result: 'accepted' } }));
+    expect(events).toContainEqual({ name: 'surface_view', params: { surface: 'popup' } });
+    expect(events.some((event) => event.name === 'surface_ready')).toBe(false);
+    for (const mounted of roots.splice(0)) mounted.unmount();
+    const panel = await open('panel');
+    await shows(panel, 'Photo Cleaner');
+    await vi.waitFor(() => expect(events).toContainEqual({ name: 'surface_ready', params: { surface: 'panel' } }));
+  });
+
+  for (const page of ['popup', 'panel', 'review'] as const) {
+    it(`${page}: asks for usage consent before a scan, remembers refusal and can be enabled or disabled`, async () => {
+      account = NO_TAB;
+      const root = await open(page);
+      await shows(root, 'Help improve Photo Cleaner?', 'Reporting is not configured');
+      await click(root, 'No thanks');
+      await shows(root, 'Send optional usage statistics');
+      expect(root.textContent).not.toContain('Help improve Photo Cleaner?');
+      expect((await new IndexedDbUsageStore(indexedDB).get()).answer).toBe('no');
+      const toggle = root.querySelector<HTMLInputElement>('.usage-card input')!;
+      toggle.click();
+      await vi.waitFor(() => expect(toggle.checked).toBe(true));
+      expect((await new IndexedDbUsageStore(indexedDB).get()).answer).toBe('yes');
+      toggle.click();
+      await vi.waitFor(() => expect(toggle.checked).toBe(false));
+      expect((await new IndexedDbUsageStore(indexedDB).get()).clientId).toBeNull();
+    });
+  }
+
+  it('popup: allowing usage is saved; reopening remembers it; erase brings back the question', async () => {
+    const root = await open('popup');
+    await click(root, 'Allow usage statistics');
+    await shows(root, 'Send optional usage statistics');
+    expect(root.querySelector<HTMLInputElement>('.usage-card input')!.checked).toBe(true);
+    for (const mounted of roots.splice(0)) mounted.unmount();
+    vi.resetModules();
+    const reopened = await open('panel');
+    await shows(reopened, 'Send optional usage statistics');
+    expect(reopened.querySelector<HTMLInputElement>('.usage-card input')!.checked).toBe(true);
+    for (const mounted of roots.splice(0)) mounted.unmount();
+    await eraseAllData(indexedDB, { keys: async () => [] } as unknown as CacheStorage);
+    vi.resetModules();
+    await shows(await open('popup'), 'Help improve Photo Cleaner?');
+  });
+
   it('popup: the account, its Scan and the buttons', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('popup');

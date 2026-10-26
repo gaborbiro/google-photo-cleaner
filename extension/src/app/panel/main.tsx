@@ -2,6 +2,7 @@
 // control room for the account signed in to its tab.
 
 import { createRoot } from 'react-dom/client';
+import { UsageCard, useUsageSurface } from '../ui/UsageCard';
 import { panelTab } from '../shared/messages';
 import { send, useSignedInScan, useStartOverWhenErased } from '../ui/hooks';
 import { ScanCard, StorageProblem } from '../ui/JobCard';
@@ -9,6 +10,7 @@ import { ScanCard, StorageProblem } from '../ui/JobCard';
 const TAB_ID = panelTab(location.search);
 
 function Panel() {
+  useUsageSurface('panel', 'panel');
   useStartOverWhenErased();
   const { view, scan, analysis, report, launch } = useSignedInScan(TAB_ID);
   return (
@@ -20,6 +22,7 @@ function Panel() {
         </div>
       </header>
       <StorageProblem />
+      <UsageCard />
       {view.state === 'looking' && <p className="muted">Checking which account is signed in…</p>}
       {view.problemText && <p className="warn">{view.problemText}</p>}
       {view.account && scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} surface="panel" />}

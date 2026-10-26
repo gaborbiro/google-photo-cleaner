@@ -5,11 +5,12 @@ Dashboard: https://chrome.google.com/webstore/devconsole
 
 ## Each release
 
-1. Raise `version` in `extension/static-app/manifest.json` (the store refuses a version it already has).
-2. Go through `docs/extension-manual-checks.md` in Chrome.
-3. `cd extension && npm run check && npm run package` → `extension/release/photo-cleaner-<version>.zip`.
-   The package is `dist-app` without the manifest's `key` (the store refuses it and gives the
-   extension its own ID) and without the developer pages (`dev-*`).
+1. Push or merge to master. After checks pass, GitHub assigns a version and publishes the packaged
+   ZIP in [Releases](https://github.com/gaborbiro/google-photo-cleaner/releases). One-time repository
+   configuration is in [automatic releases](github-releases.md).
+2. Download `photo-cleaner-<version>.zip` and go through `docs/extension-manual-checks.md` in Chrome.
+3. The package excludes the manifest's `key` (the store assigns its own ID) and developer pages
+   (`dev-*`). There is no normal laptop release-build step.
 4. Dashboard → the item → Package → Upload new package → Submit for review.
 
 The store's extension ID differs from the unpacked one (pinned by `key`). If something ever needs
@@ -42,7 +43,7 @@ Find and trash duplicate photos in Google Photos with on-device AI. Free and pri
 >
 > Private by design
 > • The AI runs on your own computer's graphics card. Your photos are never uploaded anywhere.
-> • No account, no server, no analytics. Everything Photo Cleaner learns about your library stays in
+> • No account or collection server. Optional usage statistics only if you agree. Everything Photo Cleaner learns about your library stays in
 >   your browser, and uninstalling removes it.
 >
 > Duplicates
@@ -115,6 +116,13 @@ extension under `ort/`; the model download is weights, which are data.)
 **Data usage**, what to tick: **Website content** (the photo list and previews read from
 photos.google.com). It is used only on the computer and never sent to us. Tick the three
 certifications (no selling or transferring data, no unrelated uses, no creditworthiness or lending).
+
+**Before the analytics release:** update the live listing and disclosures together with the privacy
+policy. Disclose optional **User activity** and the random installation identifier (check the current
+dashboard's identifier category), transferred directly to Google Analytics after consent. No photo,
+account or search contents are transferred. Verify event/user retention is two months with reset
+disabled and advertising features off. See [usage reporting setup](usage-events-setup.md). These
+repository notes do not change the live store answers or publish the policy.
 
 **Privacy policy URL:** https://gaborbiro.github.io/google-photo-cleaner/privacy.html
 

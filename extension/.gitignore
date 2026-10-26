@@ -2,3 +2,4 @@ node_modules/
 dist-app/
 generated/
 release/
+usage.config.json

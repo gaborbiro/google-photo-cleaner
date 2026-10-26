@@ -10,6 +10,8 @@ import { decisionItems, type Blocked, type DecisionKind, type DuplicateGroup, ty
 import type { TrashQueueStatus } from './trash';
 
 /** When saving or reading the decisions failed (details in the log). */
+import { emitUsage } from '../shared/usageClient';
+
 export const ACTION_FAILED = "That didn't work: Photo Cleaner couldn't read or save its data. Try again.";
 
 export type Tone = 'positive' | 'caution' | 'negative' | 'neutral';
@@ -146,6 +148,21 @@ function whyKept(m: GroupMember): string {
 }
 
 export class DuplicatesReview {
+  private usageActive = false;
+  private usageReady: string | null = null;
+  private usageDecisions = 0;
+  setUsageActive(active: boolean): void {
+    this.usageActive = active;
+    if (!active) this.usageReady = null;
+    else this.reportUsageReady();
+  }
+  private reportUsageReady(): void {
+    if (!this.usageActive || !this.loaded) return;
+    const state = this.blocked ? 'blocked' : this.pending.length > 0 ? 'usable' : 'empty';
+    if (state === this.usageReady) return;
+    this.usageReady = state;
+    emitUsage({ name: 'duplicates_ready', params: { state } });
+  }
   private readonly listeners = new Set<() => void>();
   private readonly decisionListeners = new Set<() => void>();
   private current: DuplicatesView;
@@ -281,6 +298,7 @@ export class DuplicatesReview {
     this.settings = queue.settings;
     this.notAnalysed = queue.photosNotAnalysed;
     this.loaded = true;
+    this.reportUsageReady();
     if (!queue.blocked) this.reportGroupsLeft();
     this.publish();
     this.preload();
@@ -499,6 +517,8 @@ export class DuplicatesReview {
     void this.run(async () => {
       try {
         await this.deps.record(group, kind, decisionItems(group, kind, selected));
+        this.usageDecisions++;
+        if ([1, 10, 50].includes(this.usageDecisions)) emitUsage({ name: 'review_progress', params: { milestone: String(this.usageDecisions) as '1' | '10' | '50', decision: kind === 'APPROVED' ? 'approve' : kind === 'KEPT' ? 'keep' : 'later' } });
       } catch (error) {
         this.say(error instanceof Error ? error.message : 'The decision was refused.', 'negative');
         return;

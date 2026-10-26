@@ -3,6 +3,12 @@
 // Photos tabs, and opens the app's tabs. Job state lives in the job store.
 
 import type { OpError, OpResult, PageOp, TabCommand } from '../../shared/protocol';
+import { UsageSender } from '../shared/usageSender';
+import { IndexedDbUsageStore } from '../shared/usageStore';
+import type { UsageState } from '../shared/usageStore';
+import { UsageLaunches } from '../shared/usageLaunches';
+import { USAGE_CONFIG } from '../shared/usage';
+import { bindUsageEmitter, emitUsage } from '../shared/usageClient';
 import { pauseRunningJobs, resumeWaitingForPhotos } from '../shared/actions';
 import { CHANGES_CHANNEL } from '../shared/constants';
 import { eraseAllData } from '../shared/erase';
@@ -15,6 +21,17 @@ import { isAppRequest, panelOptions, reviewUrl, type AccountAnswer, type AppRequ
 
 const PHOTOS_URL = 'https://photos.google.com/';
 const store = new IndexedDbJobStore();
+const usageStore = new IndexedDbUsageStore();
+const usage = new UsageSender(usageStore, USAGE_CONFIG);
+const usageLaunches = new UsageLaunches((input) => { void usage.record(input); }, (surface) => {
+  if (USAGE_CONFIG) void chrome.runtime.sendMessage({ kind: 'usage-probe', surface }).catch(() => {});
+});
+let usageContext: UsageState | null = null;
+if (USAGE_CONFIG) void usageStore.get().then((state) => { usageContext = state; }).catch(() => {});
+bindUsageEmitter((event, receipt) => {
+  if (!USAGE_CONFIG || usageContext?.answer !== 'yes') return;
+  usageLaunches.record({ event, receipt, epoch: usageContext.epoch, atMs: Date.now() });
+});
 keepProblemsHere();
 
 async function photosTabs(): Promise<chrome.tabs.Tab[]> {
@@ -209,6 +226,7 @@ async function wakeEngineIfWorkLeft(): Promise<void> {
  * is closed, so that Resume starts a new one.
  */
 async function engineError(started: boolean, message: string, stack: string | null): Promise<void> {
+  emitUsage({ name: 'feature_failed', params: { feature: 'engine', reason: 'unknown' } });
   console.error(`Photo Cleaner: ${started ? 'an error in the background page' : 'the background page could not start'}`, message);
   recordUnexpectedReport(started ? 'background page: error' : 'background page: could not start', message, stack);
   if (!started) {
@@ -259,6 +277,9 @@ async function photosReady(tab: chrome.tabs.Tab | undefined): Promise<void> {
  * written meanwhile), then the data goes, then every open Photo Cleaner page reloads empty.
  */
 async function eraseAll(): Promise<{ ok: true }> {
+  usageLaunches.clear();
+  usageContext = null;
+  usage.stop();
   if (await engineRunning()) await chrome.offscreen.closeDocument();
   tabAccounts.clear();
   await eraseAllData();
@@ -321,6 +342,30 @@ async function openReview(account: string | null, tab: ReviewTab): Promise<void>
 
 async function handle(request: AppRequest, sender: chrome.runtime.MessageSender): Promise<unknown> {
   switch (request.kind) {
+    case 'app-usage-event': {
+      const path = sender.url?.split('?')[0].split('#')[0];
+      const trusted = ['popup.html', 'panel.html', 'review.html', 'engine.html'].some((page) => path === chrome.runtime.getURL(page));
+      if (!trusted || !request.input || typeof request.input !== 'object') return false;
+      usageLaunches.record(request.input);
+      await usage.settled();
+      return true;
+    }
+    case 'app-usage-consent': {
+      const path = sender.url?.split('?')[0].split('#')[0];
+      if (!['popup.html', 'panel.html', 'review.html'].some((page) => path === chrome.runtime.getURL(page)) ||
+        (request.answer !== 'yes' && request.answer !== 'no')) return false;
+      usageContext = null;
+      usageLaunches.clear();
+      usage.stop();
+      const setupState = await store.all().then((jobs) => jobs.length > 0 ? 'existing' as const : 'new' as const, () => 'unknown' as const);
+      const state = await usage.consent(request.answer, setupState);
+      usageContext = state;
+      const channel = new BroadcastChannel(CHANGES_CHANNEL);
+      channel.postMessage({ kind: 'usage-changed' });
+      channel.close();
+      if (state.answer === 'yes') void usage.record({ event: { name: 'usage_enabled', params: {} }, epoch: state.epoch, atMs: Date.now() });
+      return { ok: true };
+    }
     case 'app-account': {
       // The panel and popup ask this as they open: a good moment to carry on, too.
       const answer = await accountOf(request.tabId === undefined ? undefined : await chrome.tabs.get(request.tabId));
@@ -348,9 +393,18 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
       return runOp(request.account, request.op, request.params);
     case 'app-idle-state':
       return chrome.idle.queryState(60);
-    case 'app-open-review':
-      await openReview(request.account, request.tab);
-      return true;
+    case 'app-open-review': {
+      const source = sender.url?.startsWith(chrome.runtime.getURL('panel.html')) ? 'panel' : 'popup';
+      emitUsage({ name: 'surface_open_requested', params: { source_surface: source, target_surface: 'review' } });
+      try {
+        await openReview(request.account, request.tab);
+        emitUsage({ name: 'surface_open_result', params: { source_surface: source, target_surface: 'review', result: 'accepted' } });
+        return true;
+      } catch (error) {
+        emitUsage({ name: 'surface_open_result', params: { source_surface: source, target_surface: 'review', result: 'failed' } });
+        throw error;
+      }
+    }
     case 'app-open-photos':
       return photosTab();
     case 'app-show-panel':

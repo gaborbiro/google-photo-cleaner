@@ -15,6 +15,6 @@ export const DB_NAME = 'photo-cleaner';
  * 2: library scan stores (M2). 3: analysis stores (M3). 4: review decisions and trash queue (M4). 5: preferences.
  * 6: fingerprints per account (moved from `embeddings`, which was keyed by photo key alone); review summaries.
  * 7: the simulated trash's store removed (photos always go to Google Photos' trash).
- * 8: the problem log, for diagnosing failures after they happened.
+ * 8: the problem log, for diagnosing failures after they happened. 9: optional usage consent and local milestone receipts.
  */
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;

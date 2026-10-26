@@ -56,6 +56,10 @@ npm run check
 
 `npm run check` builds the shared Kotlin rules, runs their tests, then runs the extension's typecheck, tests and build. It is also the command used in CI.
 
+Once the [one-time GitHub settings](docs/github-releases.md) are added, each successful master push
+automatically publishes a versioned extension ZIP in [GitHub Releases](https://github.com/gaborbiro/google-photo-cleaner/releases).
+Builds, tests, version numbering and packaging run on GitHub; Chrome Web Store submission stays manual.
+
 ## Run the browser extension
 
 1. From `extension/`, run `npm run kotlin && npm run build`.
@@ -81,6 +85,10 @@ Before a release, or after changing browser integrations, go through the [manual
 - Google session tokens stay inside the photos.google.com page; the extension never sees cookies or tokens.
 - Only numbers about photos are stored, such as fingerprints, quality and dates, never images, and only in the browser. **Erase Photo Cleaner's data** removes what it stored.
 - Logs never contain tokens, photo keys, album titles or URLs.
+- Optional usage statistics go directly to Google Analytics only after you agree. They describe
+  feature progress and fixed error categories, never photos, searches, albums or your Google account.
+  Reporting can be turned off in the popup, panel or review Scan page. Developer builds send nothing;
+  release configuration and reporting checks are in [usage events setup](docs/usage-events-setup.md).
 
 Read the [privacy policy](https://gaborbiro.github.io/google-photo-cleaner/privacy.html) for details. Contributors and coding agents should read [AGENTS.md](AGENTS.md) before making changes.
 

@@ -220,6 +220,32 @@ and to check for an update.
    (`chrome://extensions` → Photo Cleaner → service worker): no photo keys, photo addresses
    (`googleusercontent.com/…`), album titles or tokens.
 2. DevTools → Network on the review tab: requests go only to Google Photos (through its tab) and,
-   for the AI models, Hugging Face.
+   for the AI models, Hugging Face. In a configured build, only after opting in, the service worker
+   may also send the allowlisted usage events directly to Google Analytics (see section 10).
 3. Copy diagnostics (review tab, Scan) and read what it copied: no photo or album keys
    (`AF1Qip…`), addresses, album titles, tokens, your email or the account's fingerprint.
+
+## 10. Optional usage statistics (0.4.49)
+
+Follow [usage reporting setup](usage-events-setup.md) with a test GA property before a configured
+release. These checks remain manual; automated tests do not contact Google Analytics.
+
+1. In popup, panel and review Scan, decline reporting without a signed-in account. Reopen: the
+   choice persists. Enable/disable the setting. Before yes and after no there are no GA requests.
+2. From the popup open the panel and review tab. Confirm requested, accepted/failed and actual
+   visible-render events separately. Repeat with the review tab already open; hidden internal
+   tabs and ordinary rerenders must not count as opening a new screen. Side-panel opening must
+   still work directly from a click. A rejected request or no readiness reply is not success.
+3. Follow scan → model load → analysis milestones. Try a tiny library, no new work, pause/resume,
+   Photos closing and reopening, engine restart, full speed and gentle mode. Old milestones must
+   not flood reports after resume. Focus a surface for 15 seconds to check measured engagement.
+4. Review keep/later/approve and Search text/examples/selection/confirmation/cancel. Never include
+   query words, example identifiers, photo keys, account details or diagnostic messages in payloads.
+5. With a small approved selection, verify approval is separate from confirmed trashing. Repeated
+   queue polls count nothing new. Check protected/blocked outcomes, uncertain reconciliation, undo
+   before sending and confirmed restoration. The existing safety checks in sections 3 and 5b apply.
+6. Switch off or erase while work/sends are pending. New events stop, pending sends are aborted
+   where possible, and a later opt-in gets a new identity. After erase the question returns.
+7. Separately validate synthetic payloads and check actual Realtime/DebugView and processed
+   funnels. An opaque network response is not evidence of ingestion. Check data quality, retention,
+   advertising settings, privacy page publication and live store disclosures before release.

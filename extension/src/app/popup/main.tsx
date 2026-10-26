@@ -1,10 +1,12 @@
 // The toolbar popup: the front door. Says what to do next, depending on where things stand.
 
 import { createRoot } from 'react-dom/client';
+import { UsageCard, useUsageSurface } from '../ui/UsageCard';
 import { openPhotos, send, showPanel, useSignedInScan, useStartOverWhenErased } from '../ui/hooks';
 import { ScanCard, StorageProblem } from '../ui/JobCard';
 
 function Popup() {
+  useUsageSurface('popup');
   useStartOverWhenErased();
   const { view, scan, analysis, report, launch } = useSignedInScan();
   const { panelTab } = view;
@@ -15,6 +17,7 @@ function Popup() {
         {view.accountName && <p className="account mono" title="The Google account signed in to Google Photos">{view.accountName}</p>}
       </header>
       <StorageProblem />
+      {view.state !== 'looking' && <UsageCard />}
       {view.state === 'looking' && <p className="muted">Looking for Google Photos…</p>}
       {view.state === 'no-photos' && <p>Photo Cleaner works inside Google Photos. Open it to scan your library.</p>}
       {view.state === 'problem' && <p className="warn">{view.problemText}</p>}

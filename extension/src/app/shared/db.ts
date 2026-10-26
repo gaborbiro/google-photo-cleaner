@@ -4,6 +4,7 @@
 import { DB_NAME, DB_VERSION } from './constants';
 
 export const STORES = {
+  usage: 'usage',
   jobs: 'jobs',
   runs: 'runs',
   cursors: 'cursors',
@@ -118,6 +119,7 @@ function upgrade(open: IDBOpenDBRequest): void {
     create(STORES.preferences, { keyPath: 'account' });
     create(STORES.reviewSummaries, { keyPath: 'account' });
     create(STORES.problems, { keyPath: 'id', autoIncrement: true });
+    create(STORES.usage, { keyPath: 'id' });
   };
 }
 

@@ -6,7 +6,7 @@
   "scripts": {
     "kotlin": "node scripts/kotlin.mjs",
     "build": "node build.mjs",
-    "package": "node build.mjs && node scripts/package.mjs",
+    "package": "node build.mjs --usage --release && node scripts/package.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "node scripts/check.mjs"

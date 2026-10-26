@@ -4,7 +4,8 @@
 
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as usage from '../../src/app/shared/usageClient';
 import { modelKey } from '../../src/app/ai/model';
 import { duplicatesStores, refreshReviewSummary, reviewDeps, trashQueueDeps, trashQueuePass } from '../../src/app/duplicates/session';
 import { processTrashQueue } from '../../src/app/duplicates/trash';
@@ -16,6 +17,7 @@ import { fakeDedupKey, fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fak
 const at = (degrees: number) => Float32Array.from([Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)]);
 const quality = { sharpness: 100, brightness: 128, clippedDark: 0, clippedBright: 0, width: 256, height: 256 };
 const NO_FAVOURITES = { ...ALL_PROTECTED, favourites: false };
+afterEach(() => { vi.restoreAllMocks(); });
 
 /**
  * Six photos, scanned and analysed, in one database that both Search and Duplicates use. Photos
@@ -126,6 +128,34 @@ describe('the count of groups waiting, for the popup', () => {
 });
 
 describe("Google Photos' trash", () => {
+  it('usage distinguishes approval from verified outcomes, preserves Search provenance, and does not count idle queue polls', async () => {
+    const { search, review, queuePass } = await library();
+    const events = vi.spyOn(usage, 'emitUsage').mockImplementation(() => {});
+    await search.sweep(['lib-3', 'lib-4']);
+    expect(events.mock.calls.map(([event]) => event)).toEqual([{ name: 'trash_approved', params: { source: 'search' } }]);
+    await queuePass();
+    const results = events.mock.calls.filter(([event]) => event.name === 'trash_result');
+    expect(results.map(([event]) => event)).toEqual(Array(2).fill({ name: 'trash_result', params: { source: 'search', result: 'confirmed' } }));
+    expect(new Set(results.map(([, receipt]) => receipt)).size).toBe(1); // sender emits once per decision/outcome
+    const count = events.mock.calls.length;
+    await queuePass();
+    expect(events).toHaveBeenCalledTimes(count);
+    await review.undo();
+    await queuePass();
+    expect(events.mock.calls.map(([event]) => event)).toContainEqual({ name: 'undo_used', params: { source: 'search' } });
+    expect(events.mock.calls.map(([event]) => event)).toContainEqual({ name: 'trash_result', params: { source: 'search', result: 'restored' } });
+    expect(JSON.stringify(events.mock.calls.map(([event]) => event))).not.toMatch(/account-a|lib-|dedup|sweep:/);
+  });
+
+  it('a protection recheck that refuses all selected photos never claims a usage approval', async () => {
+    const { search, queuePass, google } = await library();
+    const events = vi.spyOn(usage, 'emitUsage').mockImplementation(() => {});
+    expect(await search.sweep(['lib-0'])).toEqual({ queued: [], leftOut: ['lib-0'] });
+    await queuePass();
+    expect(events).not.toHaveBeenCalled();
+    expect(google.changes()).toEqual([]);
+  });
+
   it('approved photos go there; undo brings them back', async () => {
     const { search, review, queuePass, google } = await library();
     await search.sweep(['lib-3', 'lib-4']);

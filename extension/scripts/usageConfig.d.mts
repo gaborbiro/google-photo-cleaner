@@ -1,0 +1,1 @@
+export function usageConfig(enabled: boolean, path: string, production?: boolean, environment?: Record<string, string | undefined>): { measurementId: string; apiSecret: string; debug: boolean } | null;

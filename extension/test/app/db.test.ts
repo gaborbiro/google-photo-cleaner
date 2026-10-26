@@ -24,6 +24,7 @@ async function oldDatabase(factory: IDBFactory): Promise<IDBDatabase> {
  * then the new store's); without it, the store was removed with its records.
  */
 const STORES_BY_VERSION: { since: number; until?: number; name: string; options: IDBObjectStoreParameters; indexes: string[]; record: Record<string, unknown>; movedTo?: string }[] = [
+  { since: 9, name: STORES.usage, options: { keyPath: 'id' }, indexes: [], record: { id: 'settings', answer: 'no' } },
   { since: 2, name: STORES.jobs, options: { keyPath: 'id' }, indexes: [], record: { id: 'library-scan:acc1', status: 'finished' } },
   { since: 2, name: STORES.runs, options: { keyPath: 'id', autoIncrement: true }, indexes: ['account'], record: { id: 1, accountFingerprint: 'acc1' } },
   { since: 2, name: STORES.cursors, options: { keyPath: ['runId', 'phase', 'scope'] }, indexes: [], record: { runId: 1, phase: 'LIBRARY', scope: '', token: 't' } },
@@ -64,7 +65,7 @@ async function savedDatabase(factory: IDBFactory, version: number): Promise<void
 }
 
 describe('database upgrades', () => {
-  for (const version of [2, 3, 4, 5, 6, 7]) {
+  for (const version of [2, 3, 4, 5, 6, 7, 8]) {
     it(`from version ${version}: every saved record and index is kept, and the new stores are added`, async () => {
       const factory = new IDBFactory();
       await savedDatabase(factory, version);

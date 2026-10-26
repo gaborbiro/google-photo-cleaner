@@ -91,17 +91,19 @@ function send(message: AppRequest) {
 }
 
 describe('opening Google Photos', () => {
-  it('Open Google Photos brings the open tab forward, in its window', async () => {
-    expect(await send({ kind: 'app-open-photos' })).toBe(true);
+  // The page that asked opens the tab's panel, then asks for the tab to come forward (app-show-panel).
+  it('Open Google Photos names the open tab, leaving it where it is', async () => {
+    expect(await send({ kind: 'app-open-photos' })).toEqual({ tabId: 42 });
     expect(tabs.create).not.toHaveBeenCalled();
-    expect(tabs.update).toHaveBeenCalledExactlyOnceWith(42, { active: true });
-    expect(focusWindow).toHaveBeenCalledExactlyOnceWith(7, { focused: true });
+    expect(tabs.update).not.toHaveBeenCalled();
+    expect(focusWindow).not.toHaveBeenCalled();
   });
 
-  it('Open Google Photos opens a tab when none is open', async () => {
+  it('Open Google Photos opens a tab behind the page when none is open, so a popup stays to open its panel', async () => {
     tabs.query.mockResolvedValue([]);
-    expect(await send({ kind: 'app-open-photos' })).toBe(true);
-    expect(tabs.create).toHaveBeenCalledExactlyOnceWith({ url: 'https://photos.google.com/' });
+    tabs.create.mockResolvedValue({ id: 51, windowId: 7, url: '', pendingUrl: 'https://photos.google.com/', status: 'loading' });
+    expect(await send({ kind: 'app-open-photos' })).toEqual({ tabId: 51 });
+    expect(tabs.create).toHaveBeenCalledExactlyOnceWith({ url: 'https://photos.google.com/', active: false });
     expect(tabs.update).not.toHaveBeenCalled();
   });
 
@@ -127,6 +129,17 @@ describe('the panel (Chrome’s side panel)', () => {
     updated.emit(5, { status: 'loading' }, page(5, 'https://photos.google.com/'));
     await vi.waitFor(() => expect(sidePanel.options.get(5)).toMatchObject({ enabled: true }));
     expect(sidePanel.setOptions).toHaveBeenCalledTimes(3);
+  });
+
+  it('is kept in a tab just opened on Google Photos, which says where it is going only as its pending address', async () => {
+    sidePanel.options.set(5, { tabId: 5, path: 'panel.html?tab=5', enabled: true }); // the popup has just opened it
+    updated.emit(5, { status: 'loading' }, { ...page(5, ''), pendingUrl: 'https://photos.google.com/' });
+    await vi.waitFor(() => expect(sidePanel.getOptions).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(sidePanel.setOptions).not.toHaveBeenCalled();
+    // Coming from another site (no address without the "tabs" permission), it is offered too.
+    updated.emit(6, { status: 'loading' }, { ...page(6), pendingUrl: 'https://photos.google.com/' });
+    await vi.waitFor(() => expect(sidePanel.options.get(6)).toEqual({ tabId: 6, path: 'panel.html?tab=6', enabled: true }));
   });
 
   it('is set only when it changes, so a panel in use is not reloaded; and only as a page starts loading', async () => {

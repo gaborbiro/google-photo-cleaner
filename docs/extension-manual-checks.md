@@ -40,7 +40,8 @@ and copy the console (right-click the page → Inspect → Console).
    Duplicates: the button brings that tab forward and switches it to Duplicates without reloading
    (the selection and the place in the list are still there).
 8. Close the Photos tab, open the popup: it says Photo Cleaner works inside Google Photos and offers
-   **Open Google Photos**, which opens it (without the panel). With Photos open in a background tab,
+   **Open Google Photos**, which opens it with the panel beside it (the panel shows the account once
+   the page has loaded); the review tab's **Open Google Photos** does the same. With Photos open in a background tab,
    or in another window, **Open panel in Google Photos** brings that tab forward with its panel open.
    Clicking it twice: still one panel.
 9. Reload the extension (↻) with a Photos tab open, without reloading that tab, then open the popup:

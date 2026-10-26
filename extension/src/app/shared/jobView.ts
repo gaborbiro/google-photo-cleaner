@@ -423,7 +423,7 @@ export interface SurfaceView {
   /** The account signed in to Google Photos, as shown: "someone@example.com". */
   accountName: string | null;
   /**
-   * The popup offers Open Google Photos (which brings the Photos tab forward, or opens one): whenever
+   * The popup offers Open Google Photos (which brings the Photos tab forward, or opens one, with its panel): whenever
    * the answer came without an account. Not while looking, which ends within seconds, so the button
    * doesn't flash up each time the popup opens.
    */

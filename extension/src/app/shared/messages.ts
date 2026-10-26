@@ -27,7 +27,10 @@ export type AppRequest =
   | { kind: 'app-run-op'; account: string; op: PageOp; params: Record<string, unknown> }
   /** Open the review tab for [account] on [tab], or bring the open one forward and switch it there. */
   | { kind: 'app-open-review'; account: string | null; tab: ReviewTab }
-  /** Bring the best Photos tab forward, or open one. */
+  /**
+   * The best Photos tab, or a new one opened behind the page asking (a popup closes as another tab
+   * comes forward, and must stay to open the tab's panel); answers `{ tabId }`. See [photosTabOf].
+   */
   | { kind: 'app-open-photos' }
   /** Bring Photos tab [tabId] forward: the popup has just opened its panel (see [panelOptions]). */
   | { kind: 'app-show-panel'; tabId: number }
@@ -88,6 +91,13 @@ export function accountAnswer(reply: unknown): AccountAnswer {
   if (typeof reply === 'object' && reply !== null && 'account' in reply && 'problem' in reply) return reply as AccountAnswer;
   const error = typeof reply === 'object' && reply !== null ? (reply as { error?: unknown }).error : undefined;
   return { account: null, problem: typeof error === 'string' ? error : EXTENSION_SILENT, photosTabOpen: null, tabId: null };
+}
+
+/** The Photos tab in the background's reply to `app-open-photos`; a failed request (`{ error }`, or no answer) throws, saying why. */
+export function photosTabOf(reply: unknown): number {
+  if (typeof reply === 'object' && reply !== null && typeof (reply as { tabId?: unknown }).tabId === 'number') return (reply as { tabId: number }).tabId;
+  const error = typeof reply === 'object' && reply !== null ? (reply as { error?: unknown }).error : undefined;
+  throw new Error(typeof error === 'string' ? error : EXTENSION_SILENT);
 }
 
 export function isAppRequest(value: unknown): value is AppRequest {

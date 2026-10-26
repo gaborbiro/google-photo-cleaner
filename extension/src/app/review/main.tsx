@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { documentTitle, reviewAccount, reviewPageView, scanView } from '../shared/jobView';
 import { REVIEW_TABS, requestedReviewTab, type ReviewTab } from '../shared/messages';
-import { extensionVersion, send, useAccount, useAllJobs, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useSpinningTabIcon, useStartOverWhenErased } from '../ui/hooks';
+import { extensionVersion, openPhotos, useAccount, useAllJobs, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useSpinningTabIcon, useStartOverWhenErased } from '../ui/hooks';
 import { DiagnosticsCard, EraseCard, ProtectionCard, ScanCard, StorageProblem } from '../ui/JobCard';
 import { DuplicatesReview } from '../duplicates/reviewModel';
 import { reviewDeps } from '../duplicates/session';
@@ -131,7 +131,7 @@ function Review() {
             </div>
             {page.accountName && <p className="account mono" title="The Google account whose library this is">{page.accountName}</p>}
           </div>
-          <button onClick={() => void send({ kind: 'app-open-photos' })}>Open Google Photos <span aria-hidden="true">↗</span></button>
+          <button onClick={() => void openPhotos()}>Open Google Photos <span aria-hidden="true">↗</span></button>
         </div>
         <StorageProblem />
         {ERASED && (

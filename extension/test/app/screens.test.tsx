@@ -54,6 +54,7 @@ function pretendExtension() {
         sent.push(request);
         if (request.kind === 'app-account') return typeof account === 'function' ? account() : account;
         if (request.kind === 'app-erase-all') return eraseAnswer;
+        if (request.kind === 'app-open-photos') return { tabId: PHOTOS_TAB };
         if (request.kind === 'app-run-op' && request.op === 'fetchPreview') return { ok: true, data: { contentType: 'image/jpeg', base64: 'AAAA' } };
         if (request.kind === 'app-run-op' && (request.op === 'listTrashPage' || request.op === 'moveToTrash' || request.op === 'restoreFromTrash')) {
           return google.run(request.account!, request.op, request.params ?? {});
@@ -135,6 +136,16 @@ function press(key: string, target: EventTarget = window) {
 }
 
 const requests = (kind: string) => sent.filter((r) => r.kind === kind);
+
+/** Open Google Photos was clicked: the background found or opened the Photos tab, then the page opened its panel and asked for the tab to come forward. */
+async function photosOpenedWithPanel() {
+  await vi.waitFor(() => expect(requests('app-show-panel')).toEqual([{ kind: 'app-show-panel', tabId: PHOTOS_TAB }]));
+  expect(requests('app-open-photos')).toHaveLength(1);
+  expect(sidePanelCalls).toEqual([
+    ['setOptions', { tabId: PHOTOS_TAB, path: `panel.html?tab=${PHOTOS_TAB}`, enabled: true }],
+    ['open', { tabId: PHOTOS_TAB }],
+  ]);
+}
 
 beforeEach(() => {
   vi.resetModules();
@@ -516,7 +527,7 @@ describe('clicks and keys reach what they should', () => {
     }
     await shows(root, problem);
     await click(root, 'Open Google Photos');
-    expect(requests('app-open-photos')).toHaveLength(1);
+    await photosOpenedWithPanel();
   });
 
   it.each(['popup', 'panel'] as const)('%s: when the extension fails to say which account, it says why', async (page) => {
@@ -548,12 +559,19 @@ describe('clicks and keys reach what they should', () => {
     expect(root.textContent).not.toContain('Photo Cleaner works inside Google Photos');
   });
 
-  it('popup without Google Photos: Open Google Photos asks for it', async () => {
+  it('popup without Google Photos: Open Google Photos asks for it, and opens its panel', async () => {
     account = NO_TAB;
     const root = await open('popup');
     await shows(root, 'Open Google Photos');
     await click(root, 'Open Google Photos');
-    expect(requests('app-open-photos')).toHaveLength(1);
+    await photosOpenedWithPanel();
+  });
+
+  it('review tab: Open Google Photos asks for it, and opens its panel', async () => {
+    await scannedAndAnalysed(indexedDB);
+    const root = await open('review', '?account=account-a');
+    await click(root, 'Open Google Photos');
+    await photosOpenedWithPanel();
   });
 
   it.each(['popup', 'panel', 'review'] as const)('%s: Full speed can be chosen in stage 1 and stays checked in stage 2', async (page) => {

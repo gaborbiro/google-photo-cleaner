@@ -1,7 +1,7 @@
 // The toolbar popup: the front door. Says what to do next, depending on where things stand.
 
 import { createRoot } from 'react-dom/client';
-import { send, showPanel, useSignedInScan, useStartOverWhenErased } from '../ui/hooks';
+import { openPhotos, send, showPanel, useSignedInScan, useStartOverWhenErased } from '../ui/hooks';
 import { ScanCard, StorageProblem } from '../ui/JobCard';
 
 function Popup() {
@@ -18,7 +18,7 @@ function Popup() {
       {view.state === 'looking' && <p className="muted">Looking for Google Photos…</p>}
       {view.state === 'no-photos' && <p>Photo Cleaner works inside Google Photos. Open it to scan your library.</p>}
       {view.state === 'problem' && <p className="warn">{view.problemText}</p>}
-      {view.offerPhotos && <button className="primary" onClick={() => void send({ kind: 'app-open-photos' })}>Open Google Photos</button>}
+      {view.offerPhotos && <button className="primary" onClick={() => void openPhotos()}>Open Google Photos</button>}
       {view.account && (
         <>
           {scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} surface="popup" />}

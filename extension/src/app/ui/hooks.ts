@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { jobId, type AnalysisJob, type Job, type JobKind, type ScanJob } from '../shared/job';
-import { accountAnswer, panelOptions, type AccountAnswer, type AppRequest } from '../shared/messages';
+import { accountAnswer, panelOptions, photosTabOf, type AccountAnswer, type AppRequest } from '../shared/messages';
 import { openDatabase, storageProblemText } from '../shared/db';
 import { IndexedDbJobStore, onErased, onJobsChanged } from '../shared/store';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
@@ -144,6 +144,22 @@ export async function showPanel(tabId: number): Promise<void> {
   } catch (error) {
     console.error('Photo Cleaner: could not open the panel', error);
   }
+}
+
+/**
+ * Opens Google Photos with its panel: the best Photos tab, or a new one, which the service worker
+ * finds or opens; then its panel, as [showPanel] does. A click lets its page open a side panel for a
+ * few seconds, so the panel can still open after asking the service worker.
+ */
+export async function openPhotos(): Promise<void> {
+  let tabId: number;
+  try {
+    tabId = photosTabOf(await send({ kind: 'app-open-photos' }));
+  } catch (error) {
+    console.error('Photo Cleaner: could not open Google Photos', error);
+    return;
+  }
+  await showPanel(tabId);
 }
 
 /** The extension's version, as its manifest says: "0.4.14". */

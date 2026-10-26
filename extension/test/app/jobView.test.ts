@@ -3,7 +3,7 @@ import { NO_ANALYSIS } from '../../src/app/ai/analysis';
 import { endJob, markAlive, NO_PROGRESS, NOT_RESPONDING_TEXT, pauseJob, reportProgress, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 import type { ReportView } from '../../src/app/scan/report';
 import { accountLabel, checkedText, copyReportText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView, versionLine } from '../../src/app/shared/jobView';
-import { accountAnswer, panelOptions, panelTab, requestedReviewTab, reviewUrl } from '../../src/app/shared/messages';
+import { accountAnswer, panelOptions, panelTab, photosTabOf, requestedReviewTab, reviewUrl } from '../../src/app/shared/messages';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
 const NOW = new Date(2026, 9, 14, 21, 40).getTime();
@@ -350,6 +350,20 @@ describe("the background's answer to which account is signed in", () => {
     for (const reply of [undefined, null, true, {}]) {
       expect(accountAnswer(reply)).toEqual({ account: null, problem: expect.stringContaining('The extension did not answer'), photosTabOpen: null, tabId: null });
     }
+  });
+});
+
+describe("the background's answer to Open Google Photos", () => {
+  it('names the Photos tab', () => {
+    expect(photosTabOf({ tabId: 3 })).toBe(3);
+  });
+
+  it('when the request failed, throws its error', () => {
+    expect(() => photosTabOf({ error: 'Could not open the saved data.' })).toThrow('Could not open the saved data.');
+  });
+
+  it('when nobody answered, throws saying the extension did not answer', () => {
+    for (const reply of [undefined, null, true, {}, { tabId: '3' }]) expect(() => photosTabOf(reply)).toThrow('The extension did not answer');
   });
 });
 

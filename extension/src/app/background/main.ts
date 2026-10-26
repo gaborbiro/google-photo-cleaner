@@ -278,20 +278,26 @@ async function bringForward(tab: chrome.tabs.Tab): Promise<void> {
   if (tab.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true });
 }
 
-async function openPhotos(): Promise<void> {
-  const tab = (await photosTabs())[0];
-  if (tab) await bringForward(tab);
-  else await chrome.tabs.create({ url: PHOTOS_URL });
+/**
+ * The best Photos tab, or a new one, not brought forward: the page that asked opens its panel and
+ * then asks for it to come forward (`app-show-panel`), as a popup closes once another tab does.
+ */
+async function photosTab(): Promise<{ tabId: number }> {
+  const tab = (await photosTabs())[0] ?? (await chrome.tabs.create({ url: PHOTOS_URL, active: false }));
+  if (tab.id === undefined) throw new Error('The Google Photos tab has no id');
+  return { tabId: tab.id };
 }
 
 /**
  * The panel is offered on Google Photos tabs only: Chrome hides it on a tab that leaves Google Photos
  * and shows it again on coming back. Without the "tabs" permission, Chrome gives no address for other
- * sites' tabs. Options already set are left alone, so a panel in use is not reloaded.
+ * sites' tabs. A tab still on its way to Google Photos (just opened, nothing loaded yet) says where it
+ * is going only as its pending address, and keeps the panel the popup has just opened in it. Options
+ * already set are left alone, so a panel in use is not reloaded.
  */
 async function offerPanel(tab: chrome.tabs.Tab): Promise<void> {
   if (tab.id === undefined) return;
-  const wanted = tab.url?.startsWith(PHOTOS_URL) ? panelOptions(tab.id) : { tabId: tab.id, enabled: false };
+  const wanted = (tab.pendingUrl ?? tab.url)?.startsWith(PHOTOS_URL) ? panelOptions(tab.id) : { tabId: tab.id, enabled: false };
   const current = await chrome.sidePanel.getOptions({ tabId: tab.id });
   if (current.enabled === wanted.enabled && (!wanted.enabled || current.path === wanted.path)) return;
   await chrome.sidePanel.setOptions(wanted);
@@ -346,8 +352,7 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
       await openReview(request.account, request.tab);
       return true;
     case 'app-open-photos':
-      await openPhotos();
-      return true;
+      return photosTab();
     case 'app-show-panel':
       await bringForward(await chrome.tabs.get(request.tabId));
       return true;

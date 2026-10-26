@@ -614,10 +614,10 @@ export class SearchModel {
   /** The × on a result hides only that photo, whether selected or not. */
   hideResult(mediaKey: string): void {
     if (this.searching || !this.shown.some((hit) => hit.mediaKey === mediaKey)) return;
-    this.hideResults([mediaKey]);
+    this.hideResults([mediaKey], false);
   }
 
-  private hideResults(keys: string[]): void {
+  private hideResults(keys: string[], focusFeedback = true): void {
     const focusedKey = this.shown[this.focusedIndex]?.mediaKey;
     const viewerKey = this.viewerIndex === null ? null : this.shown[this.viewerIndex]?.mediaKey;
     for (const key of keys) {
@@ -638,7 +638,7 @@ export class SearchModel {
     this.rangeStart = null;
     this.allFocused = false;
     this.confirming = null;
-    this.focusPulse++;
+    if (focusFeedback) this.focusPulse++;
     this.say(`Hidden ${count(keys.length, 'photo', 'photos')} from these results. Nothing was trashed. A new search shows them again.`, 'neutral');
     this.publish();
   }

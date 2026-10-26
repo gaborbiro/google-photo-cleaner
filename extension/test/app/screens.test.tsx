@@ -439,8 +439,15 @@ describe('clicks and keys reach what they should', () => {
     const selected = searchTiles(root)[0]!;
     selected.querySelector<HTMLElement>('.search-tile-image')!.click();
     await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
+    let scrollY = 600;
+    vi.spyOn(window, 'scrollY', 'get').mockImplementation(() => scrollY);
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {
+      scrollY = 0;
+    });
     searchTiles(root)[1]!.querySelector<HTMLButtonElement>('[aria-label="Hide this result"]')!.click();
     await vi.waitFor(() => expect(searchTiles(root)).toHaveLength(before - 1));
+    expect(window.scrollY).toBe(600);
+    expect(scrollIntoView).not.toHaveBeenCalled();
     expect(selected.classList.contains('selected')).toBe(true);
     expect(selectedCount(root)).toBe(1);
     expect(root.querySelector('.search [role="alertdialog"]')).toBeNull();

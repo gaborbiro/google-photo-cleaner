@@ -358,6 +358,8 @@ button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-b
 /* The question before a sweep: inside the pinned bar, soft red with a red start edge. */
 .confirm { display: flex; flex-direction: column; gap: var(--space-3); padding: 14px; background: var(--pc-trash-fill); border-left: 3px solid var(--pc-trash); border-radius: 5px; }
 .confirm strong { color: var(--pc-trash); }
+.confirm-hide { background: var(--pc-surface); border-left-color: var(--pc-accent); }
+.confirm-hide strong { color: var(--pc-text); }
 .search-grid { display: grid; grid-template-columns: repeat(auto-fill, var(--tile-px, 160px)); gap: var(--space-5) var(--space-4); }
 .search-tile { margin: 0; width: var(--tile-px, 160px); scroll-margin-top: calc(var(--tabs-h) + var(--bar-h) + 16px); scroll-margin-bottom: 16px; }
 .search-tile-image {
@@ -366,11 +368,16 @@ button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-b
   outline: 2px solid transparent; outline-offset: 3px;
 }
 .search-tile-image img { width: 100%; height: 100%; object-fit: cover; border-radius: 3px; display: block; }
-.search-tile.selected .search-tile-image { border-color: var(--pc-trash); }
+.search-tile.selected .search-tile-image { border-color: var(--pc-accent); }
 .search-tile.selected .search-tile-image::after {
-  content: 'TRASH'; position: absolute; left: 6px; bottom: 6px; padding: 1px 5px; border: 1px solid var(--pc-trash); border-radius: 3px;
-  background: var(--pc-trash-fill); color: var(--pc-trash); font: 700 11px/18px var(--font-data);
+  content: 'SELECTED'; position: absolute; left: 6px; bottom: 6px; padding: 1px 5px; border: 1px solid var(--pc-accent); border-radius: 3px;
+  background: var(--pc-accent); color: var(--pc-on-accent); font: 700 11px/18px var(--font-data);
 }
+.hide-result {
+  position: absolute; top: 6px; right: 6px; width: 32px; min-height: 32px; height: 32px; padding: 0;
+  border: 1px solid #ffffff88; border-radius: var(--radius-control); background: #000000cc; color: #fff; font-size: 22px;
+}
+.hide-result:hover:not(:disabled), .hide-result:focus-visible { background: #000; border-color: #fff; }
 .search-tile.focused .search-tile-image { outline-color: var(--pc-focus); }
 .search-tile figcaption { margin-top: 6px; }
 .search-tile figcaption a { color: var(--pc-muted); text-decoration: none; }

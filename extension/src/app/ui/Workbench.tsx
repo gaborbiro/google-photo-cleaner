@@ -14,14 +14,16 @@ function pressOf(e: KeyboardEvent): KeyPress {
  * The keyboard of a workbench while it is [active]: [gridKey] maps a key press to an action, which
  * [onGrid] carries out ([held]: a repeat of a held arrow). While the viewer is open it takes every key.
  */
-export function useWorkbenchKeys<A extends string>(options: {
+export function useWorkbenchKeys<A extends string, V extends string = ViewerAction>(options: {
   active: boolean;
   viewerOpen: boolean;
   gridKey: (press: KeyPress) => KeyResult<A>;
   onGrid: Record<A, (held: boolean) => void>;
-  onViewer: Record<ViewerAction, () => void>;
+  viewerKey?: (press: KeyPress) => KeyResult<V>;
+  onViewer: Record<V, () => void>;
 }): void {
   const { active, viewerOpen, gridKey } = options;
+  const mapViewerKey = options.viewerKey ?? viewerKey;
   // The latest handlers, so the listeners added below never act on an earlier render's.
   const handlers = useRef(options);
   handlers.current = options;
@@ -39,11 +41,11 @@ export function useWorkbenchKeys<A extends string>(options: {
     };
     const onKey = (e: KeyboardEvent) => {
       const press = pressOf(e);
-      const result = viewerOpen ? viewerKey(press) : gridKey(press);
+      const result = viewerOpen ? mapViewerKey(press) : gridKey(press);
       if (result.kind === 'ignore') return;
       e.preventDefault();
       if (result.kind === 'swallow') return;
-      if (viewerOpen) return act(press.key, handlers.current.onViewer[result.action as ViewerAction]);
+      if (viewerOpen) return act(press.key, handlers.current.onViewer[result.action as V]);
       act(press.key, handlers.current.onGrid[result.action as A]);
     };
     const onKeyUp = (e: KeyboardEvent) => held.released(e.key);
@@ -57,7 +59,7 @@ export function useWorkbenchKeys<A extends string>(options: {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [active, viewerOpen, gridKey]);
+  }, [active, viewerOpen, gridKey, mapViewerKey]);
 }
 
 /** The outline's bounce: the photo lifts 3 px and settles back. */
@@ -118,6 +120,7 @@ export interface ViewerProps {
   viewer: {
     imageUrl: string | null; loading: boolean; statusText: string | null; infoText: string; selectionText: string; tone: string; link: string;
     rotationDeg: number; sideways: boolean; rotationText: string | null;
+    toggleText?: string;
   };
   onPrevious: () => void;
   onNext: () => void;
@@ -145,7 +148,7 @@ export function Viewer({ viewer, onPrevious, onNext, onToggle, onRotate, onClose
       <div className="viewer-buttons">
         <button tabIndex={-1} onClick={onPrevious}>← Previous</button>
         <button tabIndex={-1} onClick={onNext}>Next →</button>
-        <button tabIndex={-1} onClick={onToggle}><kbd>Space</kbd> · Toggle trash</button>
+        <button tabIndex={-1} onClick={onToggle}><kbd>Space</kbd> · {viewer.toggleText ?? 'Toggle trash'}</button>
         <button tabIndex={-1} title="Turn anticlockwise, for viewing only" onClick={() => onRotate(-1)}>↺ Rotate left</button>
         <button tabIndex={-1} title="Turn clockwise, for viewing only" onClick={() => onRotate(1)}><kbd>R</kbd> · Rotate right</button>
         <a href={viewer.link} target="_blank" rel="noreferrer"><button tabIndex={-1}>Open in Google Photos <span aria-hidden="true">↗</span></button></a>

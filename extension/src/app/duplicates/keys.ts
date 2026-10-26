@@ -98,10 +98,10 @@ export function gridKey(press: KeyPress): KeyResult<GridAction> {
   return { kind: 'act', action };
 }
 
-export type SearchAction = 'approve' | 'focusAll' | 'toggle' | 'enter' | 'cancel' | 'more' | 'less' | 'undo' | 'left' | 'right' | 'up' | 'down' | 'smaller' | 'larger';
+export type SearchAction = 'approve' | 'hide' | 'focusAll' | 'toggle' | 'enter' | 'cancel' | 'more' | 'less' | 'undo' | 'left' | 'right' | 'up' | 'down' | 'smaller' | 'larger';
 
 const SEARCH_KEYS: Record<string, SearchAction> = {
-  d: 'approve', a: 'focusAll', ' ': 'toggle', Enter: 'enter', Escape: 'cancel', m: 'more', l: 'less', z: 'undo', u: 'undo',
+  d: 'approve', h: 'hide', a: 'focusAll', ' ': 'toggle', Enter: 'enter', Escape: 'cancel', m: 'more', l: 'less', z: 'undo', u: 'undo',
   ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', ...SIZE_KEYS,
 };
 
@@ -120,4 +120,13 @@ export function viewerKey(press: KeyPress): KeyResult<ViewerAction> {
   const action = VIEWER_KEYS[press.key];
   if (!action || press.repeat) return { kind: 'swallow' };
   return { kind: 'act', action };
+}
+
+/** Search also lets H hide the selection while viewing a photo. Duplicates keeps its own keys. */
+export function searchViewerKey(press: KeyPress): KeyResult<ViewerAction | 'hide'> {
+  if (press.key.toLowerCase() === 'h') {
+    if (!usable(press)) return { kind: 'ignore' };
+    return press.repeat ? { kind: 'swallow' } : { kind: 'act', action: 'hide' };
+  }
+  return viewerKey(press);
 }

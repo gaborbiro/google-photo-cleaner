@@ -97,6 +97,7 @@ export interface ViewerView {
   statusText: string | null;
   infoText: string;
   selectionText: string;
+  toggleText: string;
   tone: Tone;
   link: string;
   /** The photo's turn for viewing (0, 90, 180 or 270 degrees clockwise); on its side at 90 and 270. */
@@ -113,7 +114,7 @@ export interface SearchView {
   canStartOver: boolean;
   searching: boolean;
   progressText: string | null;
-  /** "300 best matches · 12 selected for the trash"; null before a search. */
+  /** "300 best matches · 12 selected"; null before a search. */
   resultText: string | null;
   hiddenText: string | null;
   blockedText: string | null;
@@ -130,6 +131,10 @@ export interface SearchView {
   focusPulse: number;
   showMoreVisible: boolean;
   confirmText: string | null;
+  confirmKind: 'trash' | 'hide' | null;
+  confirmTitle: string;
+  confirmButtonText: string;
+  canHideSelected: boolean;
   notice: Notice | null;
   viewer: ViewerView | null;
 }
@@ -158,8 +163,8 @@ export function searchIntroText(protection: ProtectionChoices | null): string {
   const never = [...kinds, 'photos of unknown status'];
   const listed = never.length === 1 ? never[0] : `${never.slice(0, -1).join(', ')} and ${never.at(-1)}`;
   return 'Describe what to search for (for example “meal prep boxes in plastic containers”, “printed documents”, “screenshots”). ' +
-    `The strongest matches are shown; ${listed} never appear. Click to select for the trash, Shift-click to select a range; ` +
-    'M finds more like the selected photos, L fewer.';
+    `The strongest matches are shown; ${listed} never appear. Click to select, Ctrl/Cmd-click to add or remove a photo, Shift-click to select a range. ` +
+    'H hides selected photos from these results; a new search shows them again. M finds more like the selected photos, L fewer. D asks before trashing.';
 }
 
 /** What a sweep did, in words: how many went to the trash queue, and how many were left out and why. */
@@ -202,12 +207,15 @@ export class SearchModel {
   private shown: SearchHit[] = [];
   private hidden = { protectedOrUnknown: 0, alreadyApproved: 0, lessLike: 0 };
   private readonly selected = new Set<string>();
+  /** Hidden only in this search, including refinements and Show more; never a saved decision. */
+  private readonly hiddenResults = new Set<string>();
+  private hasMore = false;
   private searching = false;
   private modelReady = false;
   /** The first text search is getting the AI model ready (it takes a while). */
   private loadingModel = false;
   private modelPercent: number | null = null;
-  private confirming = false;
+  private confirming: 'trash' | 'hide' | null = null;
   private notice: Notice | null = null;
   private sequence = 0;
   private resultsVersion = 0;
@@ -274,7 +282,7 @@ export class SearchModel {
   searchText(): void {
     const text = this.queryText.trim();
     if (text === '') return;
-    void this.run({ text, textVector: null, more: [], less: [] });
+    void this.run({ text, textVector: null, more: [], less: [] }, { resetHidden: true });
   }
 
   /** "Search more like these" from Duplicates: a new search by these example photos. */
@@ -282,7 +290,7 @@ export class SearchModel {
     if (this.searching) return this.sayAndPublish('A search is still running. Try again when it has finished.', 'caution');
     this.queryText = '';
     this.say(`Searching for photos like the ${count(mediaKeys.length, 'photo', 'photos')} from the duplicate group.`, 'neutral');
-    void this.run({ text: null, textVector: null, more: [...mediaKeys], less: [] });
+    void this.run({ text: null, textVector: null, more: [...mediaKeys], less: [] }, { resetHidden: true });
   }
 
   /** M / L: the selected photos become examples to find more of, or fewer of; the search runs again. */
@@ -294,9 +302,8 @@ export class SearchModel {
       ? { ...base, more: [...new Set([...base.more, ...keys])], less: base.less.filter((k) => !this.selected.has(k)) }
       : { ...base, less: [...new Set([...base.less, ...keys])], more: base.more.filter((k) => !this.selected.has(k)) };
     if (next.text === null && next.more.length === 0) return this.sayAndPublish('“Less like these” needs something to search for: a description or photos to find more of.', 'caution');
-    // The photos to find more of are usually ones to trash too, so they stay selected; those to find
-    // fewer of were only examples.
-    void this.run(next, kind === 'more');
+    // Keep the selection for more-like refinements; the less-like examples are no longer selected.
+    void this.run(next, { keepSelection: kind === 'more' });
   }
 
   /** The × on an example: it no longer counts; the search runs again (unless nothing is left to look for). */
@@ -307,6 +314,9 @@ export class SearchModel {
       this.query = next;
       this.ranked = [];
       this.shown = [];
+      this.hasMore = false;
+      this.selected.clear();
+      this.confirming = null;
       this.resetFocus();
       return this.publish();
     }
@@ -322,7 +332,9 @@ export class SearchModel {
     this.shown = [];
     this.hidden = { protectedOrUnknown: 0, alreadyApproved: 0, lessLike: 0 };
     this.selected.clear();
-    this.confirming = false;
+    this.hiddenResults.clear();
+    this.hasMore = false;
+    this.confirming = null;
     this.resetFocus();
     this.resultsVersion++;
     this.publish();
@@ -339,7 +351,7 @@ export class SearchModel {
   }
 
   /** Runs [query]; [keepSelection]: the selected photos still among the results stay selected. */
-  private async run(query: Query, keepSelection = false): Promise<void> {
+  private async run(query: Query, { keepSelection = false, resetHidden = false } = {}): Promise<void> {
     if (this.searching) return;
     this.searching = true;
     this.notice = this.notice?.tone === 'neutral' ? this.notice : null;
@@ -353,6 +365,9 @@ export class SearchModel {
         this.query = query;
         this.ranked = [];
         this.shown = [];
+        this.hasMore = false;
+        this.selected.clear();
+        this.confirming = null;
         return;
       }
       let textVector = query.textVector;
@@ -366,10 +381,11 @@ export class SearchModel {
         this.modelReady = true;
       }
       this.query = { ...query, textVector };
+      if (resetHidden) this.hiddenResults.clear();
       this.limit = PAGE;
       this.rank();
       this.keepSelectedResults(keepSelection);
-      this.confirming = false;
+      this.confirming = null;
       this.resetFocus();
       this.resultsVersion++;
     } catch (error) {
@@ -383,7 +399,7 @@ export class SearchModel {
   }
 
   /**
-   * After a new search: what is selected for the trash is only ever among the results on screen, so a
+   * After a new search: what is selected is only ever among the results on screen, so a
    * selected photo no longer among them is no longer selected (and the user is told).
    */
   private keepSelectedResults(keep: boolean): void {
@@ -406,8 +422,10 @@ export class SearchModel {
     if (query.textVector === null && more.length === 0) {
       throw new Error('None of the chosen photos has been analysed yet. Check for new photos on the Scan tab first.');
     }
-    const result = rankSearch([...library.photos.values()], { text: query.textVector, more, less }, this.limit);
+    const candidates = [...library.photos.values()].filter((photo) => !this.hiddenResults.has(photo.mediaKey));
+    const result = rankSearch(candidates, { text: query.textVector, more, less }, this.limit);
     this.ranked = result.hits;
+    this.hasMore = result.hits.length >= this.limit;
     this.hidden = { protectedOrUnknown: result.protectedOrUnknownHidden, alreadyApproved: result.alreadyApprovedHidden, lessLike: result.lessLikeHidden };
     this.applySort();
   }
@@ -515,22 +533,28 @@ export class SearchModel {
   }
 
   /**
-   * A click: focuses the photo and switches it. With Shift, selects everything from the outlined photo
-   * (or the start of the outlined range) to this one, and outlines them all, so Space switches them together.
+   * A click selects just this photo. Ctrl/Cmd-click toggles it without changing other selections.
+   * Shift selects the range from the outlined photo; Ctrl/Cmd with Shift adds the range.
    */
-  tileClicked(index: number, shift: boolean): void {
+  tileClicked(index: number, shift: boolean, additive = false): void {
     if (index < 0 || index >= this.shown.length) return;
     if (index !== this.focusedIndex || this.allFocused || this.rangeStart !== null || shift) this.focusPulse++;
     if (shift && !this.allFocused) {
       const start = this.rangeStart ?? this.focusedIndex;
+      if (!additive) this.selected.clear();
       for (const i of this.rangeIndices(start, index)) this.selected.add(this.shown[i]!.mediaKey);
       this.rangeStart = start;
     } else {
-      this.toggle(this.shown[index]!.mediaKey);
+      if (additive) this.toggle(this.shown[index]!.mediaKey);
+      else {
+        this.selected.clear();
+        this.selected.add(this.shown[index]!.mediaKey);
+      }
       this.rangeStart = null;
     }
     this.focusedIndex = index;
     this.allFocused = false;
+    this.confirming = null;
     this.publish();
   }
 
@@ -559,15 +583,63 @@ export class SearchModel {
       if (all) this.selected.delete(key);
       else this.selected.add(key);
     }
+    this.confirming = null;
     this.publish();
   }
 
-  /** A: outline every result; A again goes back to the single outline. */
+  /** A: select and outline every result; A again clears the selection. */
   focusAll(): void {
     if (!this.resultsOrSay()) return;
     this.allFocused = !this.allFocused;
+    this.selected.clear();
+    if (this.allFocused) for (const hit of this.shown) this.selected.add(hit.mediaKey);
     this.rangeStart = null;
+    this.confirming = null;
     this.focusPulse++;
+    this.publish();
+  }
+
+  // --- hiding results ---
+
+  /** H / Hide from results: one selected photo at once, several only after confirmation. */
+  hideSelected(): void {
+    if (this.searching) return;
+    if (this.selected.size === 0) return this.sayAndPublish('Select photos to hide from these results first.', 'caution');
+    if (this.selected.size === 1) return this.hideResults([...this.selected]);
+    if (this.viewerIndex !== null) this.viewerClose();
+    this.confirming = 'hide';
+    this.publish();
+  }
+
+  /** The × on a result hides only that photo, whether selected or not. */
+  hideResult(mediaKey: string): void {
+    if (this.searching || !this.shown.some((hit) => hit.mediaKey === mediaKey)) return;
+    this.hideResults([mediaKey]);
+  }
+
+  private hideResults(keys: string[]): void {
+    const focusedKey = this.shown[this.focusedIndex]?.mediaKey;
+    const viewerKey = this.viewerIndex === null ? null : this.shown[this.viewerIndex]?.mediaKey;
+    for (const key of keys) {
+      this.hiddenResults.add(key);
+      this.selected.delete(key);
+    }
+    this.ranked = this.ranked.filter((hit) => !this.hiddenResults.has(hit.mediaKey));
+    this.shown = this.shown.filter((hit) => !this.hiddenResults.has(hit.mediaKey));
+    const remainingIndex = (key: string | undefined, previous: number) => {
+      const kept = this.shown.findIndex((hit) => hit.mediaKey === key);
+      return kept >= 0 ? kept : Math.min(previous, Math.max(0, this.shown.length - 1));
+    };
+    this.focusedIndex = remainingIndex(focusedKey, this.focusedIndex);
+    if (this.viewerIndex !== null) {
+      this.viewerIndex = this.shown.length === 0 ? null : remainingIndex(viewerKey ?? undefined, this.viewerIndex);
+      if (this.viewerIndex !== null) this.loadLarge();
+    }
+    this.rangeStart = null;
+    this.allFocused = false;
+    this.confirming = null;
+    this.focusPulse++;
+    this.say(`Hidden ${count(keys.length, 'photo', 'photos')} from these results. Nothing was trashed. A new search shows them again.`, 'neutral');
     this.publish();
   }
 
@@ -575,15 +647,16 @@ export class SearchModel {
 
   /** D: asks to confirm moving the selection to the trash. */
   approve(): void {
-    if (this.selected.size === 0) return this.sayAndPublish('Nothing is selected for the trash.', 'caution');
-    if (this.confirming) return this.sayAndPublish('Press Enter to move them to the trash, or Esc to cancel.', 'caution');
-    this.confirming = true;
+    if (this.selected.size === 0) return this.sayAndPublish('Select photos to trash first.', 'caution');
+    if (this.confirming === 'trash') return this.sayAndPublish('Press Enter to move them to the trash, or Esc to cancel.', 'caution');
+    this.confirming = 'trash';
     this.publish();
   }
 
   /** Enter: confirms while asking; otherwise views the outlined photo large. */
   enter(): void {
-    if (this.confirming) return void this.confirm();
+    if (this.confirming === 'hide') return this.hideResults([...this.selected]);
+    if (this.confirming === 'trash') return void this.confirm();
     if (!this.resultsOrSay()) return;
     this.openViewer(this.focusedIndex);
   }
@@ -591,13 +664,13 @@ export class SearchModel {
   /** Esc: cancels the question. */
   cancel(): void {
     if (!this.confirming) return;
-    this.confirming = false;
+    this.confirming = null;
     this.publish();
   }
 
   private async confirm(): Promise<void> {
     const keys = [...this.selected];
-    this.confirming = false;
+    this.confirming = null;
     let result: SweepResult;
     try {
       result = await this.deps.sweep(keys);
@@ -681,6 +754,7 @@ export class SearchModel {
 
   openViewer(index: number): void {
     if (index < 0 || index >= this.shown.length) return;
+    this.confirming = null;
     this.viewerIndex = index;
     this.loadLarge();
     this.publish();
@@ -705,6 +779,7 @@ export class SearchModel {
   viewerToggle(): void {
     if (this.viewerIndex === null) return;
     this.toggle(this.shown[this.viewerIndex]!.mediaKey);
+    this.confirming = null;
     this.publish();
   }
 
@@ -737,6 +812,7 @@ export class SearchModel {
     const photos = this.library?.photos;
     const caption = (h: SearchHit) => `${photoDay(photos!.get(h.mediaKey)!.takenAtMs)} · match #${h.rank}`;
     const hiddenParts = [
+      ...(this.hiddenResults.size > 0 ? [`${count(this.hiddenResults.size, 'photo', 'photos')} hidden from these results`] : []),
       ...(this.hidden.protectedOrUnknown > 0 ? [`${count(this.hidden.protectedOrUnknown, 'protected or unknown photo', 'protected or unknown photos')} hidden`] : []),
       ...(this.hidden.alreadyApproved > 0 ? [`${n(this.hidden.alreadyApproved)} already in the trash queue hidden`] : []),
       ...(this.hidden.lessLike > 0 ? [`${n(this.hidden.lessLike)} more like the unwanted examples hidden`] : []),
@@ -752,7 +828,7 @@ export class SearchModel {
         : this.modelPercent !== null ? `Searching… downloading the AI model (once): ${this.modelPercent}%`
           : this.loadingModel ? 'Searching… the first search also gets the AI model ready on the graphics card (about 10–20 s).'
             : 'Searching…',
-      resultText: this.query && !this.library?.blocked ? `${count(this.shown.length, 'best match', 'best matches')} · ${n(this.selected.size)} selected for the trash` : null,
+      resultText: this.query && !this.library?.blocked ? `${count(this.shown.length, 'best match', 'best matches')} · ${n(this.selected.size)} selected` : null,
       hiddenText: this.query && hiddenParts.length > 0 ? hiddenParts.join(' · ') : null,
       blockedText: this.library?.blocked ? BLOCKED_TEXT[this.library.blocked] : null,
       sort: this.sort,
@@ -774,10 +850,16 @@ export class SearchModel {
       })),
       resultsVersion: this.resultsVersion,
       focusPulse: this.focusPulse,
-      showMoreVisible: this.ranked.length >= this.limit,
-      confirmText: this.confirming
-        ? `Move ${count(this.selected.size, 'photo', 'photos')} to the trash? They go to Google Photos' trash, where they stay for 60 days.`
-        : null,
+      showMoreVisible: this.hasMore,
+      canHideSelected: this.selected.size > 0 && !this.searching,
+      confirmKind: this.confirming,
+      confirmTitle: this.confirming === 'hide' ? 'Hide from results?' : 'Move to the trash?',
+      confirmButtonText: this.confirming === 'hide' ? 'Hide from results' : 'Move to trash',
+      confirmText: this.confirming === 'hide'
+        ? `Hide ${count(this.selected.size, 'selected photo', 'selected photos')} from these results? Nothing will be trashed. A new search will show them again.`
+        : this.confirming === 'trash'
+          ? `Move ${count(this.selected.size, 'photo', 'photos')} to the trash? They go to Google Photos' trash, where they stay for 60 days.`
+          : null,
       notice: this.notice,
       viewer: this.viewerIndex === null ? null : this.viewerView(this.viewerIndex, caption),
     };
@@ -793,8 +875,9 @@ export class SearchModel {
       loading: large === null || large === undefined,
       statusText: failed ? 'The large preview could not be loaded; showing the thumbnail.' : large ? null : 'Loading the large preview…',
       infoText: `${index + 1} of ${n(this.shown.length)} · ${caption(hit)}`,
-      selectionText: selected ? 'Selected for the trash' : 'Kept (not selected)',
-      tone: selected ? 'negative' : 'positive',
+      selectionText: selected ? 'Selected' : 'Not selected',
+      toggleText: 'Toggle selection',
+      tone: 'neutral',
       link: `https://photos.google.com/photo/${hit.mediaKey}`,
       ...this.rotations.of(hit.mediaKey),
     };

@@ -130,11 +130,26 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
 2. Select a few → **M** (more like these): they show as + examples and the results change.
    **L** (less like these) shows − examples and drops look-alikes. Removing an example works.
    **Start over** clears everything.
+   A plain click selects just one photo (clicking it again keeps it selected); **Ctrl/Cmd-click**
+   adds or removes a photo, **Shift-click** selects a range. **A** selects all; **Space** toggles
+   the outlined photos' selection. Selection has a purple border and a SELECTED badge; nothing
+   is marked for the trash until **D** and confirmation.
 3. **D** asks to confirm; **Enter** moves them to the trash queue, **Esc** cancels.
    **Z** undoes it.
 4. From Duplicates, **Search more like these** opens Search with that group as examples.
 5. **M** keeps the selected photos selected. **−** / **+** and the viewer's rotate work as in
    Duplicates (section 4, items 8 and 9).
+6. **Hide from results** / **H**: one selected photo disappears immediately; with several selected,
+   a question gives the count and says nothing will be trashed. **Esc** / **Cancel** keeps them;
+   **Enter** / **Hide from results** confirms. Each photo's top-right **×** hides just that result
+   immediately, leaving other selections alone. The trash queue and Google Photos stay unchanged.
+   Sorting, **Show more**, More/Less like refinements, and switching tabs keep those photos hidden.
+   A fresh **Search**, **Search more like these** from Duplicates, or **Start over** brings them back.
+7. In Search's large viewer, selection says **Selected** / **Not selected**, and **Space** toggles
+   selection. **H** hides one selection immediately and keeps a remaining photo in the viewer;
+   several selections close the viewer to ask for confirmation. Hiding all results leaves an empty
+   grid without an error. **H** does nothing while typing in the search field or while another tab
+   is active; **Delete** and **Backspace** never hide or trash results.
 
 ## 5b. Real trashing (Google Photos changes: start small)
 

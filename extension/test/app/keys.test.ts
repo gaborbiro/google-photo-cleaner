@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gridKey, HELD_STEP_MS, HeldArrow, HOLD_DELAY_MS, repeatsWhenHeld, searchKey, viewerKey, type KeyPress } from '../../src/app/duplicates/keys';
+import { gridKey, HELD_STEP_MS, HeldArrow, HOLD_DELAY_MS, repeatsWhenHeld, searchKey, searchViewerKey, viewerKey, type KeyPress } from '../../src/app/duplicates/keys';
 
 const press = (key: string, opts: Partial<KeyPress> = {}): KeyPress => ({ key, repeat: false, ctrlKey: false, altKey: false, metaKey: false, inTextField: false, ...opts });
 
@@ -93,5 +93,20 @@ describe('Duplicates keys', () => {
     expect(viewerKey(press('r', { repeat: true }))).toEqual({ kind: 'swallow' });
     expect(viewerKey(press('d'))).toEqual({ kind: 'swallow' });
     expect(viewerKey(press('Enter'))).toEqual({ kind: 'swallow' });
+  });
+
+  it('H hides Search results once, except while typing or using a browser shortcut; Delete does nothing', () => {
+    for (const map of [searchKey, searchViewerKey]) {
+      expect(map(press('h'))).toEqual({ kind: 'act', action: 'hide' });
+      expect(map(press('H'))).toEqual({ kind: 'act', action: 'hide' });
+      expect(map(press('h', { repeat: true }))).toEqual({ kind: 'swallow' });
+      for (const modifier of ['ctrlKey', 'altKey', 'metaKey', 'inTextField'] as const) {
+        expect(map(press('h', { [modifier]: true }))).toEqual({ kind: 'ignore' });
+      }
+    }
+    expect(searchKey(press('Delete'))).toEqual({ kind: 'ignore' });
+    expect(searchKey(press('Backspace'))).toEqual({ kind: 'ignore' });
+    expect(gridKey(press('h'))).toEqual({ kind: 'ignore' });
+    expect(viewerKey(press('h'))).toEqual({ kind: 'swallow' });
   });
 });

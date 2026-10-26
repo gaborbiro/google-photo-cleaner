@@ -260,6 +260,13 @@ async function duplicatesShown() {
   return root;
 }
 
+async function searchShown() {
+  const root = await duplicatesShown();
+  await click(root, 'Search more like these');
+  await vi.waitFor(() => expect(searchTiles(root).length).toBeGreaterThanOrEqual(3), { timeout: 3_000 });
+  return root;
+}
+
 describe('clicks and keys reach what they should', () => {
   it('Duplicates: arrows move the focus; Space and a click toggle a photo; Enter, arrows and Esc work the viewer', async () => {
     const root = await duplicatesShown();
@@ -341,10 +348,10 @@ describe('clicks and keys reach what they should', () => {
 
     press('d', root.querySelector('input[type="search"]')!);
     // A later change drawn on screen means the key press above was handled by then.
-    searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.click();
+    searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
     await vi.waitFor(() => expect(selectedCount(root)).toBe(2));
     expect(root.textContent).not.toContain('to the trash?');
-    searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.click();
+    searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
     await vi.waitFor(() => expect(selectedCount(root)).toBe(3));
 
     press('d');
@@ -373,9 +380,108 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
     const before = root.querySelectorAll('.search .examples').length;
     press('m');
-    await shows(root, '1 selected for the trash');
+    await shows(root, '1 selected');
     expect(root.querySelectorAll('.search .examples').length).toBe(before);
     expect(selectedCount(root)).toBe(1);
+  });
+
+  it('Search: clicks select one, Ctrl/Cmd-click toggles individuals, and Shift-click selects a range without trash decisions', async () => {
+    const root = await searchShown();
+    const image = (index: number) => searchTiles(root)[index]!.querySelector<HTMLElement>('.search-tile-image')!;
+    image(0).click();
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
+    image(0).click();
+    image(1).dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(2));
+    image(0).dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
+    expect(searchTiles(root)[1]!.classList.contains('selected')).toBe(true);
+    image(2).click();
+    await vi.waitFor(() => expect(searchTiles(root)[2]!.classList.contains('selected')).toBe(true));
+    expect(selectedCount(root)).toBe(1);
+    image(0).dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(3));
+    expect(root.querySelector('.search [role="alertdialog"]')).toBeNull();
+    expect(await decisions()).toEqual([]);
+  });
+
+  it('Search: the Hide button and H confirm multiple selections; Cancel keeps them, Enter hides them without trashing', async () => {
+    const root = await searchShown();
+    const before = searchTiles(root).length;
+    searchTiles(root)[0]!.querySelector<HTMLElement>('.search-tile-image')!.click();
+    searchTiles(root)[1]!.querySelector<HTMLElement>('.search-tile-image')!.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(2));
+    press('h', root.querySelector('input[type="search"]')!);
+    press('Delete');
+    await click(root, 'Oldest');
+    await vi.waitFor(() => expect(root.querySelector('.search button[aria-pressed="true"]')!.textContent).toBe('Oldest'));
+    expect(root.querySelector('.search [role="alertdialog"]')).toBeNull();
+    expect(searchTiles(root)).toHaveLength(before);
+    await click(root, 'H · Hide from results');
+    await shows(root, 'Hide 2 selected photos from these results?', 'Nothing will be trashed.');
+    expect(root.querySelector('.search [role="alertdialog"]')!.getAttribute('aria-label')).toBe('Hide from results?');
+    expect(searchTiles(root)).toHaveLength(before);
+    await click(root, 'Esc · Cancel');
+    await vi.waitFor(() => expect(root.querySelector('.search [role="alertdialog"]')).toBeNull());
+    press('H');
+    await shows(root, 'Hide 2 selected photos from these results?');
+    press('Enter');
+    await vi.waitFor(() => expect(searchTiles(root)).toHaveLength(before - 2));
+    expect(selectedCount(root)).toBe(0);
+    expect(root.querySelector('.search [role="alertdialog"]')).toBeNull();
+    expect(await decisions()).toEqual([]);
+    expect(google.trash.size).toBe(0);
+  });
+
+  it('Search: the × hides just its result immediately, keeping other selections; H hides a single selection immediately', async () => {
+    const root = await searchShown();
+    const before = searchTiles(root).length;
+    const selected = searchTiles(root)[0]!;
+    selected.querySelector<HTMLElement>('.search-tile-image')!.click();
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
+    searchTiles(root)[1]!.querySelector<HTMLButtonElement>('[aria-label="Hide this result"]')!.click();
+    await vi.waitFor(() => expect(searchTiles(root)).toHaveLength(before - 1));
+    expect(selected.classList.contains('selected')).toBe(true);
+    expect(selectedCount(root)).toBe(1);
+    expect(root.querySelector('.search [role="alertdialog"]')).toBeNull();
+    expect(root.querySelector('.viewer')).toBeNull();
+    press('h');
+    await vi.waitFor(() => expect(searchTiles(root)).toHaveLength(before - 2));
+    expect(selectedCount(root)).toBe(0);
+    expect(root.querySelector('.search [role="alertdialog"]')).toBeNull();
+    expect(await decisions()).toEqual([]);
+    expect(google.trash.size).toBe(0);
+  });
+
+  it('Search: H works in the viewer, and hiding all results asks first and closes it safely', async () => {
+    const root = await searchShown();
+    const before = searchTiles(root).length;
+    searchTiles(root)[0]!.querySelector<HTMLElement>('.search-tile-image')!.click();
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
+    press('Enter');
+    await shows(root, 'Toggle selection');
+    expect(root.querySelector('.viewer-info strong')!.textContent).toBe('Selected');
+    press('h');
+    await vi.waitFor(() => expect(searchTiles(root)).toHaveLength(before - 1));
+    expect(root.querySelector('.viewer')).not.toBeNull();
+    press('Escape');
+    await vi.waitFor(() => expect(root.querySelector('.viewer')).toBeNull());
+    await click(root, 'A · Select all');
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(before - 1));
+    press('Enter');
+    await vi.waitFor(() => expect(root.querySelector('.viewer')).not.toBeNull());
+    press('h');
+    await vi.waitFor(() => expect(root.querySelector('.viewer')).toBeNull());
+    await shows(root, `Hide ${before - 1} selected photos from these results?`);
+    press('Escape');
+    await vi.waitFor(() => expect(root.querySelector('.search [role="alertdialog"]')).toBeNull());
+    press('h');
+    await shows(root, `Hide ${before - 1} selected photos from these results?`);
+    await click(root, 'Enter · Hide from results');
+    await vi.waitFor(() => expect(searchTiles(root)).toHaveLength(0));
+    expect(root.querySelector('.viewer')).toBeNull();
+    expect(await decisions()).toEqual([]);
+    expect(google.trash.size).toBe(0);
   });
 
   it('Duplicates and Search: the − and + buttons and the - and + keys change the photo size, each tab its own', async () => {

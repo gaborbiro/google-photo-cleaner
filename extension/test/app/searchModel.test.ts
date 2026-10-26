@@ -76,10 +76,83 @@ async function searched(text = 'boxes', fakes = new Fakes()) {
 const keys = (model: SearchModel) => model.getView().tiles.map((t) => t.mediaKey);
 
 describe('Search & sweep', () => {
+  it('hiding multiple selected results asks first, cancels, then hides without a trash decision', async () => {
+    const { model, view, fakes } = await searched();
+    const changed = vi.fn();
+    model.onDecisionsChanged(changed);
+    model.tileClicked(0, false);
+    model.tileClicked(1, true);
+    model.hideSelected();
+    expect(keys(model)).toHaveLength(4);
+    expect(view()).toMatchObject({ confirmKind: 'hide', confirmText: expect.stringContaining('Hide 2 selected photos') });
+    model.cancel();
+    expect(view().confirmText).toBeNull();
+    expect(keys(model)).toHaveLength(4);
+    model.hideSelected();
+    model.enter();
+    expect(keys(model)).toEqual(['tub', 'cat']);
+    expect(view()).toMatchObject({ resultText: '2 best matches · 0 selected', confirmText: null });
+    expect(fakes.swept).toEqual([]);
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('hiding one result is immediate, preserves other selections, and never returns on sort or refinement', async () => {
+    const { model, view, fakes } = await searched();
+    model.tileClicked(2, false);
+    model.hideResult('box1');
+    expect(view().confirmText).toBeNull();
+    expect(view().tiles.filter((t) => t.selected).map((t) => t.mediaKey)).toEqual(['tub']);
+    expect(view().tiles.find((t) => t.current)?.mediaKey).toBe('tub');
+    model.setSort('oldest');
+    model.addExamples('more');
+    await settle();
+    expect(keys(model)).not.toContain('box1');
+    model.hideSelected();
+    expect(keys(model)).not.toContain('tub');
+    expect(view().confirmText).toBeNull();
+    expect(fakes.swept).toEqual([]);
+    model.searchText();
+    await settle();
+    expect(keys(model)).toContain('box1');
+    expect(keys(model)).toContain('tub');
+  });
+
+  it('hiding keeps Show more available and never brings hidden results back', async () => {
+    const fakes = new Fakes();
+    fakes.library.photos = new Map(Array.from({ length: 305 }, (_, i) => {
+      const p = photo(`p${i}`, 0, 1);
+      return [p.mediaKey, p];
+    }));
+    const { model, view } = await searched('boxes', fakes);
+    model.hideResult('p0');
+    expect(view().showMoreVisible).toBe(true);
+    model.showMore();
+    expect(keys(model)).toHaveLength(304);
+    expect(keys(model)).not.toContain('p0');
+    model.startOver();
+    model.setQueryText('boxes');
+    model.searchText();
+    await settle();
+    expect(keys(model)).toContain('p0');
+  });
+
+  it('hiding every selected result cancels a pending trash confirmation and leaves safe empty results', async () => {
+    const { model, view, fakes } = await searched();
+    model.focusAll();
+    model.approve();
+    model.hideSelected();
+    expect(view().confirmKind).toBe('hide');
+    model.enter();
+    expect(keys(model)).toEqual([]);
+    expect(view()).toMatchObject({ viewer: null, confirmText: null, resultText: '0 best matches · 0 selected' });
+    model.enter();
+    expect(fakes.swept).toEqual([]);
+  });
+
   it('shows the best matches with the first outlined; protected photos never appear, only counted', async () => {
     const { model, view } = await searched();
     expect(keys(model)).toEqual(['box1', 'box2', 'tub', 'cat']);
-    expect(view()).toMatchObject({ resultText: '4 best matches · 0 selected for the trash', hiddenText: '1 protected or unknown photo hidden', searching: false, progressText: null, showMoreVisible: false });
+    expect(view()).toMatchObject({ resultText: '4 best matches · 0 selected', hiddenText: '1 protected or unknown photo hidden', searching: false, progressText: null, showMoreVisible: false });
     expect(view().tiles[0]).toMatchObject({ focused: true, current: true, caption: '3 Oct 2026 · match #1', link: 'https://photos.google.com/photo/box1' });
   });
 
@@ -113,8 +186,8 @@ describe('Search & sweep', () => {
     expect(view().more.map((e) => e.mediaKey)).toEqual(['cat']);
     // Photos to find more of are usually ones to trash too: they stay selected.
     expect(view().tiles.filter((t) => t.selected).map((t) => t.mediaKey)).toEqual(['cat']);
-    expect(view().resultText).toBe('4 best matches · 1 selected for the trash');
-    model.tileClicked(keys(model).indexOf('cat'), false); // cat no longer for the trash
+    expect(view().resultText).toBe('4 best matches · 1 selected');
+    model.tileClicked(keys(model).indexOf('cat'), false, true); // Ctrl-click removes cat from the selection
     const tub = keys(model).indexOf('tub');
     model.tileClicked(tub, false);
     model.addExamples('less');
@@ -131,7 +204,7 @@ describe('Search & sweep', () => {
   it('more like the selected: the selection stays, except photos no longer among the results, which the user is told of', async () => {
     const { model, view, fakes } = await searched();
     model.tileClicked(keys(model).indexOf('box2'), false);
-    model.tileClicked(keys(model).indexOf('tub'), false);
+    model.tileClicked(keys(model).indexOf('tub'), false, true);
     // Meanwhile tub became a favourite: the next search reads the library again and leaves it out.
     fakes.library.photos.get('tub')!.eligible = false;
     model.libraryChanged();
@@ -208,10 +281,10 @@ describe('Search & sweep', () => {
   it('D asks first; Enter moves exactly the selection to the trash queue and out of the results', async () => {
     const { model, fakes, view } = await searched();
     model.approve();
-    expect(view().notice!.text).toBe('Nothing is selected for the trash.');
+    expect(view().notice!.text).toBe('Select photos to trash first.');
     model.tileClicked(0, false);
     model.tileClicked(2, true); // shift: box1 to tub
-    expect(view().resultText).toBe('4 best matches · 3 selected for the trash');
+    expect(view().resultText).toBe('4 best matches · 3 selected');
     model.approve();
     expect(view().confirmText).toBe("Move 3 photos to the trash? They go to Google Photos' trash, where they stay for 60 days.");
     model.cancel();
@@ -262,7 +335,7 @@ describe('Search & sweep', () => {
     expect(fakes.swept).toEqual([['box1', 'tub']]);
     expect(keys(model)).toEqual(['cat']);
     expect(view().notice).toMatchObject({ tone: 'caution', text: 'Moved 2 photos to the trash queue. Z undoes it. 1 photo was left out: it is protected now, gone from the library or already in the trash queue.' });
-    expect(view().resultText).toBe('1 best match · 0 selected for the trash');
+    expect(view().resultText).toBe('1 best match · 0 selected');
     expect(view().hiddenText).toContain('2 already in the trash queue hidden');
   });
 
@@ -292,7 +365,7 @@ describe('Search & sweep', () => {
     model.enter();
     await settle();
     expect(view().notice).toMatchObject({ tone: 'negative', text: '1 selected photo is no longer eligible or already in the trash queue; search again' });
-    expect(view().resultText).toBe('4 best matches · 1 selected for the trash');
+    expect(view().resultText).toBe('4 best matches · 1 selected');
   });
 
   it("the grid's measured width sets how far up and down move; a hidden grid keeps the last width", async () => {
@@ -348,26 +421,46 @@ describe('Search & sweep', () => {
     expect(selected()).toEqual([0, 1, 2]);
     model.tileClicked(1, false); // a plain click: one photo again
     expect(outlined()).toEqual([1]);
-    expect(selected()).toEqual([0, 2]);
+    expect(selected()).toEqual([1]);
     model.focusMove(1, 0);
     model.tileClicked(3, true); // from the photo the arrows moved to
     expect(outlined()).toEqual([2, 3]);
-    expect(selected()).toEqual([0, 2, 3]);
+    expect(selected()).toEqual([2, 3]);
     model.tileClicked(0, true); // the range keeps its start
     expect(outlined()).toEqual([0, 1, 2]);
-    expect(selected()).toEqual([0, 1, 2, 3]);
+    expect(selected()).toEqual([0, 1, 2]);
     model.focusMove(1, 0); // arrows go back to one photo
     expect(outlined()).toEqual([1]);
   });
 
-  it('A outlines every result; Space then marks them all, and again none', async () => {
+  it('A selects every result; Space clears and restores the selection', async () => {
     const { model, view } = await searched();
     model.focusAll();
-    expect(view().tiles.every((t) => t.focused && !t.current)).toBe(true);
+    expect(view().tiles.every((t) => t.focused && t.selected && !t.current)).toBe(true);
     model.toggleFocused();
-    expect(view().resultText).toBe('4 best matches · 4 selected for the trash');
+    expect(view().resultText).toBe('4 best matches · 0 selected');
     model.toggleFocused();
-    expect(view().resultText).toBe('4 best matches · 0 selected for the trash');
+    expect(view().resultText).toBe('4 best matches · 4 selected');
+    model.focusAll();
+    expect(view().resultText).toBe('4 best matches · 0 selected');
+  });
+
+  it('plain clicks select one; Ctrl/Cmd-click toggles without changing the other selections', async () => {
+    const { model, view, fakes } = await searched();
+    const selected = () => view().tiles.filter((t) => t.selected).map((t) => t.mediaKey);
+    model.tileClicked(0, false);
+    model.tileClicked(0, false);
+    expect(selected()).toEqual(['box1']);
+    model.tileClicked(2, false, true);
+    expect(selected()).toEqual(['box1', 'tub']);
+    model.tileClicked(0, false, true);
+    expect(selected()).toEqual(['tub']);
+    model.tileClicked(1, false);
+    expect(selected()).toEqual(['box2']);
+    model.tileClicked(3, true, true);
+    expect(selected()).toEqual(['box2', 'tub', 'cat']);
+    expect(view().confirmText).toBeNull();
+    expect(fakes.swept).toEqual([]);
   });
 
   it('arrows stay within rows and columns; a tap at the edge bounces, a slide into it just stops', async () => {
@@ -405,9 +498,9 @@ describe('Search & sweep', () => {
     const { model, view } = await searched();
     model.enter();
     await settle();
-    expect(view().viewer).toMatchObject({ infoText: '1 of 4 · 3 Oct 2026 · match #1', selectionText: 'Kept (not selected)', imageUrl: 'data:thumb-box1' });
+    expect(view().viewer).toMatchObject({ infoText: '1 of 4 · 3 Oct 2026 · match #1', selectionText: 'Not selected', imageUrl: 'data:thumb-box1' });
     model.viewerToggle();
-    expect(view().viewer).toMatchObject({ selectionText: 'Selected for the trash', tone: 'negative' });
+    expect(view().viewer).toMatchObject({ selectionText: 'Selected', tone: 'neutral' });
     model.viewerStep(2);
     model.viewerClose();
     expect(view().tiles.findIndex((t) => t.current)).toBe(2);
@@ -427,7 +520,7 @@ describe('Search & sweep', () => {
     model.viewerClose();
     model.enter();
     expect(view().viewer!.rotationDeg).toBe(270);
-    expect(view().resultText).toBe('4 best matches · 0 selected for the trash');
+    expect(view().resultText).toBe('4 best matches · 0 selected');
     expect(fakes.swept).toEqual([]);
   });
 

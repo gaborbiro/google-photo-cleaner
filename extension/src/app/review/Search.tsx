@@ -2,7 +2,7 @@
 // them to the trash queue. All state and texts come from SearchModel.
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { searchKey } from '../duplicates/keys';
+import { searchKey, searchViewerKey } from '../duplicates/keys';
 import { SORTS, type ExampleView, type SearchModel, type SearchTile } from '../search/searchModel';
 import { SizeButtons, tileSizeStyle, Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
 
@@ -21,9 +21,10 @@ function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: num
   }, [model, tile.mediaKey, tile.imageWanted]);
   return (
     <figure ref={ref} className={`search-tile${tile.selected ? ' selected' : ''}${tile.focused ? ' focused' : ''}`}>
-      <div className="search-tile-image" ref={image} onClick={(e) => model.tileClicked(index, e.shiftKey)}>
+      <div className="search-tile-image" ref={image} onClick={(e) => model.tileClicked(index, e.shiftKey, e.ctrlKey || e.metaKey)}>
         {tile.imageUrl ? <img src={tile.imageUrl} alt="" draggable={false} /> : <span className="muted small">{tile.error ?? '…'}</span>}
         <button className="expand" title="View large (Enter)" aria-label="View large" tabIndex={-1} onClick={(e) => { e.stopPropagation(); model.openViewer(index); }}>⤢</button>
+        <button className="hide-result" title="Hide this result (nothing is trashed)" aria-label="Hide this result" onClick={(e) => { e.stopPropagation(); model.hideResult(tile.mediaKey); }}>×</button>
       </div>
       <figcaption className="small"><a href={tile.link} target="_blank" rel="noreferrer" tabIndex={-1}>{tile.caption}</a></figcaption>
     </figure>
@@ -57,8 +58,10 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
     active,
     viewerOpen: view.viewer !== null,
     gridKey: searchKey,
+    viewerKey: searchViewerKey,
     onGrid: {
       approve: () => model.approve(), focusAll: () => model.focusAll(), toggle: () => model.toggleFocused(), enter: () => model.enter(),
+      hide: () => model.hideSelected(),
       cancel: () => model.cancel(), more: () => model.addExamples('more'), less: () => model.addExamples('less'), undo: () => model.undo(),
       smaller: () => model.resize(-1), larger: () => model.resize(1),
       left: (h) => model.focusMove(-1, 0, h), right: (h) => model.focusMove(1, 0, h), up: (h) => model.focusMove(0, -1, h), down: (h) => model.focusMove(0, 1, h),
@@ -66,6 +69,7 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
     onViewer: {
       close: () => model.viewerClose(), previous: () => model.viewerStep(-1), next: () => model.viewerStep(1), toggle: () => model.viewerToggle(),
       rotate: () => model.viewerRotate(1),
+      hide: () => model.hideSelected(),
     },
   });
 
@@ -129,18 +133,19 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
           )}
           <div className="buttons">
             <button tabIndex={-1} className="danger" onClick={() => model.approve()}><kbd>D</kbd> · Trash selected</button>
+            <button tabIndex={-1} disabled={!view.canHideSelected} onClick={() => model.hideSelected()}><kbd>H</kbd> · Hide from results</button>
             <button tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('more')}><kbd>M</kbd> · More like selected</button>
             <button tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('less')}><kbd>L</kbd> · Less like selected</button>
-            <button tabIndex={-1} onClick={() => model.focusAll()}><kbd>A</kbd> · Focus all</button>
-            <button tabIndex={-1} onClick={() => model.toggleFocused()}><kbd>Space</kbd> · Toggle trash</button>
+            <button tabIndex={-1} onClick={() => model.focusAll()}><kbd>A</kbd> · Select all</button>
+            <button tabIndex={-1} onClick={() => model.toggleFocused()}><kbd>Space</kbd> · Toggle selection</button>
             <button tabIndex={-1} onClick={() => model.undo()}><kbd>Z</kbd> · Undo</button>
             <SizeButtons canShrink={view.canShrink} canGrow={view.canGrow} onResize={(d) => model.resize(d)} />
           </div>
           {view.confirmText && (
-            <div className="confirm" role="alertdialog" aria-label="Move to the trash?">
+            <div className={`confirm${view.confirmKind === 'hide' ? ' confirm-hide' : ''}`} role="alertdialog" aria-label={view.confirmTitle}>
               <strong>{view.confirmText}</strong>
               <div className="buttons">
-                <button className="danger" onClick={() => model.enter()}><kbd>Enter</kbd> · Move to trash</button>
+                <button className={view.confirmKind === 'trash' ? 'danger' : 'primary'} onClick={() => model.enter()}><kbd>Enter</kbd> · {view.confirmButtonText}</button>
                 <button onClick={() => model.cancel()}><kbd>Esc</kbd> · Cancel</button>
               </div>
             </div>

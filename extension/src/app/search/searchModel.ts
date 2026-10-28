@@ -34,8 +34,13 @@ export interface LibraryPhoto {
   approved: boolean;
 }
 
+/** Why there is nothing to search. An old scan is not one: it is searched, only not swept. */
+export type SearchBlocked = Exclude<Blocked, 'SCAN_STALE'>;
+
 export interface SearchLibrary {
-  blocked: Blocked | null;
+  blocked: SearchBlocked | null;
+  /** The scan is more than a day old: its photos can be searched, but none can be trashed until it is checked again. */
+  scanOutOfDate: boolean;
   photos: Map<string, LibraryPhoto>;
   /** The account's protection choices: which kinds of photo never appear. */
   protection: ProtectionChoices;
@@ -78,9 +83,9 @@ export interface SearchTile {
   imageUrl: string | null;
   /** A thumbnail (or a sharper one, after the photos were made larger) is to be fetched once the tile is in view. */
   imageWanted: boolean;
+  /** Selected photos are the only ones outlined. */
   selected: boolean;
-  focused: boolean;
-  /** The one photo the keys act on (not when A outlines them all). */
+  /** The photo last clicked or moved to: kept in view and lifted on each click or arrow, but not outlined. */
   current: boolean;
   caption: string;
   link: string;
@@ -146,11 +151,13 @@ const THUMB_CACHE = 900;
 const FETCH_CONCURRENCY = 6;
 const VIEWER_PX = 1024;
 
-const BLOCKED_TEXT: Record<Blocked, string> = {
+const BLOCKED_TEXT: Record<SearchBlocked, string> = {
   NOT_SCANNED: 'The library has not been scanned yet. Start a scan on the Scan tab.',
   SCAN_UNFINISHED: 'The library scan is unfinished, so no photo can be trashed. Finish it on the Scan tab.',
-  SCAN_STALE: 'The library scan is more than a day old. Check for new photos on the Scan tab (about 2–3 minutes).',
 };
+const SCAN_OUT_OF_DATE_TEXT = 'The library scan is more than a day old. Searching works, but to trash photos, check for new photos on the Scan tab first (about 2–3 minutes).';
+/** Why a sweep refused while the scan is more than a day old (also D's answer before it asks). */
+export const SCAN_OUT_OF_DATE_SWEEP = 'Nothing was moved to the trash: the library scan is more than a day old. Check for new photos on the Scan tab, then try again.';
 
 /**
  * The explanation above the search field. Which photos never appear follows the account's protection
@@ -224,13 +231,13 @@ export class SearchModel {
   private sequence = 0;
   private resultsVersion = 0;
 
+  /** The photo last clicked or moved to with the arrows: where a Shift-click range starts and what Enter opens. Not drawn: only the selection is. */
   private focusedIndex = 0;
-  /** After a Shift-click: where the outlined range starts; it ends at [focusedIndex]. */
+  /** After a Shift-click: where the selected range starts; it ends at [focusedIndex]. */
   private rangeStart: number | null = null;
   private columns = 1;
   /** The width the grid last measured; the columns follow it and the photo size. */
   private gridWidthPx: number | null = null;
-  private allFocused = false;
   private focusPulse = 0;
   private readonly size: PhotoSize;
 
@@ -482,12 +489,11 @@ export class SearchModel {
     this.publish();
   }
 
-  // --- focus and selection (as in the Duplicates review) ---
+  // --- selection: one outline, as in a file manager ---
 
   private resetFocus(): void {
     this.focusedIndex = 0;
     this.rangeStart = null;
-    this.allFocused = false;
   }
 
   gridMeasured(columns: number): void {
@@ -533,34 +539,44 @@ export class SearchModel {
     return false;
   }
 
-  /** Arrows: within the row and the column; a tap at the edge bounces, a slide into it just stops. */
+  /**
+   * Arrows: the selection moves to the next photo within the row and the column, one photo at a time,
+   * as in a file manager. With nothing selected, the first press selects the photo last clicked (at
+   * first, the first result). A tap at the edge bounces, a slide into it just stops.
+   */
   focusMove(dx: number, dy: number, held = false): void {
     if (!this.resultsOrSay()) return;
     this.rangeStart = null;
-    if (this.allFocused) {
-      this.allFocused = false;
-    } else {
+    if (this.selected.size > 0) {
       const column = this.focusedIndex % this.columns;
       const target = this.focusedIndex + dx + dy * this.columns;
       if (column + dx < 0 || column + dx >= this.columns || target < 0 || target >= this.shown.length) {
         if (held) return;
+        this.selectOnly(this.focusedIndex);
         this.focusPulse++;
         return this.publish();
       }
       this.focusedIndex = target;
     }
+    this.selectOnly(this.focusedIndex);
     this.focusPulse++;
     this.publish();
   }
 
+  private selectOnly(index: number): void {
+    this.selected.clear();
+    this.selected.add(this.shown[index]!.mediaKey);
+    this.confirming = null;
+  }
+
   /**
-   * A click selects just this photo. Ctrl/Cmd-click toggles it without changing other selections.
-   * Shift selects the range from the outlined photo; Ctrl/Cmd with Shift adds the range.
+   * A click selects just this photo. Ctrl/Cmd-click adds or removes it without changing the others.
+   * Shift selects the range from the photo last clicked; Ctrl/Cmd with Shift adds the range.
    */
   tileClicked(index: number, shift: boolean, additive = false): void {
     if (index < 0 || index >= this.shown.length) return;
-    if (index !== this.focusedIndex || this.allFocused || this.rangeStart !== null || shift) this.focusPulse++;
-    if (shift && !this.allFocused) {
+    if (index !== this.focusedIndex || this.rangeStart !== null || shift) this.focusPulse++;
+    if (shift) {
       const start = this.rangeStart ?? this.focusedIndex;
       if (!additive) this.selected.clear();
       for (const i of this.rangeIndices(start, index)) this.selected.add(this.shown[i]!.mediaKey);
@@ -574,7 +590,6 @@ export class SearchModel {
       this.rangeStart = null;
     }
     this.focusedIndex = index;
-    this.allFocused = false;
     this.confirming = null;
     this.publish();
   }
@@ -584,39 +599,19 @@ export class SearchModel {
     return Array.from({ length: Math.abs(to - from) + 1 }, (_, i) => low + i);
   }
 
-  /** The outlined photos' places in the results: every result after A, the range after a Shift-click, or the one photo. */
-  private focusedIndices(): number[] {
-    if (this.allFocused) return this.shown.map((_, i) => i);
-    return this.rangeIndices(this.rangeStart ?? this.focusedIndex, this.focusedIndex);
-  }
-
   private toggle(mediaKey: string): void {
     if (this.selected.has(mediaKey)) this.selected.delete(mediaKey);
     else this.selected.add(mediaKey);
   }
 
-  /** Space: the outlined photos, every one of them (or none, when they all are). */
-  toggleFocused(): void {
+  /** A: select every result; when they all are already, clear the selection. */
+  selectAll(): void {
     if (!this.resultsOrSay()) return;
-    const outlined = this.focusedIndices().map((i) => this.shown[i]!.mediaKey);
-    const all = outlined.every((key) => this.selected.has(key));
-    for (const key of outlined) {
-      if (all) this.selected.delete(key);
-      else this.selected.add(key);
-    }
-    this.confirming = null;
-    this.publish();
-  }
-
-  /** A: select and outline every result; A again clears the selection. */
-  focusAll(): void {
-    if (!this.resultsOrSay()) return;
-    this.allFocused = !this.allFocused;
+    const all = this.shown.every((hit) => this.selected.has(hit.mediaKey));
     this.selected.clear();
-    if (this.allFocused) for (const hit of this.shown) this.selected.add(hit.mediaKey);
+    if (!all) for (const hit of this.shown) this.selected.add(hit.mediaKey);
     this.rangeStart = null;
     this.confirming = null;
-    this.focusPulse++;
     this.publish();
   }
 
@@ -657,7 +652,6 @@ export class SearchModel {
       if (this.viewerIndex !== null) this.loadLarge();
     }
     this.rangeStart = null;
-    this.allFocused = false;
     this.confirming = null;
     if (focusFeedback) this.focusPulse++;
     this.say(`Hidden ${count(keys.length, 'photo', 'photos')} from these results. Nothing was trashed. A new search shows them again.`, 'neutral');
@@ -669,6 +663,11 @@ export class SearchModel {
   /** D: asks to confirm moving the selection to the trash. */
   approve(): void {
     if (this.selected.size === 0) return this.sayAndPublish('Select photos to trash first.', 'caution');
+    // Once a new scan may have come in, the question is asked and the sweep checks the scan again.
+    if (this.library?.scanOutOfDate && !this.libraryStale) {
+      emitUsage({ name: 'feature_blocked', params: { feature: 'search', reason: 'stale_scan' } });
+      return this.sayAndPublish(SCAN_OUT_OF_DATE_SWEEP, 'caution');
+    }
     if (this.confirming === 'trash') return this.sayAndPublish('Press Enter to move them to the trash, or Esc to cancel.', 'caution');
     this.confirming = 'trash';
     emitUsage({ name: 'trash_confirmation', params: { action: 'shown' } });
@@ -798,7 +797,6 @@ export class SearchModel {
     if (this.viewerIndex === null) return;
     this.focusedIndex = this.viewerIndex;
     this.rangeStart = null;
-    this.allFocused = false;
     this.viewerIndex = null;
     this.publish();
   }
@@ -845,7 +843,6 @@ export class SearchModel {
       ...(this.hidden.lessLike > 0 ? [`${n(this.hidden.lessLike)} more like the unwanted examples hidden`] : []),
     ];
     const example = (mediaKey: string): ExampleView => ({ mediaKey, imageUrl: this.thumbs.get(mediaKey)?.url ?? null });
-    const outlined = new Set(this.focusedIndices());
     return {
       introText: searchIntroText(this.library?.protection ?? null),
       query: this.queryText,
@@ -857,7 +854,7 @@ export class SearchModel {
             : 'Searching…',
       resultText: this.query && !this.library?.blocked ? `${count(this.shown.length, 'best match', 'best matches')} · ${n(this.selected.size)} selected` : null,
       hiddenText: this.query && hiddenParts.length > 0 ? hiddenParts.join(' · ') : null,
-      blockedText: this.library?.blocked ? BLOCKED_TEXT[this.library.blocked] : null,
+      blockedText: this.library?.blocked ? BLOCKED_TEXT[this.library.blocked] : this.library?.scanOutOfDate ? SCAN_OUT_OF_DATE_TEXT : null,
       sort: this.sort,
       tilePx: this.size.current.tilePx,
       canShrink: this.size.canShrink,
@@ -869,8 +866,7 @@ export class SearchModel {
         imageUrl: this.thumbs.get(h.mediaKey)?.url ?? null,
         imageWanted: this.thumbWanted(h.mediaKey),
         selected: this.selected.has(h.mediaKey),
-        focused: outlined.has(index),
-        current: !this.allFocused && index === this.focusedIndex,
+        current: index === this.focusedIndex,
         caption: caption(h),
         link: `https://photos.google.com/photo/${h.mediaKey}`,
         error: this.thumbErrors.get(h.mediaKey) ?? null,

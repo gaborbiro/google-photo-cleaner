@@ -2,9 +2,9 @@
 // the desktop's ReviewViewModel behaviour.
 
 import { describe, expect, it, vi } from 'vitest';
-import { ACTION_FAILED, DuplicatesReview, type ReviewDeps } from '../../src/app/duplicates/reviewModel';
+import { ACTION_FAILED, DuplicatesReview, type LoadedQueue, type ReviewDeps } from '../../src/app/duplicates/reviewModel';
 import type { StoredDecision } from '../../src/app/duplicates/reviewStore';
-import type { DecisionKind, DuplicateGroup, GroupMember, ReviewQueue } from '../../src/app/duplicates/rules';
+import type { DecisionKind, DuplicateGroup, GroupMember } from '../../src/app/duplicates/rules';
 import { memorySizeMemory } from '../../src/app/shared/photoSize';
 import { ROTATED_TEXT } from '../../src/app/shared/viewRotation';
 import { SourceError } from '../../src/app/scan/source';
@@ -27,7 +27,8 @@ const g2 = () => group('g2', member('d', 'KEEPER'), member('e', 'PROPOSED'));
 
 class Fakes implements ReviewDeps {
   pending: DuplicateGroup[] = [g1(), g2()];
-  blocked: ReviewQueue['blocked'] = null;
+  blocked: LoadedQueue['blocked'] = null;
+  scanOutOfDate = false;
   notAnalysed = 0;
   decisions: StoredDecision[] = [];
   loads = 0;
@@ -43,12 +44,12 @@ class Fakes implements ReviewDeps {
     this.groupsLeftReported.push(count);
   }
 
-  async loadQueue(): Promise<ReviewQueue> {
+  async loadQueue(): Promise<LoadedQueue> {
     this.loads++;
     const decided = new Set(this.decisions.filter((d) => d.kind !== 'DEFERRED').map((d) => d.groupId));
     const pending = this.blocked ? [] : this.pending.filter((g) => !decided.has(g.id));
     return {
-      blocked: this.blocked, pending, deferredIds: [], totalGroups: this.pending.length, decidedGroups: decided.size,
+      blocked: this.blocked, scanOutOfDate: this.scanOutOfDate, pending, deferredIds: [], totalGroups: this.pending.length, decidedGroups: decided.size,
       analysedAtMs: null, photosAnalysed: 100, photosNotAnalysed: this.notAnalysed, settings: { threshold: 0.915, windowMs: 120_000 },
     };
   }
@@ -445,13 +446,39 @@ describe('the Duplicates review', () => {
 
   it('a blocked review says why, also when a key is pressed', async () => {
     const fakes = new Fakes();
-    fakes.blocked = 'SCAN_STALE';
+    fakes.blocked = 'SCAN_UNFINISHED';
     const { review, view } = await opened(fakes);
-    expect(view()).toMatchObject({ blockedText: 'The library scan is more than a day old. Check for new photos on the Scan tab: it re-reads the list of your photos (about 2–3 minutes) and only looks at new ones.', group: null, emptyText: null });
+    expect(view()).toMatchObject({ blockedText: 'The library scan is unfinished, so no photo can be proposed. Finish it on the Scan tab.', group: null, emptyText: null });
     // The reason takes the place of the counts, which mean nothing without a usable scan.
     expect(view()).toMatchObject({ groupsText: null });
     review.approve();
     expect(view().notice!.text).toBe(view().blockedText);
+  });
+
+  it('a scan more than a day old can be reviewed, kept and skipped, but D refuses to approve', async () => {
+    const fakes = new Fakes();
+    fakes.scanOutOfDate = true;
+    const { review, view } = await opened(fakes);
+    expect(view()).toMatchObject({
+      blockedText: 'The library scan is more than a day old. You can review the groups, but to trash photos, check for new photos on the Scan tab first: it re-reads the list of your photos (about 2–3 minutes) and only looks at new ones.',
+      groupsText: '2 groups (0 decided · 2 to go)',
+    });
+    expect(view().group!.selectionText).toBe('1 of 3 photos selected for the trash');
+    review.approve();
+    await settle();
+    expect(fakes.decisions).toEqual([]);
+    expect(view().notice).toMatchObject({ text: 'Nothing was moved to the trash: the library scan is more than a day old. Check for new photos on the Scan tab, then try again.', tone: 'caution' });
+    review.keep();
+    await settle();
+    expect(fakes.decisions.map((d) => [d.groupId, d.kind])).toEqual([['g1', 'KEPT']]);
+    // A fresh scan builds the groups again, and approving works.
+    fakes.scanOutOfDate = false;
+    review.show();
+    await settle();
+    expect(view().blockedText).toBeNull();
+    review.approve();
+    await settle();
+    expect(fakes.decisions[0]).toMatchObject({ groupId: 'g2', kind: 'APPROVED' });
   });
 
   it('says how many photos are not analysed yet, since their moments can come back with them', async () => {
@@ -472,7 +499,7 @@ describe('the Duplicates review', () => {
     expect(view().notAnalysedText).toBeNull();
     // While the review is blocked, the reason is what counts.
     fakes.notAnalysed = 5;
-    fakes.blocked = 'SCAN_STALE';
+    fakes.blocked = 'SCAN_UNFINISHED';
     review.show();
     await settle();
     expect(view().notAnalysedText).toBeNull();
@@ -513,7 +540,7 @@ describe('the Duplicates review', () => {
     expect(fakes.groupsLeftReported.at(-1)).toBe(2);
 
     const blocked = new Fakes();
-    blocked.blocked = 'SCAN_STALE';
+    blocked.blocked = 'SCAN_UNFINISHED';
     await opened(blocked);
     expect(blocked.groupsLeftReported).toEqual([]);
   });

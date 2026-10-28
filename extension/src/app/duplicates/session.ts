@@ -10,7 +10,7 @@ import { IndexedDbPreferences } from '../shared/preferences';
 import { browserSizeMemory } from '../shared/photoSize';
 import { previewDataUrl } from '../shared/previews';
 import { GoogleTrash, type RunPageOp } from './googleTrash';
-import type { ReviewDeps } from './reviewModel';
+import type { LoadedQueue, ReviewDeps } from './reviewModel';
 import { IndexedDbReviewStore } from './reviewStore';
 import { groupingSettings, reviewQueue, type AnalysedPhoto, type ReviewQueue } from './rules';
 import { processTrashQueue, type TrashQueueDeps, type TrashQueueStatus } from './trash';
@@ -38,7 +38,7 @@ export function duplicatesStores(factory: IDBFactory = indexedDB, run: RunPageOp
 let shared: DuplicatesStores | null = null;
 const sharedStores = () => (shared ??= duplicatesStores());
 
-async function loadQueue({ inventory, analysis, review, preferences }: DuplicatesStores, account: string, nowMs: number): Promise<ReviewQueue> {
+async function loadQueue({ inventory, analysis, review, preferences }: DuplicatesStores, account: string, nowMs: number): Promise<LoadedQueue> {
   const run = await inventory.latestRun(account);
   const snapshot = run ? await inventory.snapshot(run.id) : null;
   const settings = await analysis.settings(account);
@@ -57,7 +57,18 @@ async function loadQueue({ inventory, analysis, review, preferences }: Duplicate
     };
   });
   const decisions = (await review.activeDecisions(account)).map(({ id, groupId, kind, items, members, createdAtMs }) => ({ id, groupId, kind, items, members, createdAtMs }));
-  return reviewQueue(snapshot, nowMs, photos, embeddings.map((e) => e.vector), decisions, groupingSettings(settings?.detail ?? PREFERRED_DETAIL), await preferences.protection(account));
+  const choices = await preferences.protection(account);
+  const queueAt = (atMs: number): ReviewQueue =>
+    reviewQueue(snapshot, atMs, photos, embeddings.map((e) => e.vector), decisions, groupingSettings(settings?.detail ?? PREFERRED_DETAIL), choices);
+  const queue = queueAt(nowMs);
+  if (queue.blocked !== 'SCAN_STALE') return { ...queue, blocked: queue.blocked, scanOutOfDate: false };
+  // An old scan proves nothing now, so every photo would be unknown. It is grouped as it was when it
+  // finished, and protected photos stay kept; only approving waits for a fresh scan (the trash queue checks again).
+  const finishedAtMs = snapshot?.run.finishedAtMs ?? null;
+  if (finishedAtMs === null) throw new Error('A finished library scan has no finish time.');
+  const asScanned = queueAt(finishedAtMs);
+  if (asScanned.blocked === 'SCAN_STALE') throw new Error('A library scan is out of date even when it finished.');
+  return { ...asScanned, blocked: asScanned.blocked, scanOutOfDate: true };
 }
 
 export function reviewDeps(account: string, stores: DuplicatesStores = sharedStores(), now: () => number = Date.now): ReviewDeps {
@@ -76,7 +87,7 @@ export function reviewDeps(account: string, stores: DuplicatesStores = sharedSto
 /**
  * Works out how many groups [account] has waiting and saves it, so the popup can say so before the
  * review tab is opened (the background page does this when an analysis finishes). Nothing is saved
- * while the groups can't be built (no finished, recent scan).
+ * while the groups can't be built (no finished scan).
  */
 export async function refreshReviewSummary(account: string, stores: DuplicatesStores = sharedStores(), now: () => number = Date.now): Promise<void> {
   const queue = await loadQueue(stores, account, now());

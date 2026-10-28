@@ -98,14 +98,17 @@ export function gridKey(press: KeyPress): KeyResult<GridAction> {
   return { kind: 'act', action };
 }
 
-export type SearchAction = 'approve' | 'hide' | 'focusAll' | 'toggle' | 'enter' | 'cancel' | 'more' | 'less' | 'undo' | 'left' | 'right' | 'up' | 'down' | 'smaller' | 'larger';
+export type SearchAction = 'approve' | 'hide' | 'selectAll' | 'enter' | 'cancel' | 'more' | 'less' | 'undo' | 'left' | 'right' | 'up' | 'down' | 'smaller' | 'larger';
 
 const SEARCH_KEYS: Record<string, SearchAction> = {
-  d: 'approve', h: 'hide', a: 'focusAll', ' ': 'toggle', Enter: 'enter', Escape: 'cancel', m: 'more', l: 'less', z: 'undo', u: 'undo',
+  d: 'approve', h: 'hide', a: 'selectAll', Enter: 'enter', Escape: 'cancel', m: 'more', l: 'less', z: 'undo', u: 'undo',
   ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', ...SIZE_KEYS,
 };
 
-/** Search's keys: as in Duplicates, plus M / L (more / less like the selected photos), Enter and Esc for the trash question. */
+/**
+ * Search's keys: as in Duplicates, plus M / L (more / less like the selected photos), Enter and Esc for the trash
+ * question. No Space: the arrows move the selection itself, so there is no outline apart from it to toggle.
+ */
 export function searchKey(press: KeyPress): KeyResult<SearchAction> {
   if (!usable(press)) return { kind: 'ignore' };
   const action = SEARCH_KEYS[press.key.length === 1 ? press.key.toLowerCase() : press.key];

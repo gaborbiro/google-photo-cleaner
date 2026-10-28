@@ -19,6 +19,7 @@ function photo(key: string, degrees: number, day: number, opts: Partial<LibraryP
 class Fakes implements SearchDeps {
   library: SearchLibrary = {
     blocked: null,
+    scanOutOfDate: false,
     photos: new Map([photo('box1', 0, 3), photo('box2', 5, 1), photo('fav', 2, 2, { eligible: false }), photo('tub', 30, 4), photo('cat', 80, 5)].map((p) => [p.mediaKey, p])),
     protection: ALL_PROTECTED,
   };
@@ -138,7 +139,7 @@ describe('Search & sweep', () => {
 
   it('hiding every selected result cancels a pending trash confirmation and leaves safe empty results', async () => {
     const { model, view, fakes } = await searched();
-    model.focusAll();
+    model.selectAll();
     model.approve();
     model.hideSelected();
     expect(view().confirmKind).toBe('hide');
@@ -149,11 +150,11 @@ describe('Search & sweep', () => {
     expect(fakes.swept).toEqual([]);
   });
 
-  it('shows the best matches with the first outlined; protected photos never appear, only counted', async () => {
+  it('shows the best matches, none selected; protected photos never appear, only counted', async () => {
     const { model, view } = await searched();
     expect(keys(model)).toEqual(['box1', 'box2', 'tub', 'cat']);
     expect(view()).toMatchObject({ resultText: '4 best matches · 0 selected', hiddenText: '1 protected or unknown photo hidden', searching: false, progressText: null, showMoreVisible: false });
-    expect(view().tiles[0]).toMatchObject({ focused: true, current: true, caption: '3 Oct 2026 · match #1', link: 'https://photos.google.com/photo/box1' });
+    expect(view().tiles[0]).toMatchObject({ selected: false, current: true, caption: '3 Oct 2026 · match #1', link: 'https://photos.google.com/photo/box1' });
   });
 
   it('says the first search gets the AI model ready', async () => {
@@ -370,6 +371,7 @@ describe('Search & sweep', () => {
 
   it("the grid's measured width sets how far up and down move; a hidden grid keeps the last width", async () => {
     const { model, view } = await searched();
+    model.tileClicked(0, false); // with nothing selected, the first arrow would only select
     model.gridWidthMeasured(3 * 160 + 2 * 16 - 1); // just too narrow for 3 tiles
     model.focusMove(0, 1, false);
     expect(view().tiles.findIndex((t) => t.current)).toBe(2);
@@ -407,41 +409,46 @@ describe('Search & sweep', () => {
     expect(view().notice!.text).toBe('Undid the trashing: photos not yet sent are cancelled and any already trashed are restored');
   });
 
-  it('Shift-click selects from the outlined photo and outlines the range; Space switches it all', async () => {
+  it('Shift-click selects the range from the photo last clicked; the arrows move one selected photo', async () => {
     const { model, view } = await searched();
-    const outlined = () => view().tiles.flatMap((t, i) => (t.focused ? [i] : []));
     const selected = () => view().tiles.flatMap((t, i) => (t.selected ? [i] : []));
-    model.tileClicked(2, true); // the first photo is outlined from the start
+    model.tileClicked(2, true); // nothing clicked yet: from the first result
     expect(selected()).toEqual([0, 1, 2]);
-    expect(outlined()).toEqual([0, 1, 2]);
     expect(view().tiles.findIndex((t) => t.current)).toBe(2);
-    model.toggleFocused();
-    expect(selected()).toEqual([]);
-    model.toggleFocused();
-    expect(selected()).toEqual([0, 1, 2]);
     model.tileClicked(1, false); // a plain click: one photo again
-    expect(outlined()).toEqual([1]);
     expect(selected()).toEqual([1]);
-    model.focusMove(1, 0);
+    model.focusMove(1, 0); // the selection itself moves
+    expect(selected()).toEqual([2]);
     model.tileClicked(3, true); // from the photo the arrows moved to
-    expect(outlined()).toEqual([2, 3]);
     expect(selected()).toEqual([2, 3]);
     model.tileClicked(0, true); // the range keeps its start
-    expect(outlined()).toEqual([0, 1, 2]);
     expect(selected()).toEqual([0, 1, 2]);
-    model.focusMove(1, 0); // arrows go back to one photo
-    expect(outlined()).toEqual([1]);
+    model.focusMove(1, 0); // arrows go back to one photo, next to the one last clicked
+    expect(selected()).toEqual([1]);
   });
 
-  it('A selects every result; Space clears and restores the selection', async () => {
+  it('with nothing selected, the first arrow selects the photo last clicked without moving', async () => {
     const { model, view } = await searched();
-    model.focusAll();
-    expect(view().tiles.every((t) => t.focused && t.selected && !t.current)).toBe(true);
-    model.toggleFocused();
-    expect(view().resultText).toBe('4 best matches · 0 selected');
-    model.toggleFocused();
+    const selected = () => view().tiles.flatMap((t, i) => (t.selected ? [i] : []));
+    model.focusMove(1, 0);
+    expect(selected()).toEqual([0]);
+    model.tileClicked(2, false, true);
+    model.tileClicked(2, false, true); // Ctrl-click on and off again
+    model.tileClicked(0, false, true); // and the first off: nothing selected, the last click was on it
+    expect(selected()).toEqual([]);
+    model.focusMove(0, 1);
+    expect(selected()).toEqual([0]);
+  });
+
+  it('A selects every result; A again clears the selection', async () => {
+    const { model, view } = await searched();
+    model.selectAll();
+    expect(view().tiles.every((t) => t.selected)).toBe(true);
+    model.tileClicked(1, false, true); // Ctrl-click takes one off
+    expect(view().resultText).toBe('4 best matches · 3 selected');
+    model.selectAll(); // not all selected: A selects them all
     expect(view().resultText).toBe('4 best matches · 4 selected');
-    model.focusAll();
+    model.selectAll();
     expect(view().resultText).toBe('4 best matches · 0 selected');
   });
 
@@ -453,8 +460,9 @@ describe('Search & sweep', () => {
     expect(selected()).toEqual(['box1']);
     model.tileClicked(2, false, true);
     expect(selected()).toEqual(['box1', 'tub']);
-    model.tileClicked(0, false, true);
+    model.tileClicked(0, false, true); // Ctrl-click on a selected photo unselects it
     expect(selected()).toEqual(['tub']);
+    expect(view().tiles[0]).toMatchObject({ selected: false, current: true });
     model.tileClicked(1, false);
     expect(selected()).toEqual(['box2']);
     model.tileClicked(3, true, true);
@@ -480,9 +488,37 @@ describe('Search & sweep', () => {
 
   it('a blocked library says why and shows nothing', async () => {
     const fakes = new Fakes();
-    fakes.library = { blocked: 'SCAN_STALE', photos: new Map(), protection: ALL_PROTECTED };
+    fakes.library = { blocked: 'SCAN_UNFINISHED', scanOutOfDate: false, photos: new Map(), protection: ALL_PROTECTED };
     const { view } = await searched('boxes', fakes);
-    expect(view()).toMatchObject({ blockedText: 'The library scan is more than a day old. Check for new photos on the Scan tab (about 2–3 minutes).', tiles: [], resultText: null });
+    expect(view()).toMatchObject({ blockedText: 'The library scan is unfinished, so no photo can be trashed. Finish it on the Scan tab.', tiles: [], resultText: null });
+  });
+
+  it('a scan more than a day old is searched and selected, but D refuses to ask about the trash', async () => {
+    const fakes = new Fakes();
+    fakes.library = { ...fakes.library, scanOutOfDate: true };
+    const { model, view } = await searched('boxes', fakes);
+    expect(keys(model)).toEqual(['box1', 'box2', 'tub', 'cat']);
+    expect(view().blockedText).toBe('The library scan is more than a day old. Searching works, but to trash photos, check for new photos on the Scan tab first (about 2–3 minutes).');
+    model.tileClicked(0, false);
+    model.approve();
+    expect(view().confirmText).toBeNull();
+    expect(view().notice).toMatchObject({ text: 'Nothing was moved to the trash: the library scan is more than a day old. Check for new photos on the Scan tab, then try again.', tone: 'caution' });
+    model.enter(); // with no question asked, Enter only views the photo
+    await settle();
+    expect(fakes.swept).toEqual([]);
+  });
+
+  it('after a new scan may have come in, D asks again and the sweep checks the scan', async () => {
+    const fakes = new Fakes();
+    fakes.library = { ...fakes.library, scanOutOfDate: true };
+    const { model, view } = await searched('boxes', fakes);
+    model.libraryChanged();
+    model.tileClicked(0, false);
+    model.approve();
+    expect(view().confirmText).not.toBeNull();
+    model.enter();
+    await settle();
+    expect(fakes.swept).toEqual([['box1']]);
   });
 
   it('"Search more like these" from Duplicates searches by those photos', async () => {

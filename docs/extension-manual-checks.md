@@ -80,6 +80,8 @@ and copy the console (right-click the page → Inspect → Console).
    computer's clock a day ahead, or wait), the button says **Check for new photos** instead of
    Resume, and step 1 says the analysis carries on afterwards. Press it: step 1 reads the list
    again, then step 2 carries on without redoing photos already analysed.
+   With the photo list more than a day old, Duplicates still shows its groups with a banner: **F**
+   and **S** work, **D** refuses until **Check for new photos** has run.
 8. Note the speed (photos per second) and how long the full library took.
 9. Copy diagnostics (review tab, Scan tab, the card above Erase): under **Recent runs** there is one
    entry for the library read (pages and time per listing) and one for the analysis (photos done,
@@ -131,9 +133,11 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
    **L** (less like these) shows − examples and drops look-alikes. Removing an example works.
    **Start over** clears everything.
    A plain click selects just one photo (clicking it again keeps it selected); **Ctrl/Cmd-click**
-   adds or removes a photo, **Shift-click** selects a range. **A** selects all; **Space** toggles
-   the outlined photos' selection. Selected photos have the same thin outline as the outlined one; nothing
-   is marked for the trash until **D** and confirmation.
+   adds or removes a photo (a removed one loses its outline), **Shift-click** selects a range from
+   the photo last clicked. The arrows move a single selected photo. **A** selects all, and again
+   clears. Only selected photos have the thin outline; nothing is marked for the trash until **D**
+   and confirmation. With the library scan more than a day old, searching still works but **D**
+   refuses; after **Check for new photos** it works again.
 3. **D** asks to confirm; **Enter** moves them to the trash queue, **Esc** cancels.
    **Z** undoes it.
 4. From Duplicates, **Search more like these** opens Search with that group as examples.

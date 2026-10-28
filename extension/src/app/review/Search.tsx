@@ -10,7 +10,7 @@ import { SizeButtons, tileSizeStyle, Toast, useFocusFeedback, usePinnedHeight, u
 function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: number; focusPulse: number; model: SearchModel }) {
   const ref = useRef<HTMLElement>(null);
   const image = useRef<HTMLDivElement>(null);
-  useFocusFeedback(ref, image, tile.focused, tile.current, focusPulse);
+  useFocusFeedback(ref, image, tile.current, tile.current, focusPulse);
   // The thumbnail (or a sharper one, after the photos were made larger) is fetched once the tile comes near the screen.
   useEffect(() => {
     const el = ref.current;
@@ -20,7 +20,7 @@ function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: num
     return () => observer.disconnect();
   }, [model, tile.mediaKey, tile.imageWanted]);
   return (
-    <figure ref={ref} className={`search-tile${tile.selected ? ' selected' : ''}${tile.focused ? ' focused' : ''}`}>
+    <figure ref={ref} className={`search-tile${tile.selected ? ' selected' : ''}`}>
       <div className="search-tile-image" ref={image} onClick={(e) => model.tileClicked(index, e.shiftKey, e.ctrlKey || e.metaKey)}>
         {tile.imageUrl ? <img src={tile.imageUrl} alt="" draggable={false} /> : <span className="muted small">{tile.error ?? '…'}</span>}
         <button className="expand" title="View large (Enter)" aria-label="View large" tabIndex={-1} onClick={(e) => { e.stopPropagation(); model.openViewer(index); }}>⤢</button>
@@ -60,7 +60,7 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
     gridKey: searchKey,
     viewerKey: searchViewerKey,
     onGrid: {
-      approve: () => model.approve(), focusAll: () => model.focusAll(), toggle: () => model.toggleFocused(), enter: () => model.enter(),
+      approve: () => model.approve(), selectAll: () => model.selectAll(), enter: () => model.enter(),
       hide: () => model.hideSelected(),
       cancel: () => model.cancel(), more: () => model.addExamples('more'), less: () => model.addExamples('less'), undo: () => model.undo(),
       smaller: () => model.resize(-1), larger: () => model.resize(1),
@@ -136,8 +136,7 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
             <button tabIndex={-1} disabled={!view.canHideSelected} onClick={() => model.hideSelected()}><kbd>H</kbd> · Hide from results</button>
             <button tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('more')}><kbd>M</kbd> · More like selected</button>
             <button tabIndex={-1} disabled={view.searching} onClick={() => model.addExamples('less')}><kbd>L</kbd> · Less like selected</button>
-            <button tabIndex={-1} onClick={() => model.focusAll()}><kbd>A</kbd> · Select all</button>
-            <button tabIndex={-1} onClick={() => model.toggleFocused()}><kbd>Space</kbd> · Toggle selection</button>
+            <button tabIndex={-1} onClick={() => model.selectAll()}><kbd>A</kbd> · Select all</button>
             <button tabIndex={-1} onClick={() => model.undo()}><kbd>Z</kbd> · Undo</button>
             <SizeButtons canShrink={view.canShrink} canGrow={view.canGrow} onResize={(d) => model.resize(d)} />
           </div>

@@ -45,6 +45,7 @@ async function library() {
     queuePass: () => trashQueuePass('account-a', duplicates, now),
     google,
     stores: search,
+    duplicates,
     /** As after a new library scan. */
     rescan: () => scan(source, search.inventory),
   };
@@ -77,11 +78,36 @@ describe('Search sweeps: checked again just before anything is queued', () => {
     expect(await stores.review.activeDecisions('account-a')).toMatchObject([{ items: [{ mediaKey: 'lib-3' }] }]);
   });
 
-  it('refuses when the scan is out of date', async () => {
+  it('refuses when the scan is out of date, which can still be searched', async () => {
     const { stores } = await library();
     const dayLater = searchDeps('account-a', stores, () => NOW + 25 * 60 * 60 * 1000);
-    await expect(dayLater.sweep(['lib-3'])).rejects.toThrow(/no longer usable/);
+    const old = await dayLater.loadLibrary();
+    expect(old).toMatchObject({ blocked: null, scanOutOfDate: true });
+    expect(old.photos.get('lib-3')!.eligible).toBe(true);
+    expect(old.photos.get('lib-0')!.eligible).toBe(false); // the favourite stays protected
+    await expect(dayLater.sweep(['lib-3'])).rejects.toThrow(/more than a day old/);
     expect(await stores.review.activeDecisions('account-a')).toEqual([]);
+    expect(await searchDeps('account-a', stores, () => NOW).loadLibrary()).toMatchObject({ blocked: null, scanOutOfDate: false });
+  });
+});
+
+describe('Duplicates from a scan more than a day old', () => {
+  it('builds the groups as the scan was when it finished, with protected photos kept', async () => {
+    const { duplicates } = await library();
+    expect(await reviewDeps('account-a', duplicates, () => NOW).loadQueue()).toMatchObject({ blocked: null, scanOutOfDate: false });
+    const old = await reviewDeps('account-a', duplicates, () => NOW + 25 * 60 * 60 * 1000).loadQueue();
+    expect(old).toMatchObject({ blocked: null, scanOutOfDate: true });
+    const members = old.pending[0]!.members;
+    expect(members.find((m) => m.mediaKey === 'lib-0')).toMatchObject({ selectable: false, eligibility: 'PROTECTED' });
+    expect(members.filter((m) => m.selectable).map((m) => m.mediaKey).sort()).toEqual(['lib-1', 'lib-2']);
+  });
+
+  it('the trash queue still waits for a fresh scan', async () => {
+    const { stores, duplicates, google } = await library();
+    await stores.review.recordDecision('account-a', 'g', 'APPROVED', [{ mediaKey: 'lib-1', dedupKey: fakeDedupKey(1) }], ['lib-1'], NOW);
+    const pass = await trashQueuePass('account-a', duplicates, () => NOW + 25 * 60 * 60 * 1000);
+    expect(pass.waitingReason).toBe('Waiting: the library scan is out of date. Check for new photos to continue.');
+    expect(google.trash.size).toBe(0);
   });
 });
 

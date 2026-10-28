@@ -77,7 +77,7 @@ function Status({ view, openScan }: { view: DuplicatesView; openScan: () => void
   return (
     <section className="collapsing status-lines">
       {view.ruleText && <p>{view.ruleText}</p>}
-      {/* Why nothing can be reviewed yet: in the place of the counts, which come once it can. */}
+      {/* Why nothing can be reviewed yet (in the place of the counts), or why nothing can be trashed yet. */}
       {view.blockedText && (
         <div className="banner tone-caution">
           <strong>⚠ {view.blockedText}</strong>

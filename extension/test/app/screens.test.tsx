@@ -399,16 +399,19 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
     searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
     await vi.waitFor(() => expect(selectedCount(root)).toBe(3));
-    expect(root.querySelectorAll('.search-tile.focused').length).toBe(3); // the range is outlined
-    press(' '); // Space switches the whole range
-    await vi.waitFor(() => expect(selectedCount(root)).toBe(0));
-    press(' ');
+    press('ArrowRight'); // the arrows move a single selection
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
+    press('a');
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(searchTiles(root).length));
+    searchTiles(root)[0]!.querySelector<HTMLElement>('.search-tile-image')!.click();
+    searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
     await vi.waitFor(() => expect(selectedCount(root)).toBe(3));
 
     press('d', root.querySelector('input[type="search"]')!);
     // A later change drawn on screen means the key press above was handled by then.
     searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
     await vi.waitFor(() => expect(selectedCount(root)).toBe(2));
+    expect(searchTiles(root)[2]!.className).toBe('search-tile'); // unselected by Ctrl-click: nothing marks it
     expect(root.textContent).not.toContain('to the trash?');
     searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
     await vi.waitFor(() => expect(selectedCount(root)).toBe(3));

@@ -25,9 +25,16 @@ export interface Notice {
   visibleMs: number;
 }
 
+/** The review queue as the review reads it. An old scan is not a reason to block: it is read as it was when it finished. */
+export interface LoadedQueue extends Omit<ReviewQueue, 'blocked'> {
+  blocked: Exclude<Blocked, 'SCAN_STALE'> | null;
+  /** Built from a scan more than a day old: its groups can be reviewed, but nothing approved for the trash until it is checked again. */
+  scanOutOfDate: boolean;
+}
+
 export interface ReviewDeps {
   /** The groups still to review, built from the saved scan, analysis and decisions. */
-  loadQueue(): Promise<ReviewQueue>;
+  loadQueue(): Promise<LoadedQueue>;
   /** Saves a decision (and, for an approval, queues its photos for the trash). */
   record(group: DuplicateGroup, kind: DecisionKind, items: { mediaKey: string; dedupKey: string }[]): Promise<void>;
   /** Undoes the newest decision; null when there is none. */
@@ -118,11 +125,12 @@ export interface DuplicatesView {
   viewer: ViewerView | null;
 }
 
-const BLOCKED_TEXT: Record<Blocked, string> = {
+const BLOCKED_TEXT: Record<NonNullable<LoadedQueue['blocked']>, string> = {
   NOT_SCANNED: 'The library has not been scanned yet. Start a scan from the Scan tab or the Photo Cleaner panel in Google Photos.',
   SCAN_UNFINISHED: 'The library scan is unfinished, so no photo can be proposed. Finish it on the Scan tab.',
-  SCAN_STALE: 'The library scan is more than a day old. Check for new photos on the Scan tab: it re-reads the list of your photos (about 2–3 minutes) and only looks at new ones.',
 };
+const SCAN_OUT_OF_DATE_TEXT = 'The library scan is more than a day old. You can review the groups, but to trash photos, check for new photos on the Scan tab first: it re-reads the list of your photos (about 2–3 minutes) and only looks at new ones.';
+const SCAN_OUT_OF_DATE_APPROVE = 'Nothing was moved to the trash: the library scan is more than a day old. Check for new photos on the Scan tab, then try again.';
 
 const PROTECTION_WORDS = { FAVOURITE: 'favourite', IN_ALBUM: 'in an album', ARCHIVED: 'archived' } as const;
 const PROTECTION_PHRASES = { FAVOURITE: 'a favourite', IN_ALBUM: 'in an album', ARCHIVED: 'archived' } as const;
@@ -171,7 +179,8 @@ export class DuplicatesReview {
   private deferredIds = new Set<string>();
   private totalGroups = 0;
   private decidedGroups = 0;
-  private blocked: Blocked | null = null;
+  private blocked: LoadedQueue['blocked'] = null;
+  private scanOutOfDate = false;
   private problem: string | null = null;
   private loaded = false;
   private busy = false;
@@ -276,7 +285,7 @@ export class DuplicatesReview {
 
   private async reload(): Promise<void> {
     const shownBefore = this.pending[0]?.id;
-    let queue: ReviewQueue;
+    let queue: LoadedQueue;
     try {
       queue = await this.deps.loadQueue();
     } catch (error) {
@@ -295,6 +304,7 @@ export class DuplicatesReview {
     this.totalGroups = queue.totalGroups;
     this.decidedGroups = queue.decidedGroups;
     this.blocked = queue.blocked;
+    this.scanOutOfDate = queue.scanOutOfDate;
     this.settings = queue.settings;
     this.notAnalysed = queue.photosNotAnalysed;
     this.loaded = true;
@@ -493,6 +503,11 @@ export class DuplicatesReview {
   approve(): void {
     const group = this.currentOrSay();
     if (!group) return;
+    // Keeping and skipping still work; a new scan builds the groups again, which lifts this.
+    if (this.scanOutOfDate) {
+      emitUsage({ name: 'feature_blocked', params: { feature: 'duplicates', reason: 'stale_scan' } });
+      return this.sayAndPublish(SCAN_OUT_OF_DATE_APPROVE, 'caution');
+    }
     const selected = this.selectionOf(group);
     if (selected.size === 0) {
       this.say('Nothing is selected for the trash. Press F to keep the whole group.', 'caution');
@@ -664,7 +679,7 @@ export class DuplicatesReview {
       // From the moment the tab opens (also while the saved jobs are still being read) until the first groups are ready.
       loadingText: !loaded && this.problem === null ? 'Finding duplicate groups…' : null,
       workingText: this.working,
-      // Only once there are groups to count: while blocked (no scan yet, an old one) the reason takes their place.
+      // Only once there are groups to count: while blocked (no scan yet, an unfinished one) the reason takes their place.
       groupsText: loaded && this.blocked === null
         ? `${count(this.totalGroups, 'group', 'groups')} (${n(this.decidedGroups)} decided · ${n(this.pending.length)} to go` +
           (this.deferredIds.size > 0 ? ` · ${n(this.deferredIds.size)} skipped)` : ')')
@@ -678,7 +693,7 @@ export class DuplicatesReview {
         ? `${count(this.notAnalysed, 'photo is', 'photos are')} not analysed yet, so a moment you have decided on may come back with a photo you haven’t seen. ` +
           'Check for new photos on the Scan tab to analyse them.'
         : null,
-      blockedText: this.blocked ? BLOCKED_TEXT[this.blocked] : null,
+      blockedText: this.blocked ? BLOCKED_TEXT[this.blocked] : this.scanOutOfDate ? SCAN_OUT_OF_DATE_TEXT : null,
       emptyText: loaded && this.blocked === null && group === null ? 'No groups left to review.' : null,
       problemText: this.problem,
       queueText: this.queueText(),

@@ -76,10 +76,11 @@ describe('Duplicates keys', () => {
     expect(gridKey(press('q'))).toEqual({ kind: 'ignore' });
   });
 
-  it('Search: D trash, A all, Space toggle, M / L more or less like the selection, Enter / Esc for the question, Z undo', () => {
-    expect(['d', 'a', ' ', 'm', 'l', 'Enter', 'Escape', 'z', 'ArrowDown'].map((k) => searchKey(press(k)))).toEqual(
-      ['approve', 'focusAll', 'toggle', 'more', 'less', 'enter', 'cancel', 'undo', 'down'].map((action) => ({ kind: 'act', action })),
+  it('Search: D trash, A all, M / L more or less like the selection, Enter / Esc for the question, Z undo; no Space', () => {
+    expect(['d', 'a', 'm', 'l', 'Enter', 'Escape', 'z', 'ArrowDown'].map((k) => searchKey(press(k)))).toEqual(
+      ['approve', 'selectAll', 'more', 'less', 'enter', 'cancel', 'undo', 'down'].map((action) => ({ kind: 'act', action })),
     );
+    expect(searchKey(press(' '))).toEqual({ kind: 'ignore' });
     expect(searchKey(press('m', { inTextField: true }))).toEqual({ kind: 'ignore' }); // typing a description
     expect(searchKey(press('d', { repeat: true }))).toEqual({ kind: 'swallow' });
   });

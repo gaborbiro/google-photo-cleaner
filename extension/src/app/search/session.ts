@@ -8,7 +8,7 @@ import { classify } from '../scan/report';
 import { IndexedDbPreferences } from '../shared/preferences';
 import { browserSizeMemory } from '../shared/photoSize';
 import { previewDataUrl } from '../shared/previews';
-import type { LibraryPhoto, SearchDeps, SearchLibrary, SweepResult } from './searchModel';
+import { SCAN_OUT_OF_DATE_SWEEP, type LibraryPhoto, type SearchDeps, type SearchLibrary, type SweepResult } from './searchModel';
 
 /** The saved data Search reads and writes; tests pass their own. */
 export interface SearchStores {
@@ -36,12 +36,15 @@ let textModel: Promise<TextModel> | null = null;
 async function loadLibrary({ inventory, analysis, review, preferences }: SearchStores, account: string, nowMs: number): Promise<SearchLibrary> {
   const protection = await preferences.protection(account);
   const run = await inventory.latestRun(account);
-  if (!run) return { blocked: 'NOT_SCANNED', photos: new Map(), protection };
+  if (!run) return { blocked: 'NOT_SCANNED', scanOutOfDate: false, photos: new Map(), protection };
   const snapshot = await inventory.snapshot(run.id);
-  const classification = classify(snapshot, nowMs, protection);
-  const coverage = classification.report.coverage;
-  if (!coverage.isComplete) return { blocked: 'SCAN_UNFINISHED', photos: new Map(), protection };
-  if (coverage.isStale) return { blocked: 'SCAN_STALE', photos: new Map(), protection };
+  const current = classify(snapshot, nowMs, protection);
+  const coverage = current.report.coverage;
+  if (!coverage.isComplete) return { blocked: 'SCAN_UNFINISHED', scanOutOfDate: false, photos: new Map(), protection };
+  // An old scan proves nothing now, so every photo would be unknown. It is searched as it was when it
+  // finished, and protected photos stay hidden; only the sweep waits for a fresh scan.
+  if (coverage.isStale && coverage.finishedAtMs === null) throw new Error('A finished library scan has no finish time.');
+  const classification = coverage.isStale ? classify(snapshot, coverage.finishedAtMs!, protection) : current;
   const settings = await analysis.settings(account);
   const vectors = new Map((settings ? await analysis.embeddings(settings.modelKey, account) : []).map((e) => [e.mediaKey, e.vector]));
   const eligibility = new Map(classification.items.map((i) => [i.mediaKey, i.eligibility]));
@@ -61,7 +64,7 @@ async function loadLibrary({ inventory, analysis, review, preferences }: SearchS
       approved: approved.has(item.mediaKey),
     });
   }
-  return { blocked: null, photos, protection };
+  return { blocked: null, scanOutOfDate: coverage.isStale, photos, protection };
 }
 
 /**
@@ -73,6 +76,7 @@ async function sweep(stores: SearchStores, account: string, mediaKeys: string[],
   if (mediaKeys.length === 0) throw new Error('Nothing is selected for the trash.');
   const library = await loadLibrary(stores, account, nowMs);
   if (library.blocked) throw new Error('The library scan is no longer usable; check for new photos on the Scan tab, then search again.');
+  if (library.scanOutOfDate) throw new Error(SCAN_OUT_OF_DATE_SWEEP);
   const stillTrashable = (k: string) => { const p = library.photos.get(k); return p !== undefined && p.eligible && !p.approved; };
   const queued = mediaKeys.filter(stillTrashable);
   const leftOut = mediaKeys.filter((k) => !stillTrashable(k));

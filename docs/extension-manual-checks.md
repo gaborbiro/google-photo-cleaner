@@ -132,7 +132,7 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
    **Start over** clears everything.
    A plain click selects just one photo (clicking it again keeps it selected); **Ctrl/Cmd-click**
    adds or removes a photo, **Shift-click** selects a range. **A** selects all; **Space** toggles
-   the outlined photos' selection. Selection has a purple border and a SELECTED badge; nothing
+   the outlined photos' selection. Selected photos have the same thin outline as the outlined one; nothing
    is marked for the trash until **D** and confirmation.
 3. **D** asks to confirm; **Enter** moves them to the trash queue, **Esc** cancels.
    **Z** undoes it.

@@ -368,17 +368,13 @@ button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-b
   outline: 2px solid transparent; outline-offset: 3px;
 }
 .search-tile-image img { width: 100%; height: 100%; object-fit: cover; border-radius: 3px; display: block; }
-.search-tile.selected .search-tile-image { border-color: var(--pc-accent); }
-.search-tile.selected .search-tile-image::after {
-  content: 'SELECTED'; position: absolute; left: 6px; bottom: 6px; padding: 1px 5px; border: 1px solid var(--pc-accent); border-radius: 3px;
-  background: var(--pc-accent); color: var(--pc-on-accent); font: 700 11px/18px var(--font-data);
-}
 .hide-result {
   position: absolute; top: 6px; right: 6px; width: 32px; min-height: 32px; height: 32px; padding: 0;
   border: 1px solid #ffffff88; border-radius: var(--radius-control); background: #000000cc; color: #fff; font-size: 22px;
 }
 .hide-result:hover:not(:disabled), .hide-result:focus-visible { background: #000; border-color: #fff; }
-.search-tile.focused .search-tile-image { outline-color: var(--pc-focus); }
+/* Selected photos and the outlined one share the same thin outline. */
+.search-tile.selected .search-tile-image, .search-tile.focused .search-tile-image { outline-color: var(--pc-focus); }
 .search-tile figcaption { margin-top: 6px; }
 .search-tile figcaption a { color: var(--pc-muted); text-decoration: none; }
 .search-tile figcaption a:hover { color: var(--pc-text); text-decoration: underline; }

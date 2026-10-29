@@ -3,11 +3,14 @@
 
 import { createRoot } from 'react-dom/client';
 import { UsageCard, useUsageSurface } from '../ui/UsageCard';
+import { versionLabel } from '../shared/jobView';
 import { panelTab } from '../shared/messages';
-import { send, useSignedInScan, useStartOverWhenErased } from '../ui/hooks';
+import { LOCAL_BUILD } from '../shared/version';
+import { extensionVersion, send, useSignedInScan, useStartOverWhenErased } from '../ui/hooks';
 import { ScanCard, StorageProblem } from '../ui/JobCard';
 
 const TAB_ID = panelTab(location.search);
+const VERSION_LABEL = versionLabel(extensionVersion(), LOCAL_BUILD);
 
 function Panel() {
   useUsageSurface('panel', 'panel');
@@ -36,6 +39,7 @@ function Panel() {
           <button onClick={() => void send({ kind: 'app-open-review', account: view.account, tab: launch.tab })}>{launch.text} <span aria-hidden="true">↗</span></button>
         </div>
       )}
+      <p className="version mono" title="Photo Cleaner's version">{VERSION_LABEL}</p>
     </main>
   );
 }

@@ -248,7 +248,7 @@ describe('the pages draw', () => {
   it('panel: the account and its Scan', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('panel');
-    await shows(root, 'Photo Cleaner', 'someone@example.com', 'Photos never leave your computer', 'Open in tab');
+    await shows(root, 'Photo Cleaner', 'someone@example.com', 'Photos never leave your computer', 'Open in tab', 'v1.2.3');
     expect(root.textContent).not.toContain('Reads the list of your photos');
   });
 

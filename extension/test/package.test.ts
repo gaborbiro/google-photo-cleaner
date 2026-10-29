@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import { shipped, storeFiles, storeManifest, zip } from '../scripts/package.mjs';
+import { builtManifest } from '../scripts/localBuild.mjs';
 
 /** Reads back every file of a zip through its central directory, as an unzipper would. */
 function unzip(archive: Buffer): Map<string, Buffer> {
@@ -35,6 +36,12 @@ describe('the Chrome Web Store package', () => {
   it('leaves out the manifest key, which the store refuses, and keeps everything else', () => {
     const manifest = { manifest_version: 3, name: 'Photo Cleaner', version: '1.2.3', key: 'MIIB…', permissions: ['idle'] };
     expect(storeManifest(manifest)).toEqual({ manifest_version: 3, name: 'Photo Cleaner', version: '1.2.3', permissions: ['idle'] });
+  });
+
+  it('refuses a local build, so that only a release build reaches the store', () => {
+    const manifest = { manifest_version: 3, name: 'Photo Cleaner', version: '1.2.3', icons: { 16: 'icon16.png' }, action: { default_title: 'Photo Cleaner', default_icon: { 16: 'icon16.png' } } };
+    expect(() => storeManifest(builtManifest(manifest, false))).toThrow('npm run package');
+    expect(storeManifest(builtManifest(manifest, true))).toEqual(manifest);
   });
 
   it('leaves out the developer pages', () => {

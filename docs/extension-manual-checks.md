@@ -145,7 +145,7 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
    Duplicates (section 4, items 8 and 9).
 6. **Hide from results** / **H**: one selected photo disappears immediately; with several selected,
    a question gives the count and says nothing will be trashed. **Esc** / **Cancel** keeps them;
-   **Enter** / **Hide from results** confirms. Each photo's top-right **×** hides just that result
+   **Enter** / **Hide from results** confirms. Each photo's top-right **×** (shown on hover) hides just that result
    immediately, leaving other selections alone. The trash queue and Google Photos stay unchanged.
    Sorting, **Show more**, More/Less like refinements, and switching tabs keep those photos hidden.
    A fresh **Search**, **Search more like these** from Duplicates, or **Start over** brings them back.

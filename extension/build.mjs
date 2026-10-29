@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { assertKotlinFresh } from './scripts/kotlinFresh.mjs';
+import { builtManifest, LOCAL_ICONS_DIR } from './scripts/localBuild.mjs';
 import { installedPackages, kotlinVersion, noticesText, shippedLibraries } from './scripts/notices.mjs';
 import { usageConfig } from './scripts/usageConfig.mjs';
 
@@ -14,9 +15,11 @@ try {
 // Builds the Photo Cleaner extension into dist-app/.
 
 // The extension's version, built in: the background page (an offscreen document) can't ask Chrome for its manifest.
-const version = JSON.parse(readFileSync('static-app/manifest.json', 'utf8')).version;
-const usage = usageConfig(process.argv.includes('--usage'), 'usage.config.json', process.argv.includes('--release'));
-const common = { bundle: true, target: 'chrome116', legalComments: 'inline', logLevel: 'info', define: { __PHOTO_CLEANER_VERSION__: JSON.stringify(version), __PHOTO_CLEANER_USAGE__: JSON.stringify(usage) } };
+const manifest = JSON.parse(readFileSync('static-app/manifest.json', 'utf8'));
+const version = manifest.version;
+const release = process.argv.includes('--release');
+const usage = usageConfig(process.argv.includes('--usage'), 'usage.config.json', release);
+const common = { bundle: true, target: 'chrome116', legalComments: 'inline', logLevel: 'info', define: { __PHOTO_CLEANER_VERSION__: JSON.stringify(version), __PHOTO_CLEANER_LOCAL_BUILD__: JSON.stringify(!release), __PHOTO_CLEANER_USAGE__: JSON.stringify(usage) } };
 const gptkNotice = '/*! Includes code from Google Photos Toolkit (https://github.com/xob0t/Google-Photos-Toolkit), MIT License, Copyright (c) 2024 xob0t. See THIRD_PARTY_GPTK_LICENSE. */';
 
 {
@@ -57,6 +60,8 @@ const gptkNotice = '/*! Includes code from Google Photos Toolkit (https://github
     format: 'iife',
   });
   cpSync('static-app', outdir, { recursive: true });
+  if (!release) cpSync('local-icons', `${outdir}/${LOCAL_ICONS_DIR}`, { recursive: true });
+  writeFileSync(`${outdir}/manifest.json`, JSON.stringify(builtManifest(manifest, release), null, 2) + '\n');
   cpSync('vendor/gptk/LICENSE', `${outdir}/THIRD_PARTY_GPTK_LICENSE`);
   const libraries = shippedLibraries(inputs, installedPackages('.'), kotlinVersion(readFileSync('../gradle/libs.versions.toml', 'utf8')));
   writeFileSync(`${outdir}/THIRD_PARTY_NOTICES.txt`, noticesText(libraries, (file) => readFileSync(file, 'utf8')));

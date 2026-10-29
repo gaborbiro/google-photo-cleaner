@@ -360,7 +360,7 @@ export interface OtherAccountRow {
 export interface ReviewPageView {
   /** The account whose library this is, as shown: "someone@example.com"; null with no account yet. */
   accountName: string | null;
-  /** Beside the title, so the user can tell an update has loaded: "v0.4.14". */
+  /** Beside the title, so the user can tell an update has loaded (see [versionLabel]). */
   versionLabel: string;
   /**
    * The tabs' labels, numbered as on the desktop (which has Calibration as its step 2); Search is not a
@@ -377,6 +377,14 @@ export interface ReviewPageView {
   refreshKey: string | null;
 }
 
+/**
+ * The version as the review tab and the panel show it, so an update can be seen to have loaded:
+ * "v0.4.14", or "v0.4.14 · local build" for one loaded unpacked (see LOCAL_BUILD in version.ts).
+ */
+export function versionLabel(version: string, localBuild: boolean): string {
+  return localBuild ? `v${version} · local build` : `v${version}`;
+}
+
 export function reviewPageView(input: {
   selected: string | null;
   signedIn: { fingerprint: string; email: string | null } | null;
@@ -386,14 +394,15 @@ export function reviewPageView(input: {
   choices: ProtectionChoices | undefined;
   nowMs: number;
   version: string;
+  localBuild: boolean;
 }): ReviewPageView {
-  const { selected, signedIn, jobs, scan, analysis, choices, nowMs, version } = input;
+  const { selected, signedIn, jobs, scan, analysis, choices, nowMs, version, localBuild } = input;
   const emailOf = (account: string) => (signedIn?.fingerprint === account ? signedIn.email : null);
   const analysisOf = (account: string) => jobs.find((j): j is AnalysisJob => j.kind === 'analysis' && j.account === account) ?? null;
   const shown = selected !== null && scan !== undefined && analysis !== undefined ? scanView(scan, analysis, nowMs, 'tab') : null;
   return {
     accountName: selected === null ? null : accountLabel(selected, emailOf(selected)),
-    versionLabel: `v${version}`,
+    versionLabel: versionLabel(version, localBuild),
     tabLabels: { scan: shown ? scanTabTitle(shown) : '1 · Scan', duplicates: '2 · Duplicates', search: 'Search' },
     otherAccounts: jobs
       .filter((j): j is ScanJob => j.kind === 'library-scan' && j.account !== selected)

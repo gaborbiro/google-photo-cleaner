@@ -58,7 +58,8 @@ npm run check
 
 Once the [one-time GitHub settings](docs/github-releases.md) are added, each successful master push
 automatically publishes a versioned extension ZIP in [GitHub Releases](https://github.com/gaborbiro/google-photo-cleaner/releases).
-Builds, tests, version numbering and packaging run on GitHub; Chrome Web Store submission stays manual.
+Builds, tests, version numbering and packaging run on GitHub. Submitting a release to the Chrome Web Store is a
+workflow you start by hand ([steps](docs/chrome-web-store.md#submitting-from-github)).
 
 ## Run the browser extension
 

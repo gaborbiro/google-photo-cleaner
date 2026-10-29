@@ -11,7 +11,9 @@ Dashboard: https://chrome.google.com/webstore/devconsole
 2. Download `photo-cleaner-<version>.zip` and go through `docs/extension-manual-checks.md` in Chrome.
 3. The package excludes the manifest's `key` (the store assigns its own ID) and developer pages
    (`dev-*`). There is no normal laptop release-build step.
-4. Dashboard → the item → Package → Upload new package → Submit for review.
+4. Submit it: Actions → **Submit to Chrome Web Store** → Run workflow (on master), with the version
+   you checked (see [Submitting from GitHub](#submitting-from-github)). Or by hand: Dashboard → the
+   item → Package → Upload new package → Submit for review.
 
 The store's extension ID differs from the unpacked one (pinned by `key`). If something ever needs
 the two to match, replace `key` with the public key from the dashboard (Package → View public key).
@@ -24,6 +26,60 @@ the two to match, replace `key` with the public key from the dashboard (Package 
 - GitHub Pages for the privacy policy: repository Settings → Pages → Source: **GitHub Actions**.
   Then the `Website` workflow publishes `site/` on each push to master:
   https://gaborbiro.github.io/google-photo-cleaner/privacy.html
+
+## Submitting from GitHub
+
+The `Submit to Chrome Web Store` workflow (`.github/workflows/chrome-web-store.yml`) only runs when
+started by hand. It downloads the chosen GitHub Release ZIP (the latest if no version is given),
+uploads it with the [Chrome Web Store API](https://developer.chrome.com/docs/webstore/using-api)
+(V2) and submits it for review. It changes nothing else on the listing. It refuses, before
+uploading, while another version is still in review or approved but not yet published, and when
+the version is not newer than the published one. Running it again for a version already in review
+does nothing. "Wait for me to publish it in the dashboard" asks the store to hold the version
+after approval until you press Publish.
+
+It signs in to Google without a stored key: GitHub proves to Google that the job runs from this
+repository's master branch (Workload Identity Federation), and gets a short-lived token for a
+service account that the store lets manage the listing.
+
+One-time setup, with the Google account that owns the listing (it needs 2-step verification):
+
+1. In a Google Cloud project (any; a new one is fine), run in Cloud Shell, with your project ID:
+
+   ```
+   PROJECT=your-project-id
+   REPO=gaborbiro/google-photo-cleaner
+   gcloud services enable chromewebstore.googleapis.com iamcredentials.googleapis.com sts.googleapis.com --project=$PROJECT
+   gcloud iam service-accounts create photo-cleaner-publisher --project=$PROJECT
+   gcloud iam workload-identity-pools create github --location=global --project=$PROJECT
+   gcloud iam workload-identity-pools providers create-oidc photo-cleaner --project=$PROJECT \
+     --location=global --workload-identity-pool=github \
+     --issuer-uri=https://token.actions.githubusercontent.com \
+     --attribute-mapping=google.subject=assertion.sub,attribute.repository=assertion.repository \
+     --attribute-condition="assertion.repository=='$REPO' && assertion.ref=='refs/heads/master'"
+   NUMBER=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
+   gcloud iam service-accounts add-iam-policy-binding photo-cleaner-publisher@$PROJECT.iam.gserviceaccount.com \
+     --project=$PROJECT --role=roles/iam.workloadIdentityUser \
+     --member="principalSet://iam.googleapis.com/projects/$NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/$REPO"
+   echo "projects/$NUMBER/locations/global/workloadIdentityPools/github/providers/photo-cleaner"
+   ```
+
+2. Developer Dashboard → Account: add `photo-cleaner-publisher@<project>.iam.gserviceaccount.com`
+   as the service account (the store allows one).
+3. GitHub → Settings → Secrets and variables → Actions → **Variables** (none of these is secret):
+
+   | Name | Value |
+   |---|---|
+   | `CWS_WORKLOAD_IDENTITY_PROVIDER` | The `projects/…/providers/photo-cleaner` line printed above |
+   | `CWS_SERVICE_ACCOUNT` | `photo-cleaner-publisher@<project>.iam.gserviceaccount.com` |
+   | `CWS_PUBLISHER_ID` | Developer Dashboard → Account → Publisher ID |
+   | `CWS_EXTENSION_ID` | The store's ID of the item (32 letters, in its dashboard and store URL) |
+
+4. Optional: Settings → Environments → `chrome-web-store` (the first run creates it) → Required
+   reviewers, so each run waits for a click of approval.
+
+If you change the listing's visibility in the dashboard, publish once by hand there before the
+workflow works again (a store rule).
 
 ## Store listing tab
 

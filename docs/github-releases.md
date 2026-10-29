@@ -7,7 +7,9 @@ documentation-only pushes also get a release. Failed checks/builds/uploads do no
 
 This is a GitHub Release, not an automatic Chrome Web Store submission. Download the ZIP from
 [Releases](https://github.com/gaborbiro/google-photo-cleaner/releases), perform the relevant Chrome
-checks, and upload it in the store dashboard. No laptop packaging is needed for this normal flow.
+checks, then submit it with the hand-started `Submit to Chrome Web Store` workflow (see
+[Submitting from GitHub](chrome-web-store.md#submitting-from-github)) or in the store dashboard.
+No laptop packaging is needed for this normal flow.
 
 ## One-time repository-owner setup
 

@@ -1,0 +1,75 @@
+# Started by hand: sends an already published GitHub Release ZIP to the Chrome Web Store for review.
+# One-time setup: docs/chrome-web-store.md, "Submitting from GitHub".
+name: Submit to Chrome Web Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to submit, e.g. 0.4.80 (empty: the latest release)'
+        required: false
+        default: ''
+      publish:
+        description: 'After Google approves it'
+        type: choice
+        options:
+          - publish straight away
+          - wait for me to publish it in the dashboard
+        default: publish straight away
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: chrome-web-store
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: chrome-web-store
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Download the release ZIP
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          if [ -z "$REQUESTED" ]; then
+            REQUESTED="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+            REQUESTED="${REQUESTED#v}"
+          fi
+          if ! [[ "$REQUESTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "Not a release version: $REQUESTED"; exit 1; fi
+          gh release download "v$REQUESTED" --repo "$GITHUB_REPOSITORY" --pattern "photo-cleaner-$REQUESTED.zip" --dir release
+          echo "version=$REQUESTED" >> "$GITHUB_OUTPUT"
+
+      - name: Sign in to Google
+        id: google
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.CWS_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.CWS_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+          create_credentials_file: false
+
+      - name: Upload and submit for review
+        env:
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+          CWS_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+          CWS_PUBLISH_TYPE: ${{ inputs.publish == 'wait for me to publish it in the dashboard' && 'STAGED_PUBLISH' || 'DEFAULT_PUBLISH' }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_ASSET_PATH: release/photo-cleaner-${{ steps.release.outputs.version }}.zip
+        run: node extension/scripts/chromeWebStore.mjs

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
 import { endJob, markAlive, NO_PROGRESS, NOT_RESPONDING_TEXT, pauseJob, reportProgress, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 import type { ReportView } from '../../src/app/scan/report';
-import { accountLabel, checkedText, copyReportText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView, versionLine } from '../../src/app/shared/jobView';
+import { accountLabel, checkedText, copyReportText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView, versionLabel, versionLine } from '../../src/app/shared/jobView';
 import { accountAnswer, panelOptions, panelTab, photosTabOf, requestedReviewTab, reviewUrl } from '../../src/app/shared/messages';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
@@ -297,7 +297,7 @@ describe('the review tab', () => {
   it('names the account, shows the version, labels the tabs and lists the other accounts with links', () => {
     const page = reviewPageView({
       selected: 'acc1', signedIn: { fingerprint: 'acc1', email: 'someone@example.com' },
-      jobs: [finishedScan('acc1'), finishedScan('acc2-0123456789')], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW, version: '0.4.14',
+      jobs: [finishedScan('acc1'), finishedScan('acc2-0123456789')], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW, version: '0.4.14', localBuild: false,
     });
     expect(page.accountName).toBe('someone@example.com');
     expect(page.versionLabel).toBe('v0.4.14');
@@ -305,8 +305,15 @@ describe('the review tab', () => {
     expect(page.otherAccounts).toEqual([{ account: 'acc2-0123456789', href: '?account=acc2-0123456789', label: 'account acc2-012…', scanTitle: 'Photos not analysed yet' }]);
   });
 
+  it('says beside the version when it is a local build, so it can be told from the store version', () => {
+    expect(versionLabel('0.4.61', false)).toBe('v0.4.61');
+    expect(versionLabel('0.4.61', true)).toBe('v0.4.61 · local build');
+    const page = reviewPageView({ selected: null, signedIn: null, jobs: [], scan: null, analysis: null, choices: ALL_PROTECTED, nowMs: NOW, version: '0.4.61', localBuild: true });
+    expect(page.versionLabel).toBe('v0.4.61 · local build');
+  });
+
   it('builds the groups again only when a scan or the analysis finishes, or the choices change', () => {
-    const input = { selected: 'acc1', signedIn: null, jobs: [], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW, version: '0.4.14' };
+    const input = { selected: 'acc1', signedIn: null, jobs: [], scan: finishedScan('acc1'), analysis: null, choices: ALL_PROTECTED, nowMs: NOW, version: '0.4.14', localBuild: false };
     const key = reviewPageView(input).refreshKey;
     expect(key).not.toBeNull();
     expect(reviewPageView({ ...input, nowMs: NOW + 1_000 }).refreshKey).toBe(key);

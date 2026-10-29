@@ -3,13 +3,16 @@
 //  - no "key" in the manifest: it pins the unpacked extension's ID, and the store refuses packages
 //    that have one (the store gives the extension its own ID);
 //  - no developer pages (dev-*, e.g. dev-calibration.html).
+// A local build (`npm run build`, marked "(local build)") is refused: only a release build goes to the store.
 
 import { crc32, deflateRawSync } from 'node:zlib';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
+import { isLocal } from './localBuild.mjs';
 
 /** The manifest as the store gets it. */
 export function storeManifest(manifest) {
+  if (isLocal(manifest)) throw new Error('dist-app is a local build; build it for the store with npm run package.');
   const { key, ...rest } = manifest;
   return rest;
 }

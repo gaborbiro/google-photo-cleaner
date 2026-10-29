@@ -433,10 +433,18 @@ describe('clicks and keys reach what they should', () => {
 
     press('d');
     await shows(root, 'Move 3 photos to the trash?');
+    // The page then scrolls to the photo after the trashed ones, now first, not to whichever took the outlined one's place.
+    const next = searchTiles(root)[3]!;
+    const scrolledTo: Element[] = [];
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      scrolledTo.push(this);
+    });
     press('Enter');
     await vi.waitFor(async () => expect(await decisions()).toMatchObject([{ kind: 'APPROVED', groupId: expect.stringMatching(/^sweep:/) }]));
     expect((await decisions())[0]!.items).toHaveLength(3);
     await shows(root, 'already in the trash queue hidden');
+    expect(searchTiles(root)[0]).toBe(next);
+    expect(scrolledTo.at(-1)).toBe(next);
 
     // Back on Duplicates, the burst's photos are in the trash queue: its group is gone.
     await click(root, '2 · Duplicates');

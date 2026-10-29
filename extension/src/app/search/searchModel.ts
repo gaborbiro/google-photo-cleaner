@@ -186,6 +186,17 @@ function sweepText(queued: number, leftOut: number): string {
   return leftOut === 0 ? moved : `${moved} ${count(leftOut, 'photo was', 'photos were')} left out: ${why}.`;
 }
 
+/**
+ * Where the outline at [index] of [before] goes once [gone] leave the results: the same photo when it
+ * stays, otherwise the first one after it that stays (the last one when none does). After trashing
+ * photos 1 to 50, that is photo 51, now first: not whichever photo slid into the old place.
+ */
+function indexAfterRemoving(before: SearchHit[], index: number, gone: Set<string>): number {
+  const stayingBefore = before.slice(0, index).filter((hit) => !gone.has(hit.mediaKey)).length;
+  const staying = before.length - before.filter((hit) => gone.has(hit.mediaKey)).length;
+  return Math.min(stayingBefore, Math.max(0, staying - 1));
+}
+
 function photoDay(ms: number): string {
   if ([0, 315_532_800_000].some((d) => Math.abs(ms - d) <= 14 * 3_600_000)) return 'Date unknown';
   return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -634,21 +645,16 @@ export class SearchModel {
   }
 
   private hideResults(keys: string[], focusFeedback = true): void {
-    const focusedKey = this.shown[this.focusedIndex]?.mediaKey;
-    const viewerKey = this.viewerIndex === null ? null : this.shown[this.viewerIndex]?.mediaKey;
+    const before = this.shown;
     for (const key of keys) {
       this.hiddenResults.add(key);
       this.selected.delete(key);
     }
     this.ranked = this.ranked.filter((hit) => !this.hiddenResults.has(hit.mediaKey));
     this.shown = this.shown.filter((hit) => !this.hiddenResults.has(hit.mediaKey));
-    const remainingIndex = (key: string | undefined, previous: number) => {
-      const kept = this.shown.findIndex((hit) => hit.mediaKey === key);
-      return kept >= 0 ? kept : Math.min(previous, Math.max(0, this.shown.length - 1));
-    };
-    this.focusedIndex = remainingIndex(focusedKey, this.focusedIndex);
+    this.focusedIndex = indexAfterRemoving(before, this.focusedIndex, this.hiddenResults);
     if (this.viewerIndex !== null) {
-      this.viewerIndex = this.shown.length === 0 ? null : remainingIndex(viewerKey ?? undefined, this.viewerIndex);
+      this.viewerIndex = this.shown.length === 0 ? null : indexAfterRemoving(before, this.viewerIndex, this.hiddenResults);
       if (this.viewerIndex !== null) this.loadLarge();
     }
     this.rangeStart = null;
@@ -715,12 +721,14 @@ export class SearchModel {
     }
     if (leftOut.length > 0) this.libraryStale = true;
     const gone = new Set(keys);
+    this.focusedIndex = indexAfterRemoving(this.shown, this.focusedIndex, gone);
     this.ranked = this.ranked.filter((h) => !gone.has(h.mediaKey));
     this.shown = this.shown.filter((h) => !gone.has(h.mediaKey));
     this.hidden.alreadyApproved += queued.length;
     this.selected.clear();
-    this.focusedIndex = Math.min(this.focusedIndex, Math.max(0, this.shown.length - 1));
     this.rangeStart = null;
+    // The photos above may have gone: the outlined one is brought back into view.
+    this.focusPulse++;
     this.say(sweepText(queued.length, leftOut.length), leftOut.length > 0 ? 'caution' : 'positive');
     this.publish();
   }

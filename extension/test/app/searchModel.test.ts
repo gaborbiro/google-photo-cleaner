@@ -299,6 +299,53 @@ describe('Search & sweep', () => {
     expect(view().hiddenText).toContain('3 already in the trash queue hidden');
   });
 
+  it('after a sweep the outline goes to the first photo after the trashed ones, not to whichever slid into its place, and is brought into view', async () => {
+    const current = (model: SearchModel) => model.getView().tiles.find((t) => t.current)?.mediaKey;
+    const trash = async (model: SearchModel) => {
+      model.approve();
+      model.enter();
+      await settle();
+    };
+    const forwards = await searched();
+    forwards.model.tileClicked(0, false);
+    forwards.model.tileClicked(1, true); // box1 to box2, ending on box2
+    const pulse = forwards.view().focusPulse;
+    await trash(forwards.model);
+    expect(keys(forwards.model)).toEqual(['tub', 'cat']);
+    expect(current(forwards.model)).toBe('tub'); // not cat, now where box2 was
+    expect(forwards.view().focusPulse).toBe(pulse + 1);
+
+    const backwards = await searched();
+    backwards.model.tileClicked(1, false);
+    backwards.model.tileClicked(0, true); // box2 to box1, ending on box1
+    await trash(backwards.model);
+    expect(current(backwards.model)).toBe('tub');
+
+    const stays = await searched();
+    stays.model.tileClicked(0, false);
+    stays.model.tileClicked(2, false, true);
+    stays.model.tileClicked(2, false, true); // tub outlined but not selected: only box1 goes
+    await trash(stays.model);
+    expect(keys(stays.model)).toEqual(['box2', 'tub', 'cat']);
+    expect(current(stays.model)).toBe('tub');
+
+    const last = await searched();
+    last.model.tileClicked(2, false);
+    last.model.tileClicked(3, true); // tub and cat: nothing stays after them
+    await trash(last.model);
+    expect(current(last.model)).toBe('box2');
+  });
+
+  it('hiding a selection moves the outline as a sweep does', async () => {
+    const { model, view } = await searched();
+    model.tileClicked(0, false);
+    model.tileClicked(1, true);
+    model.hideSelected();
+    model.enter();
+    expect(keys(model)).toEqual(['tub', 'cat']);
+    expect(view().tiles.find((t) => t.current)?.mediaKey).toBe('tub');
+  });
+
   it('tells Duplicates after a sweep and an undo, not after a refused sweep or nothing to undo', async () => {
     const { model, fakes } = await searched();
     const heard = vi.fn();

@@ -633,7 +633,7 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(searchTiles(root).length).toBeGreaterThan(0), { timeout: 3_000 });
     searchTiles(root)[0]!.querySelector<HTMLElement>('.search-tile-image')!.click();
     press('d');
-    await shows(root, "They go to Google Photos' trash, where they stay for 60 days.");
+    await shows(root, "They go to Google Photos' trash, where they stay for 30 days.");
   }, 15_000);
 
   it('Scan tab: the protection checkboxes are saved and change the counts; the Scan button starts a scan', async () => {

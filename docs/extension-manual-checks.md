@@ -160,7 +160,7 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
 ## 5b. Real trashing (Google Photos changes: start small)
 
 Use photos you don't mind losing, a few at first. Everything trashed stays in Google Photos' trash
-for 60 days.
+for 30 days.
 
 1. Approve a group of 2–3 photos. Within a few seconds the queue line counts them in the trash, and
    Google Photos' **Trash** shows them (reload it). Nothing else is there that you didn't approve.

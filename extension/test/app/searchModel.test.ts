@@ -287,7 +287,7 @@ describe('Search & sweep', () => {
     model.tileClicked(2, true); // shift: box1 to tub
     expect(view().resultText).toBe('4 best matches · 3 selected');
     model.approve();
-    expect(view().confirmText).toBe("Move 3 photos to the trash? They go to Google Photos' trash, where they stay for 60 days.");
+    expect(view().confirmText).toBe("Move 3 photos to the trash? They go to Google Photos' trash, where they stay for 30 days.");
     model.cancel();
     expect(view().confirmText).toBeNull();
     model.approve();

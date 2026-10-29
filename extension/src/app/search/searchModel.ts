@@ -881,7 +881,7 @@ export class SearchModel {
       confirmText: this.confirming === 'hide'
         ? `Hide ${count(this.selected.size, 'selected photo', 'selected photos')} from these results? Nothing will be trashed. A new search will show them again.`
         : this.confirming === 'trash'
-          ? `Move ${count(this.selected.size, 'photo', 'photos')} to the trash? They go to Google Photos' trash, where they stay for 60 days.`
+          ? `Move ${count(this.selected.size, 'photo', 'photos')} to the trash? They go to Google Photos' trash, where they stay for 30 days.`
           : null,
       notice: this.notice,
       viewer: this.viewerIndex === null ? null : this.viewerView(this.viewerIndex, caption),

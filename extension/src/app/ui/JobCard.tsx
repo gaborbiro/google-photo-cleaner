@@ -179,7 +179,7 @@ export function EraseCard() {
         <>
           <p className="confirm-text">
             Removes the library scan, the AI fingerprints and your review progress (which groups you've already gone through), as uninstalling would.{' '}
-            <strong>Your photos in Google Photos are not touched</strong>: photos you already trashed stay in Google Photos' trash (kept there for 60 days), and Photo Cleaner can no longer undo them.
+            <strong>Your photos in Google Photos are not touched</strong>: photos you already trashed stay in Google Photos' trash (kept there for 30 days), and Photo Cleaner can no longer undo them.
           </p>
           {problem && <div className="warn">{problem}</div>}
           <div className="row erase-buttons">

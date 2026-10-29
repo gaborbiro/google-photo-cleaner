@@ -347,7 +347,7 @@ Kept up to date as we go; reviewed in full before publishing (phase 3).
 
 - [x] The erase button wipes every store we use: database, model cache, settings, and stops the
       background page, so "the same as uninstalling" is true. Warn that it doesn't undo anything
-      already in Google Photos' trash (kept there 60 days); the undo history is gone
+      already in Google Photos' trash (kept there 30 days); the undo history is gone
 - [ ] "Forget this account's library" deletes that account's embeddings, findings and decisions
 - [ ] The goodbye page's address carries nothing that identifies the user
 - [ ] No analytics or crash reports containing photo data, keys or addresses (the desktop app already

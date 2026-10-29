@@ -406,6 +406,10 @@ describe('clicks and keys reach what they should', () => {
     searchTiles(root)[0]!.querySelector<HTMLElement>('.search-tile-image')!.click();
     searchTiles(root)[2]!.querySelector<HTMLElement>('.search-tile-image')!.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
     await vi.waitFor(() => expect(selectedCount(root)).toBe(3));
+    const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    window.dispatchEvent(space);
+    expect(space.defaultPrevented).toBe(true); // Space does nothing, and never scrolls the page
+    expect(selectedCount(root)).toBe(3);
 
     press('d', root.querySelector('input[type="search"]')!);
     // A later change drawn on screen means the key press above was handled by then.

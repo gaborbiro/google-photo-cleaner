@@ -107,10 +107,12 @@ const SEARCH_KEYS: Record<string, SearchAction> = {
 
 /**
  * Search's keys: as in Duplicates, plus M / L (more / less like the selected photos), Enter and Esc for the trash
- * question. No Space: the arrows move the selection itself, so there is no outline apart from it to toggle.
+ * question. Space does nothing (nor scrolls the page): the arrows move the selection itself, so there is no
+ * outline apart from it to toggle.
  */
 export function searchKey(press: KeyPress): KeyResult<SearchAction> {
   if (!usable(press)) return { kind: 'ignore' };
+  if (press.key === ' ') return { kind: 'swallow' };
   const action = SEARCH_KEYS[press.key.length === 1 ? press.key.toLowerCase() : press.key];
   if (!action) return { kind: 'ignore' };
   if (press.repeat) return { kind: 'swallow' };

@@ -76,11 +76,12 @@ describe('Duplicates keys', () => {
     expect(gridKey(press('q'))).toEqual({ kind: 'ignore' });
   });
 
-  it('Search: D trash, A all, M / L more or less like the selection, Enter / Esc for the question, Z undo; no Space', () => {
+  it('Search: D trash, A all, M / L more or less like the selection, Enter / Esc for the question, Z undo; Space does nothing', () => {
     expect(['d', 'a', 'm', 'l', 'Enter', 'Escape', 'z', 'ArrowDown'].map((k) => searchKey(press(k)))).toEqual(
       ['approve', 'selectAll', 'more', 'less', 'enter', 'cancel', 'undo', 'down'].map((action) => ({ kind: 'act', action })),
     );
-    expect(searchKey(press(' '))).toEqual({ kind: 'ignore' });
+    expect(searchKey(press(' '))).toEqual({ kind: 'swallow' }); // never scrolls the page
+    expect(searchKey(press(' ', { inTextField: true }))).toEqual({ kind: 'ignore' }); // a space in the description
     expect(searchKey(press('m', { inTextField: true }))).toEqual({ kind: 'ignore' }); // typing a description
     expect(searchKey(press('d', { repeat: true }))).toEqual({ kind: 'swallow' });
   });

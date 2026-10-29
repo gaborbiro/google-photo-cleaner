@@ -1,5 +1,5 @@
 # Every push is checked. Successful master pushes also publish the configured extension ZIP.
-name: Build and Release
+name: Build and Package
 
 on:
   push:

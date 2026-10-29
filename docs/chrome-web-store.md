@@ -31,7 +31,7 @@ the two to match, replace `key` with the public key from the dashboard (Package 
 
 The `Submit to Chrome Web Store` workflow (`.github/workflows/chrome-web-store.yml`) only runs when
 started by hand. It downloads the GitHub Release ZIP of the version you give (the one you checked;
-wait until its Build and Release run has published it), uploads it with the
+wait until its Build and Package run has published it), uploads it with the
 [Chrome Web Store API](https://developer.chrome.com/docs/webstore/using-api) (V2) and submits it for
 review. It changes nothing else on the listing. It refuses, before
 uploading, while another version is still in review or approved but not yet published, and when

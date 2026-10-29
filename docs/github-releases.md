@@ -1,6 +1,6 @@
 # Automatic GitHub release ZIPs
 
-The `Build and Release` workflow checks every push and pull request. Every successful push to **master** also
+The `Build and Package` workflow checks every push and pull request. Every successful push to **master** also
 builds the configured extension and publishes a GitHub Release with `photo-cleaner-<version>.zip`.
 Merging a PR into master produces a push and follows the same path. There is no path filter, so
 documentation-only pushes also get a release. Failed checks/builds/uploads do not publish a release.
@@ -37,7 +37,7 @@ No laptop packaging is needed for this normal flow.
 4. Publish the analytics privacy policy and update the live store disclosures before distributing
    a configured extension to users. The existing Pages workflow publishes policy changes separately.
 5. Put this workflow and its supporting source changes on master. The first master push runs it;
-   the repository owner can also use **Actions → Build and Release → Run workflow**, selecting master, to verify it.
+   the repository owner can also use **Actions → Build and Package → Run workflow**, selecting master, to verify it.
 
 The current local GitHub CLI login was confirmed to have only READ access to this repository.
 It cannot add these repository settings or activate the remote changes. Preparing local code does

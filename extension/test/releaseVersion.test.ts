@@ -2,10 +2,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { prepareRelease, releaseVersion } from '../scripts/releaseVersion.mjs';
+import { RELEASE_BASE_VERSION, prepareRelease, releaseVersion } from '../scripts/releaseVersion.mjs';
 
 let dir: string;
-afterEach(() => { if (dir) rmSync(dir, { recursive: true }); });
+afterEach(() => { if (dir) rmSync(dir, { recursive: true }); dir = ''; });
 it('creates increasing Chrome versions for successive runs and stable versions when a run is retried', () => {
   expect(releaseVersion('0.4.53', '20')).toBe('0.4.73');
   expect(releaseVersion('0.4.53', '21')).toBe('0.4.74');
@@ -28,9 +28,18 @@ it('stamps only the runner checkout, preserves manifest fields, and refuses PRs/
     expect(() => prepareRelease(manifest, { ...environment, ...override })).toThrow();
     expect(JSON.parse(readFileSync(manifest, 'utf8'))).toEqual(original);
   }
-  expect(prepareRelease(manifest, environment)).toBe('0.4.74');
-  expect(JSON.parse(readFileSync(manifest, 'utf8'))).toEqual({ ...original, version: '0.4.74' });
-  expect(readFileSync(output, 'utf8')).toBe('version=0.4.74\n');
+  expect(prepareRelease(manifest, environment)).toBe('0.5.20');
+  expect(JSON.parse(readFileSync(manifest, 'utf8'))).toEqual({ ...original, version: '0.5.20' });
+  expect(readFileSync(output, 'utf8')).toBe('version=0.5.20\n');
   writeFileSync(manifest, JSON.stringify({ ...original, version: '0.1.0' }));
-  expect(prepareRelease(manifest, { ...environment, GITHUB_RUN_NUMBER: '21' })).toBe('0.4.75');
+  expect(prepareRelease(manifest, { ...environment, GITHUB_RUN_NUMBER: '21' })).toBe('0.5.21');
+});
+
+it('starts the renamed workflow above every version the old one released or the source manifest had', () => {
+  // build-and-release.yml released up to v0.4.64 (run counter ~20) and the source manifest was 0.4.68
+  // when build-and-package.yml took over with a run counter starting at 1.
+  for (const used of ['0.4.64', '0.4.68', releaseVersion('0.4.54', 100)]) {
+    const [a, b] = [releaseVersion(RELEASE_BASE_VERSION, 1), used].map((v) => v.split('.').map(Number));
+    expect(a[0] * 2 ** 32 + a[1] * 2 ** 16 + a[2]).toBeGreaterThan(b[0] * 2 ** 32 + b[1] * 2 ** 16 + b[2]);
+  }
 });

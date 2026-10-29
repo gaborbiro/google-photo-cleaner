@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { submitToChromeWebStore } from '../scripts/chromeWebStore.mjs';
+import { submitToChromeWebStore, tagStoreSubmission } from '../scripts/chromeWebStore.mjs';
 
 const EXTENSION_ID = 'a'.repeat(32);
 const ITEM = `https://chromewebstore.googleapis.com/v2/publishers/publisher-1/items/${EXTENSION_ID}`;
@@ -11,7 +11,7 @@ const published = (version: string) => ({ publishedItemRevisionStatus: { state: 
 const submitted = (state: string, version: string) => ({ ...published('0.4.70'), submittedItemRevisionStatus: { state, distributionChannels: [{ crxVersion: version }] } });
 
 let dir: string;
-afterEach(() => { if (dir) rmSync(dir, { recursive: true }); });
+afterEach(() => { if (dir) rmSync(dir, { recursive: true }); dir = ''; });
 function fixture(responses: Array<[number, unknown]>) {
   dir = mkdtempSync(join(tmpdir(), 'photo-cleaner-cws-'));
   const assetPath = join(dir, 'photo-cleaner-0.4.73.zip');
@@ -98,4 +98,41 @@ it('refuses bad settings or a ZIP named for another version before calling the s
   await expect(submitToChromeWebStore({ ...options, version: '0.4.74' })).rejects.toThrow('does not match its version');
   await expect(submitToChromeWebStore({ ...options, publishType: 'NOW' as 'DEFAULT_PUBLISH' })).rejects.toThrow('Publish type');
   expect(fetcher).not.toHaveBeenCalled();
+});
+
+function tagFixture(responses: Array<[number, unknown]>) {
+  const fetcher = vi.fn(async () => {
+    const response = responses.shift();
+    if (!response) throw new Error('Unexpected API call');
+    return new Response(JSON.stringify(response[1]), { status: response[0] });
+  });
+  return { options: { repository: 'owner/repo', version: '0.4.73', token: 'synthetic-token', fetcher }, fetcher, calls: () => fetcher.mock.calls as unknown as Array<[string, RequestInit]> };
+}
+const COMMIT = 'c'.repeat(40);
+const GIT = 'https://api.github.com/repos/owner/repo/git';
+
+it('tags the commit of the submitted release as store-v<version>', async () => {
+  const responses: Array<[number, unknown]> = [[200, { object: { type: 'commit', sha: COMMIT } }], [404, {}], [201, {}]];
+  const { options, calls } = tagFixture(responses);
+  expect(await tagStoreSubmission(options)).toEqual({ tag: 'store-v0.4.73', commit: COMMIT, created: true });
+  expect(calls().map(([url, init]) => [init.method, url])).toEqual([['GET', `${GIT}/ref/tags/v0.4.73`], ['GET', `${GIT}/ref/tags/store-v0.4.73`], ['POST', `${GIT}/refs`]]);
+  expect(JSON.parse(calls()[2][1].body as string)).toEqual({ ref: 'refs/tags/store-v0.4.73', sha: COMMIT });
+});
+
+it('leaves an existing store tag on the same commit alone and refuses one on another commit', async () => {
+  const responses: Array<[number, unknown]> = [[200, { object: { type: 'commit', sha: COMMIT } }], [200, { object: { type: 'commit', sha: COMMIT } }]];
+  const { options, fetcher } = tagFixture(responses);
+  expect(await tagStoreSubmission(options)).toMatchObject({ created: false });
+  responses.push([200, { object: { type: 'commit', sha: COMMIT } }], [200, { object: { type: 'commit', sha: 'd'.repeat(40) } }]);
+  await expect(tagStoreSubmission(options)).rejects.toThrow('already points to a different commit');
+  expect(fetcher).toHaveBeenCalledTimes(4);
+});
+
+it('refuses to tag without a release commit or settings', async () => {
+  const responses: Array<[number, unknown]> = [[404, {}], [200, { object: { type: 'tag', sha: COMMIT } }]];
+  const { options, fetcher } = tagFixture(responses);
+  await expect(tagStoreSubmission(options)).rejects.toThrow('HTTP 404');
+  await expect(tagStoreSubmission(options)).rejects.toThrow('does not point to a commit');
+  await expect(tagStoreSubmission({ ...options, token: '' })).rejects.toThrow('GitHub token are required');
+  expect(fetcher).toHaveBeenCalledTimes(2);
 });

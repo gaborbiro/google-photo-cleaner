@@ -1,4 +1,5 @@
-# Started by hand: sends an already published GitHub Release ZIP to the Chrome Web Store for review.
+# Started by hand: sends an already published GitHub Release ZIP to the Chrome Web Store for review,
+# then tags its commit store-v<version>.
 # One-time setup: docs/chrome-web-store.md, "Submitting from GitHub".
 name: Submit to Chrome Web Store
 
@@ -6,9 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version to submit, e.g. 0.4.80 (empty: the latest release)'
-        required: false
-        default: ''
+        description: 'Release version you checked, e.g. 0.4.80'
+        required: true
       publish:
         description: 'After Google approves it'
         type: choice
@@ -31,6 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: chrome-web-store
+    permissions:
+      contents: write # the store-v<version> tag
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,10 +49,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REQUESTED: ${{ inputs.version }}
         run: |
-          if [ -z "$REQUESTED" ]; then
-            REQUESTED="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
-            REQUESTED="${REQUESTED#v}"
-          fi
+          REQUESTED="${REQUESTED#v}"
           if ! [[ "$REQUESTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "Not a release version: $REQUESTED"; exit 1; fi
           gh release download "v$REQUESTED" --repo "$GITHUB_REPOSITORY" --pattern "photo-cleaner-$REQUESTED.zip" --dir release
           echo "version=$REQUESTED" >> "$GITHUB_OUTPUT"
@@ -64,8 +64,9 @@ jobs:
           access_token_scopes: https://www.googleapis.com/auth/chromewebstore
           create_credentials_file: false
 
-      - name: Upload and submit for review
+      - name: Upload, submit for review and tag
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
           CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
           CWS_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}

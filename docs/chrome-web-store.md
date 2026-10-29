@@ -24,19 +24,31 @@ the two to match, replace `key` with the public key from the dashboard (Package 
   pay the one-off US$5 fee, and verify the contact email. Consider a separate account rather than
   your personal one: it is shown to users as the publisher.
 - GitHub Pages for the privacy policy: repository Settings → Pages → Source: **GitHub Actions**.
-  Then the `Website` workflow publishes `site/` on each push to master:
+  Then the `Publish website` workflow publishes `site/` on each push to master:
   https://gaborbiro.github.io/google-photo-cleaner/privacy.html
 
 ## Submitting from GitHub
 
-The `Submit to Chrome Web Store` workflow (`.github/workflows/chrome-web-store.yml`) only runs when
-started by hand. It downloads the chosen GitHub Release ZIP (the latest if no version is given),
-uploads it with the [Chrome Web Store API](https://developer.chrome.com/docs/webstore/using-api)
-(V2) and submits it for review. It changes nothing else on the listing. It refuses, before
+The `Submit to Chrome Web Store` workflow (`.github/workflows/submit-to-chrome-web-store.yml`) only runs when
+started by hand. It downloads the GitHub Release ZIP of the version you give (the one you checked;
+wait until its Build and Package run has published it), uploads it with the
+[Chrome Web Store API](https://developer.chrome.com/docs/webstore/using-api) (V2) and submits it for
+review. It changes nothing else on the listing. It refuses, before
 uploading, while another version is still in review or approved but not yet published, and when
 the version is not newer than the published one. Running it again for a version already in review
 does nothing. "Wait for me to publish it in the dashboard" asks the store to hold the version
 after approval until you press Publish.
+
+After a successful submission it tags the release's commit `store-v<version>`, next to the
+`v<version>` tag every build gets. The tag means "sent to the store": Google approves later, and a
+rejected version keeps its tag. If tagging fails after the submission went through, run the workflow
+again for the same version; it skips the submission and adds the tag.
+
+```
+git tag -l 'store-*'                     # every version sent to the store
+git describe --tags --match 'store-*'    # the last one before this commit
+git log store-v0.4.80..master            # what changed since
+```
 
 It signs in to Google without a stored key: GitHub proves to Google that the job runs from this
 repository's master branch (Workload Identity Federation), and gets a short-lived token for a

@@ -6,7 +6,7 @@ A Chrome extension for large photo libraries. Review similar shots, choose what 
 
 [Privacy policy](https://gaborbiro.github.io/google-photo-cleaner/privacy.html) · [Project roadmap](docs/roadmap.md) · [Report an issue](https://github.com/gaborbiro/google-photo-cleaner/issues)
 
-[![Build and Release](https://github.com/gaborbiro/google-photo-cleaner/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/gaborbiro/google-photo-cleaner/actions/workflows/build-and-release.yml)
+[![Build and Package](https://github.com/gaborbiro/google-photo-cleaner/actions/workflows/build-and-package.yml/badge.svg)](https://github.com/gaborbiro/google-photo-cleaner/actions/workflows/build-and-package.yml)
 
 ## See it in action
 

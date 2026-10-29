@@ -115,7 +115,8 @@ describe('the Duplicates review', () => {
 
   it('D with nothing selected says what to do; F keeps the group and the next one appears without a message', async () => {
     const { review, fakes, view } = await opened();
-    review.tileClicked('b'); // unselect the only proposal
+    review.focusMove(1, 0);
+    review.toggleFocused(); // unselect the only proposal
     review.approve();
     expect(view().notice).toMatchObject({ text: 'Nothing is selected for the trash. Press F to keep the whole group.', tone: 'caution', visibleMs: 4_000 + 70 * 67 });
     review.keep();
@@ -251,17 +252,65 @@ describe('the Duplicates review', () => {
     expect(view().group!.focusPulse).toBe(pulse + 3);
   });
 
-  it('a click bounces only when it moves the outline, not when it toggles the outlined photo', async () => {
+  it('a click only outlines, as in Search: it never switches keep and trash, and bounces only when the outline changes', async () => {
     const { review, view } = await opened();
     const pulse = view().group!.focusPulse;
-    review.tileClicked('a'); // already outlined: toggles only
+    review.tileClicked('a'); // already the one outlined: nothing changes
     expect(view().group!.focusPulse).toBe(pulse);
-    expect(view().group!.selectionText).toBe('2 of 3 photos selected for the trash');
     review.tileClicked('b'); // moves the outline
     expect(view().group!.focusPulse).toBe(pulse + 1);
+    expect(view().group!.tiles.map((t) => [t.focused, t.current])).toEqual([[false, false], [true, true], [false, false]]);
     review.focusAll();
     review.tileClicked('b'); // from the whole group back to one photo
     expect(view().group!.focusPulse).toBe(pulse + 3);
+    expect(view().group!.selectionText).toBe('1 of 3 photos selected for the trash');
+    expect(view().group!.tiles.map((t) => t.label)).toEqual(['KEEP (recommended)', 'TRASH', 'KEEP · protected (favourite)']);
+  });
+
+  it('Ctrl/Cmd-click adds or removes a photo from the outline, never the last one; Space then marks them all', async () => {
+    const { review, view } = await opened();
+    const outlined = () => view().group!.tiles.map((t) => t.focused);
+    review.tileClicked('b', false, true);
+    expect(outlined()).toEqual([true, true, false]);
+    expect(view().group!.tiles.map((t) => t.current)).toEqual([false, false, false]); // several: nothing is scrolled to
+    review.tileClicked('a', false, true);
+    expect(outlined()).toEqual([false, true, false]);
+    review.tileClicked('b', false, true); // the last outlined photo stays
+    expect(outlined()).toEqual([false, true, false]);
+    review.tileClicked('a', false, true);
+    review.toggleFocused(); // a and b: not all marked yet, so both are
+    expect(view().group!.tiles.map((t) => t.label)).toEqual(['TRASH (was the recommended keeper)', 'TRASH', 'KEEP · protected (favourite)']);
+    review.toggleFocused(); // all marked: both kept
+    expect(view().group!.selectionText).toBe('0 of 3 photos selected for the trash');
+  });
+
+  it('Shift-click outlines the range from the photo last clicked; Ctrl/Cmd-Shift adds it; the next arrow goes back to one photo', async () => {
+    const fakes = new Fakes();
+    fakes.pending = [group('big', member('k', 'KEEPER'), ...['p1', 'p2', 'p3', 'p4'].map((k) => member(k, 'PROPOSED')))];
+    const { review, view } = await opened(fakes);
+    const outlined = () => view().group!.tiles.map((t) => t.focused);
+    review.tileClicked('p1');
+    review.tileClicked('p3', true);
+    expect(outlined()).toEqual([false, true, true, true, false]);
+    review.tileClicked('k', true); // the range keeps its start
+    expect(outlined()).toEqual([true, true, false, false, false]);
+    review.tileClicked('p4', false, true);
+    review.tileClicked('p2', true, true); // added to what is outlined
+    expect(outlined()).toEqual([true, true, true, true, true]);
+    expect(view().group!.selectionText).toBe('4 of 5 photos selected for the trash'); // outlining marks nothing
+    review.focusMove(1, 0); // back to the single outline on the photo last clicked, without moving
+    expect(view().group!.tiles.map((t) => [t.focused, t.current])).toEqual([[false, false], [false, false], [true, true], [false, false], [false, false]]);
+  });
+
+  it('Space on several photos that are all always kept says so', async () => {
+    const fakes = new Fakes();
+    fakes.pending = [group('g', member('a', 'KEEPER'), member('r1', 'REFERENCE'), member('r2', 'REFERENCE'))];
+    const { review, view } = await opened(fakes);
+    review.tileClicked('r1');
+    review.tileClicked('r2', true);
+    review.toggleFocused();
+    expect(view().notice!.text).toBe('These photos are always kept: each is protected or has an unknown status.');
+    expect(view().group!.selectionText).toBe('0 of 3 photos selected for the trash');
   });
 
   it('a slide that runs into the edge just stops; a fresh tap at the edge bounces, so the eye finds the outline', async () => {

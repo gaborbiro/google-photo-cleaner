@@ -68,7 +68,7 @@ export interface TileView {
   tone: Tone;
   selectable: boolean;
   focused: boolean;
-  /** The one photo the keys act on (not when A outlines the whole group): kept scrolled into view. */
+  /** The one photo the keys act on (not while several are outlined): kept scrolled into view. */
   current: boolean;
   /** A photo new to a moment decided before. */
   newBadge: boolean;
@@ -202,11 +202,14 @@ export class DuplicatesReview {
   private viewerIndex: number | null = null;
   private readonly rotations = new ViewRotations();
 
-  // Keyboard focus in the group grid: one photo is always outlined, the first when a group comes on.
+  // Focus in the group grid, outlined in white as Search's selection is: at least one photo, the first when a group comes on.
+  /** The photo last clicked or moved to with the arrows: where a Shift-click range starts and what Enter opens. */
   private focusedIndex = 0;
+  /** The outlined photos, which Space switches between keep and trash: by a click, Ctrl/Cmd-click, Shift-click, A or the arrows. */
+  private outlined = new Set<number>([0]);
+  /** After a Shift-click: where the outlined range starts; it ends at [focusedIndex]. */
+  private rangeStart: number | null = null;
   private columns = 1;
-  /** After A, the whole group is focused (outline on every photo) until A again, an arrow or a click. */
-  private allFocused = false;
   private focusPulse = 0;
   /** The width the grid last measured; the columns follow it and the photo size. */
   private gridWidthPx = 0;
@@ -299,7 +302,10 @@ export class DuplicatesReview {
     this.decided = [];
     // Coming back to the same group (e.g. returning to the tab) keeps the place in it.
     if (this.pending[0]?.id !== shownBefore) this.resetFocus();
-    this.focusedIndex = Math.min(this.focusedIndex, Math.max(0, (this.pending[0]?.members.length ?? 1) - 1));
+    const last = Math.max(0, (this.pending[0]?.members.length ?? 1) - 1);
+    this.focusedIndex = Math.min(this.focusedIndex, last);
+    for (const index of this.outlined) if (index > last) this.outlined.delete(index);
+    if (this.outlined.size === 0) this.outlineOnly(this.focusedIndex);
     this.deferredIds = new Set(queue.deferredIds);
     this.totalGroups = queue.totalGroups;
     this.decidedGroups = queue.decidedGroups;
@@ -356,7 +362,12 @@ export class DuplicatesReview {
 
   private resetFocus(): void {
     this.focusedIndex = 0;
-    this.allFocused = false;
+    this.outlineOnly(0);
+  }
+
+  private outlineOnly(index: number): void {
+    this.outlined = new Set([index]);
+    this.rangeStart = null;
   }
 
   /** The grid reports its width so up and down can move by a whole row. */
@@ -409,13 +420,14 @@ export class DuplicatesReview {
    * Arrows: left and right within the row, up and down within the column; at an edge (or with no
    * photo directly below on a short last row) the outline stays put. A fresh tap there bounces it,
    * so the eye finds it; a slide that runs into the edge ([held]: the repeats of a held arrow) just
-   * stops. The first press after A returns to the single outline where the user was.
+   * stops. With several photos outlined (A, Ctrl/Cmd- or Shift-click), the first press returns to
+   * the single outline on the photo last clicked.
    */
   focusMove(dx: number, dy: number, held = false): void {
     const group = this.currentOrSay();
     if (!group) return;
-    if (this.allFocused) {
-      this.allFocused = false;
+    if (this.outlined.size !== 1 || !this.outlined.has(this.focusedIndex)) {
+      this.outlineOnly(this.focusedIndex);
     } else {
       const last = group.members.length - 1;
       const column = this.focusedIndex % this.columns;
@@ -427,22 +439,41 @@ export class DuplicatesReview {
         return this.publish();
       }
       this.focusedIndex = target;
+      this.outlineOnly(target);
     }
     this.focusPulse++;
     this.publish();
   }
 
-  /** A click focuses the photo and, when it can go, switches it between keep and trash. */
-  tileClicked(mediaKey: string): void {
+  /**
+   * Clicks outline photos as in Search; only Space switches them between keep and trash. A click
+   * outlines just this photo. Ctrl/Cmd-click adds or removes it without changing the others (the
+   * last outlined photo stays). Shift outlines the range from the photo last clicked; Ctrl/Cmd with
+   * Shift adds the range.
+   */
+  tileClicked(mediaKey: string, shift = false, additive = false): void {
     const group = this.pending[0];
     if (!group) return;
     const index = group.members.findIndex((m) => m.mediaKey === mediaKey);
     if (index < 0) return;
-    // Only a click that moves the outline bounces; clicking the outlined photo just toggles it.
-    if (index !== this.focusedIndex || this.allFocused) this.focusPulse++;
+    // Only a click that changes the outline bounces; clicking the one outlined photo does nothing.
+    const alone = this.outlined.size === 1 && this.outlined.has(index);
+    if (!alone || shift || additive) this.focusPulse++;
+    if (shift) {
+      const start = this.rangeStart ?? this.focusedIndex;
+      if (!additive) this.outlined.clear();
+      for (let i = Math.min(start, index); i <= Math.max(start, index); i++) this.outlined.add(i);
+      this.rangeStart = start;
+    } else {
+      if (!additive) this.outlined.clear();
+      if (additive && this.outlined.has(index)) {
+        if (this.outlined.size > 1) this.outlined.delete(index);
+      } else {
+        this.outlined.add(index);
+      }
+      this.rangeStart = null;
+    }
     this.focusedIndex = index;
-    this.allFocused = false;
-    if (group.members[index]!.selectable) this.toggle(group, mediaKey);
     this.publish();
   }
 
@@ -462,24 +493,23 @@ export class DuplicatesReview {
   }
 
   /**
-   * Space: switch the focused photo between keep and trash. With the whole group focused (A),
-   * mark every photo that can go, or, when they all are already, keep them all.
+   * Space: switch the outlined photo between keep and trash. With several outlined, mark every one
+   * of them that can go, or, when they all are already, keep them all.
    */
   toggleFocused(): void {
     const group = this.currentOrSay();
     if (!group) return;
-    if (this.allFocused) {
-      const selectable = group.members.filter((m) => m.selectable).map((m) => m.mediaKey);
-      const selected = this.selectionOf(group);
-      const all = selectable.every((k) => selected.has(k));
-      for (const k of selectable) {
-        if (all) selected.delete(k);
-        else selected.add(k);
-      }
-      return this.publish();
+    const members = group.members.filter((_, index) => this.outlined.has(index));
+    if (members.length === 1) return this.toggleOrExplain(members[0]!.mediaKey);
+    const selectable = members.filter((m) => m.selectable).map((m) => m.mediaKey);
+    if (selectable.length === 0) return this.sayAndPublish('These photos are always kept: each is protected or has an unknown status.', 'caution');
+    const selected = this.selectionOf(group);
+    const all = selectable.every((k) => selected.has(k));
+    for (const k of selectable) {
+      if (all) selected.delete(k);
+      else selected.add(k);
     }
-    const member = group.members[this.focusedIndex];
-    if (member) this.toggleOrExplain(member.mediaKey);
+    this.publish();
   }
 
   /**
@@ -487,8 +517,13 @@ export class DuplicatesReview {
    * A again goes back to the single outline; what is marked for the trash stays as it is.
    */
   focusAll(): void {
-    if (!this.currentOrSay()) return;
-    this.allFocused = !this.allFocused;
+    const group = this.currentOrSay();
+    if (!group) return;
+    if (this.outlined.size === group.members.length) this.outlineOnly(this.focusedIndex);
+    else {
+      this.outlined = new Set(group.members.map((_, index) => index));
+      this.rangeStart = null;
+    }
     this.focusPulse++;
     this.publish();
   }
@@ -631,7 +666,7 @@ export class DuplicatesReview {
   viewerClose(): void {
     if (this.viewerIndex === null) return;
     this.focusedIndex = this.viewerIndex;
-    this.allFocused = false;
+    this.outlineOnly(this.viewerIndex);
     this.viewerIndex = null;
     this.publish();
   }
@@ -719,7 +754,8 @@ export class DuplicatesReview {
         (returning ? ` · ${n(newCount)} new since your last decision` : '') +
         (this.deferredIds.has(group.id) ? ' · skipped earlier' : ''),
       warningText: selected.size === group.members.length ? 'No photo of this moment will be kept.' : null,
-      tiles: group.members.map((m, index) => this.tileView(m, selected.has(m.mediaKey), this.allFocused || index === this.focusedIndex, !this.allFocused && index === this.focusedIndex, returning && !m.previouslyReviewed)),
+      // The photo the keys act on is kept in view only while it is the one outlined (A, which outlines every photo, scrolls nothing).
+      tiles: group.members.map((m, index) => this.tileView(m, selected.has(m.mediaKey), this.outlined.has(index), this.outlined.size === 1 && this.outlined.has(index), returning && !m.previouslyReviewed)),
     };
   }
 

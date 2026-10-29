@@ -111,7 +111,9 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
    stops at the end without bouncing. Tapping an arrow at an edge bounces the photo once. Down on
    the bottom row stays in its column.
 3. **A** focuses the whole group (every photo bounces); **A** again unfocuses. **Space** toggles
-   trash on the focused photo; clicking a photo toggles it without a bounce.
+   trash on the focused photos, and only Space does. A click focuses just that photo, as in Search,
+   and changes no TRASH or KEEP; **Ctrl/Cmd-click** adds or removes a photo (the last one stays),
+   **Shift-click** focuses a range from the photo last clicked, and Space then toggles them together.
 4. **D** trashes the selection, **F** keeps all, **S** skips. **Z** undoes, with a
    spinner while it works.
 5. In a long group scrolled down, the next long group brings its top row into view without opening

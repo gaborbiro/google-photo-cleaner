@@ -57,7 +57,7 @@ function Tile({ tile, focusPulse, review }: { tile: TileView; focusPulse: number
   useFocusFeedback(ref, image, tile.focused, tile.current, focusPulse);
   return (
     <figure ref={ref} className={`tile tone-${tile.tone}${tile.focused ? ' focused' : ''}`}>
-      <div className="tile-image" ref={image} onClick={() => review.tileClicked(tile.mediaKey)}>
+      <div className="tile-image" ref={image} onClick={(e) => review.tileClicked(tile.mediaKey, e.shiftKey, e.ctrlKey || e.metaKey)}>
         {tile.imageUrl ? <img src={tile.imageUrl} alt="" draggable={false} /> : <span className="muted small">{tile.error ?? 'Loading…'}</span>}
         {tile.newBadge && <span className="new-badge">NEW</span>}
         <button className="expand" title="View large (Enter)" aria-label="View large" tabIndex={-1} onClick={(e) => { e.stopPropagation(); review.openViewer(tile.mediaKey); }}>⤢</button>

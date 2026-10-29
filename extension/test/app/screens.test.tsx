@@ -327,7 +327,7 @@ async function searchShown() {
 }
 
 describe('clicks and keys reach what they should', () => {
-  it('Duplicates: arrows move the focus; Space and a click toggle a photo; Enter, arrows and Esc work the viewer', async () => {
+  it('Duplicates: arrows move the focus; Space toggles a photo, a click only outlines it; Enter, arrows and Esc work the viewer', async () => {
     const root = await duplicatesShown();
     await vi.waitFor(() => expect(focusedTile(dupTiles(root))).toBe(0));
     await shows(root, '2 of 3 photos selected for the trash');
@@ -337,7 +337,12 @@ describe('clicks and keys reach what they should', () => {
     press(' ');
     await vi.waitFor(() => expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'KEEP (your choice)', 'TRASH']));
     await shows(root, '1 of 3 photos selected for the trash');
+    dupTiles(root)[2]!.querySelector<HTMLElement>('.tile-image')!.click();
+    await vi.waitFor(() => expect(focusedTile(dupTiles(root))).toBe(2));
+    expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'KEEP (your choice)', 'TRASH']);
     dupTiles(root)[1]!.querySelector<HTMLElement>('.tile-image')!.click();
+    await vi.waitFor(() => expect(focusedTile(dupTiles(root))).toBe(1));
+    press(' ');
     await vi.waitFor(() => expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'TRASH', 'TRASH']));
 
     press('Enter');
@@ -449,6 +454,25 @@ describe('clicks and keys reach what they should', () => {
     await shows(root, '1 selected');
     expect(root.querySelectorAll('.search .examples').length).toBe(before);
     expect(selectedCount(root)).toBe(1);
+  });
+
+  it('Duplicates: Ctrl/Cmd-click and Shift-click outline several photos as in Search, and Space marks them together', async () => {
+    const root = await duplicatesShown();
+    const image = (index: number) => dupTiles(root)[index]!.querySelector<HTMLElement>('.tile-image')!;
+    const outlined = () => dupTiles(root).map((t) => t.classList.contains('focused'));
+    image(1).click();
+    image(2).dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    await vi.waitFor(() => expect(outlined()).toEqual([false, true, true]));
+    image(1).dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+    await vi.waitFor(() => expect(outlined()).toEqual([false, false, true]));
+    image(0).dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true })); // from the photo last clicked
+    await vi.waitFor(() => expect(outlined()).toEqual([true, true, false]));
+    image(2).dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true, ctrlKey: true }));
+    await vi.waitFor(() => expect(outlined()).toEqual([true, true, true]));
+    expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'TRASH', 'TRASH']); // clicks mark nothing
+    press(' ');
+    await vi.waitFor(() => expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'KEEP (your choice)', 'KEEP (your choice)']));
+    expect(await decisions()).toEqual([]);
   });
 
   it('Search: clicks select one, Ctrl/Cmd-click toggles individuals, and Shift-click selects a range without trash decisions', async () => {

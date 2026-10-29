@@ -1,7 +1,7 @@
 # Publishes site/ (the privacy policy the Chrome Web Store links to) on GitHub Pages:
 # https://gaborbiro.github.io/google-photo-cleaner/privacy.html
 # One-time: repository Settings → Pages → Source: "GitHub Actions".
-name: Website
+name: Publish website
 
 on:
   push:

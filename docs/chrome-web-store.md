@@ -24,7 +24,7 @@ the two to match, replace `key` with the public key from the dashboard (Package 
   pay the one-off US$5 fee, and verify the contact email. Consider a separate account rather than
   your personal one: it is shown to users as the publisher.
 - GitHub Pages for the privacy policy: repository Settings → Pages → Source: **GitHub Actions**.
-  Then the `Website` workflow publishes `site/` on each push to master:
+  Then the `Publish website` workflow publishes `site/` on each push to master:
   https://gaborbiro.github.io/google-photo-cleaner/privacy.html
 
 ## Submitting from GitHub

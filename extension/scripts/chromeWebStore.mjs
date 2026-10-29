@@ -50,6 +50,30 @@ export async function submitToChromeWebStore({ publisherId, extensionId, version
   return { state: published.state, warnings: (published.warningInfo?.warnings ?? []).map((w) => w.description ?? w.reason), alreadySubmitted: false };
 }
 
+/** Marks the commit of release v<version> as sent to the store with store-v<version>. A rerun finds it in place. */
+export async function tagStoreSubmission({ repository, version, token, fetcher = fetch }) {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? '') || !/^\d+\.\d+\.\d+$/.test(version ?? '') || !token) throw new Error('Repository, version and GitHub token are required to tag the submission.');
+  const base = `https://api.github.com/repos/${repository}/git`;
+  const headers = { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' };
+  const request = async (method, url, body, missing = false) => {
+    const response = await fetcher.call(globalThis, url, { method, headers: { ...headers, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(60_000) });
+    if (missing && response.status === 404) return null;
+    if (!response.ok) throw new Error(`GitHub ${method} failed (HTTP ${response.status}) while tagging the submission.`);
+    return response.json();
+  };
+  const release = await request('GET', `${base}/ref/tags/v${version}`);
+  if (release.object?.type !== 'commit' || !/^[a-f0-9]{40}$/.test(release.object.sha ?? '')) throw new Error(`Release tag v${version} does not point to a commit.`);
+  const tag = `store-v${version}`;
+  const existing = await request('GET', `${base}/ref/tags/${tag}`, undefined, true);
+  if (existing) {
+    if (existing.object?.sha !== release.object.sha) throw new Error(`Tag ${tag} already points to a different commit.`);
+    return { tag, commit: release.object.sha, created: false };
+  }
+  await request('POST', `${base}/refs`, { ref: `refs/tags/${tag}`, sha: release.object.sha });
+  return { tag, commit: release.object.sha, created: true };
+}
+
 if (import.meta.main) {
   try {
     const version = process.env.RELEASE_VERSION;
@@ -57,5 +81,9 @@ if (import.meta.main) {
       assetPath: process.env.RELEASE_ASSET_PATH, accessToken: process.env.CWS_ACCESS_TOKEN, publishType: process.env.CWS_PUBLISH_TYPE || undefined });
     for (const warning of result.warnings) console.warn(`Store warning: ${warning}`);
     console.log(result.alreadySubmitted ? `Version ${version} was already submitted (${result.state}); nothing to do.` : `Submitted version ${version} to the Chrome Web Store: ${result.state}.`);
+    try {
+      const tagged = await tagStoreSubmission({ repository: process.env.GITHUB_REPOSITORY, version, token: process.env.GITHUB_TOKEN });
+      console.log(`${tagged.created ? 'Tagged' : 'Already tagged'} ${tagged.commit.slice(0, 7)} as ${tagged.tag}.`);
+    } catch (error) { throw new Error(`The submission went through, but tagging it failed: ${error.message} Run the workflow again for this version to add the tag.`); }
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

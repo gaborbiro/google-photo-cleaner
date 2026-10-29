@@ -6,7 +6,7 @@ name: Publish website
 on:
   push:
     branches: [master]
-    paths: ['site/**', 'docs/design/branding-v1/icon-32.png', 'docs/design/branding-v1/icon-128.png', '.github/workflows/pages.yml']
+    paths: ['site/**', 'docs/design/branding-v1/icon-32.png', 'docs/design/branding-v1/icon-128.png', '.github/workflows/publish-website.yml']
   workflow_dispatch:
 
 permissions:

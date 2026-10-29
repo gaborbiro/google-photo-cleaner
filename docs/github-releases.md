@@ -48,13 +48,16 @@ the changes are pushed and the settings are supplied.
 
 The source manifest version remains useful for local development. GitHub stamps a separate version
 into its own checkout **before checks and packaging**. The number is the fixed release epoch
-`0.4.54` plus `GITHUB_RUN_NUMBER`, carrying components at Chrome's limit of 65,535. For example,
-workflow run 20 produces `0.4.74`. Runs on other branches/PRs can create gaps in release numbers;
+`0.5.0` plus `GITHUB_RUN_NUMBER`, carrying components at Chrome's limit of 65,535. For example,
+workflow run 20 produces `0.5.20`. (Until 2026-10-29 the workflow was `build-and-release.yml` with
+epoch `0.4.54`, releasing up to `v0.4.64`; renaming its file restarted the run counter, so the
+epoch was raised above every version used before.) Runs on other branches/PRs can create gaps in release numbers;
 that is intentional. Reverting the source manifest cannot cause a release version to go backwards.
 
 Nothing commits back to master, so there is no release-commit loop. Keep this workflow's run counter
-and fixed epoch; do not reset or reduce them. Raise the epoch deliberately if migrating to a different
-workflow with a new run counter. Run-number retries use the same version and source commit.
+and fixed epoch; do not reset or reduce them. Renaming or moving the workflow file makes GitHub start
+a new workflow with a new run counter: raise the epoch above every version used so far in the same
+change. Run-number retries use the same version and source commit.
 
 The publisher pins the release to the checked commit, uploads the ZIP to an unpublished draft,
 verifies its size and hash when supplied by GitHub, then publishes it. Re-running can resume the

@@ -1,7 +1,9 @@
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
 // Fixed epoch: reverting an application's source manifest must not reuse a published version.
-const RELEASE_BASE_VERSION = '0.4.54';
+// Raised from 0.4.54 when build-and-release.yml became build-and-package.yml (2026-10-29), which
+// restarted the run counter; the old workflow's releases and the source manifest were still 0.4.x.
+export const RELEASE_BASE_VERSION = '0.5.0';
 
 /** Stable across retries; carries at Chrome's version-component limit. No version-bump commits. */
 export function releaseVersion(source, runNumber) {

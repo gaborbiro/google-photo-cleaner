@@ -15,7 +15,7 @@ desktop app, the original prototype, was removed on 2026-10-18; it is in the git
 
 ## Verify every change
 
-Run this before you call a change done. It must pass, and it is what CI runs (`.github/workflows/build-and-release.yml`):
+Run this before you call a change done. It must pass, and it is what CI runs (`.github/workflows/build-and-package.yml`):
 
 ```
 cd extension
@@ -53,7 +53,7 @@ page and confirm the new fixes or improvements are loaded.
 | `extension/src/page/`, `extension/src/content/relay.ts`, `extension/src/shared/` | The page script's operations on Google Photos (`trashOps.ts` holds the only writes), its relay, and their messages |
 | `features/shared/protection`, `features/shared/duplicates` | **Shared rules** (Kotlin Multiplatform, JVM and JS): what is protected, duplicate grouping, keeper choice, the review queue, calibration maths. Tests in `features/shared/duplicates/src/commonTest` |
 | `repositories/*/domain` | The models the shared rules read (multiplatform) |
-| `site/` | The privacy policy page, published by `.github/workflows/pages.yml` |
+| `site/` | The privacy policy page, published by `.github/workflows/publish-website.yml` |
 | `spikes/` | Experiments from phase 1; not part of the product |
 | `tools/test-audit/` | Replays recorded faults to check the tests catch them (`docs/test-audit.md`) |
 

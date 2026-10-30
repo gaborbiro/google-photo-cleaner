@@ -258,11 +258,12 @@ Testing
 
 - [x] Name, icon, short description (2026-10-17: the branding-v1 icons are in the extension)
 - [ ] Data privacy review (go through the Data privacy chapter below; decide on each open concern)
-- [~] Privacy policy page (the stores require one): written (`site/privacy.html`), published by
-      GitHub Pages once Pages is switched on (see `docs/chrome-web-store.md`)
-- [ ] Chrome Web Store developer account (one-off $5 fee) and listing: listing texts, form answers
-      and release steps in `docs/chrome-web-store.md`; `npm run package` makes the zip; screenshots
-      still to make
+- [x] Privacy policy page (the stores require one): `site/privacy.html`, published by GitHub Pages
+      (2026-10-30). Its update for the Settings tab and the usage question after the first scan
+      (2026-10-30, branch `claude/settings-tab-2cb7765`) goes live when that branch is merged
+- [x] Chrome Web Store developer account and listing (published; store submission tagged
+      `store-v0.5.3`, 2026-10-29): listing texts, form answers and release steps in
+      `docs/chrome-web-store.md`; `npm run package` makes the zip
 - [ ] Microsoft Edge Add-ons listing
 - [ ] Website: landing page with "Add to Chrome", demo, privacy promise
 - [ ] Direct download on the website (zip + "Load unpacked" steps for Chrome; signed file for Firefox if we support it)
@@ -275,7 +276,12 @@ Testing
 - [~] Optional usage reporting, direct to GA4 Measurement Protocol (no relay). Code added in
       0.4.49: consent in popup/panel/review, launch observations, scan/analysis/review/Search/trash
       milestones and fixed failure categories. No photos, searches or account details. Silent
-      development builds; real GA setup, report verification and disclosure publication remain.
+      development builds. GA4 property set up (2026-10-30); its measurement ID and API secret are in
+      the repository's Actions settings for release builds. Since 0.4.73 the question waits until a
+      scan has finished, and events are kept on the computer until the answer. Real collection
+      verified (2026-10-30): events arrive, Realtime, DebugView and the funnels work. Still to do:
+      check that events kept before the answer land at their own times (0.4.73, not yet released),
+      and the store's data-use disclosure.
       See `docs/usage-events.md` and `docs/usage-events-setup.md`. Further error coverage:
   - [ ] Google changed something: where (scan: library / favourites / archive / album list /
         album contents; analysis: library / previews; account check; previews in review), kind,
@@ -352,8 +358,9 @@ Kept up to date as we go; reviewed in full before publishing (phase 3).
 - [ ] The goodbye page's address carries nothing that identifies the user
 - [ ] No analytics or crash reports containing photo data, keys or addresses (the desktop app already
       strips them from errors)
-- [~] Optional fixed usage/failure events are off until consent. Policy source updated; publish it
-      and the store disclosure with the configured analytics release (see usage reporting setup)
+- [~] Optional fixed usage/failure events are off until consent. Policy published (2026-10-30); its
+      update for keeping events until the answer goes live with the Settings tab branch. Store
+      disclosure still to check (see usage reporting setup)
 - [ ] Chrome Web Store: privacy policy + data-use disclosure (reads website content on
       photos.google.com, kept on the computer), "Limited Use" rules
 

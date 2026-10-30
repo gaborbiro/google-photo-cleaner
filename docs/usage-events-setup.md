@@ -2,7 +2,10 @@
 
 Implemented in extension 0.4.49. Direct collection only: no relay. All developer/CI builds are
 silent unless explicitly built with `--usage`. Consent is still required in a configured build.
-No GA property or secret has been created by this change; live reporting remains to be verified.
+The GA4 property was set up on 2026-10-30, with its measurement ID and API secret in the
+repository's Actions settings. Real collection was verified on 2026-10-30: events arrive, and
+Realtime, DebugView and the funnels work. Still to verify with a 0.4.73 or later build: events kept
+before the answer land at the times they happened.
 
 ## Configure a test property first
 

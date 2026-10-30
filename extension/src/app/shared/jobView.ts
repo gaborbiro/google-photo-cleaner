@@ -5,6 +5,7 @@
 
 import { MODEL_DOWNLOAD_BYTES } from '../ai/model';
 import { SCAN_MAX_AGE_MS, type ReportView } from '../scan/report';
+import { feedbackView, type FeedbackView } from './feedback';
 import { count, n } from './format';
 import { googleProblemLine } from './googleProblems';
 import { NOT_RESPONDING_TEXT, notResponding, type AnalysisJob, type Job, type JobKind, type ScanJob } from './job';
@@ -360,13 +361,20 @@ export interface OtherAccountRow {
 export interface ReviewPageView {
   /** The account whose library this is, as shown: "someone@example.com"; null with no account yet. */
   accountName: string | null;
-  /** Beside the title, so the user can tell an update has loaded (see [versionLabel]). */
+  /** At the foot of the Settings tab, so the user can tell an update has loaded (see [versionLabel]). */
   versionLabel: string;
+  /** Settings' Feedback card: where to write, the email's subject naming the version. */
+  feedback: FeedbackView;
   /**
-   * The tabs' labels, numbered as on the desktop (which has Calibration as its step 2); Search is not a
-   * step. The Scan tab's carries its status: "1 · Scan (done)".
+   * The tabs' labels, numbered as on the desktop (which has Calibration as its step 2); Search and
+   * Settings are not steps. The Scan tab's carries its status: "1 · Scan (done)".
    */
-  tabLabels: { scan: string; duplicates: string; search: string };
+  tabLabels: Record<ReviewTab, string>;
+  /**
+   * Which photos are never trashed, on every work tab, since the choices themselves are in Settings:
+   * "Never trashed: favourites and archived photos." Null with no account or while the choices load.
+   */
+  protectionText: string | null;
   /** Other accounts scanned on this computer, each a link to its own review. */
   otherAccounts: OtherAccountRow[];
   /**
@@ -383,6 +391,20 @@ export interface ReviewPageView {
  */
 export function versionLabel(version: string, localBuild: boolean): string {
   return localBuild ? `v${version} · local build` : `v${version}`;
+}
+
+const PROTECTED_KINDS: { key: keyof ProtectionChoices; name: string }[] = [
+  { key: 'favourites', name: 'favourites' },
+  { key: 'albums', name: 'photos in an album' },
+  { key: 'archived', name: 'archived photos' },
+];
+
+/** The protection choices in a line: "Never trashed: favourites, photos in an album and archived photos." */
+export function protectionText(choices: ProtectionChoices): string {
+  const names = PROTECTED_KINDS.filter((k) => choices[k.key]).map((k) => k.name);
+  if (names.length === 0) return 'Favourites, photos in an album and archived photos may all be offered for the trash.';
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `Never trashed: ${list}.`;
 }
 
 export function reviewPageView(input: {
@@ -403,7 +425,9 @@ export function reviewPageView(input: {
   return {
     accountName: selected === null ? null : accountLabel(selected, emailOf(selected)),
     versionLabel: versionLabel(version, localBuild),
-    tabLabels: { scan: shown ? scanTabTitle(shown) : '1 · Scan', duplicates: '2 · Duplicates', search: 'Search' },
+    feedback: feedbackView(version),
+    tabLabels: { scan: shown ? scanTabTitle(shown) : '1 · Scan', duplicates: '2 · Duplicates', search: 'Search', settings: 'Settings' },
+    protectionText: selected === null || choices === undefined ? null : protectionText(choices),
     otherAccounts: jobs
       .filter((j): j is ScanJob => j.kind === 'library-scan' && j.account !== selected)
       .map((j) => ({

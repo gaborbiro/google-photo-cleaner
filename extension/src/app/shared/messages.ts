@@ -42,8 +42,10 @@ export type AppRequest =
   /** Erase everything Photo Cleaner saved on this computer; answers `{ ok: true }` or `{ error }`. */
   | { kind: 'app-erase-all' };
 
-export type ReviewTab = 'scan' | 'duplicates' | 'search';
-export const REVIEW_TABS: readonly ReviewTab[] = ['scan', 'duplicates', 'search'];
+export type ReviewTab = 'scan' | 'duplicates' | 'search' | 'settings';
+/** The tabs for the work, in order; Settings stands apart from them at the far end. */
+export const WORK_TABS: readonly ReviewTab[] = ['scan', 'duplicates', 'search'];
+export const REVIEW_TABS: readonly ReviewTab[] = [...WORK_TABS, 'settings'];
 
 /**
  * The review tab's address for [account], opening [tab]: `review.html?account=…#duplicates`. Only the

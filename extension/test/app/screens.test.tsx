@@ -197,11 +197,18 @@ describe('the pages draw', () => {
   });
 
   for (const page of ['popup', 'panel', 'review'] as const) {
-    it(`${page}: asks for usage consent before a scan, remembers refusal and can be enabled or disabled`, async () => {
+    it(`${page}: asks for usage consent once a scan has finished, remembers refusal and can be enabled or disabled`, async () => {
       account = NO_TAB;
+      await scannedAndAnalysed(indexedDB);
       const root = await open(page);
       await shows(root, 'Help improve Photo Cleaner?', 'Reporting is not configured');
       await click(root, 'No thanks');
+      if (page === 'review') {
+        // The review tab only asks on Scan; once answered, the setting is in Settings.
+        await vi.waitFor(() => expect(root.textContent).not.toContain('Help improve Photo Cleaner?'));
+        expect(root.querySelector('.usage-card')).toBeNull();
+        await click(root, 'Settings');
+      }
       await shows(root, 'Send optional usage statistics');
       expect(root.textContent).not.toContain('Help improve Photo Cleaner?');
       expect((await new IndexedDbUsageStore(indexedDB).get()).answer).toBe('no');
@@ -215,7 +222,24 @@ describe('the pages draw', () => {
     });
   }
 
-  it('popup: allowing usage is saved; reopening remembers it; erase brings back the question', async () => {
+  it('before any scan, only the review tab’s Settings offers the usage choice', async () => {
+    for (const page of ['popup', 'panel'] as const) {
+      const root = await open(page);
+      await shows(root, 'Photo Cleaner');
+      await vi.waitFor(() => expect(requests('app-account').length).toBeGreaterThan(0));
+      expect(root.querySelector('.usage-card')).toBeNull();
+      for (const r of roots.splice(0)) r.unmount();
+      vi.resetModules();
+    }
+    const review = await open('review', '?account=account-a');
+    await shows(review, 'Scan library');
+    expect(review.querySelector('.usage-card')).toBeNull();
+    await click(review, 'Settings');
+    await shows(review, 'Help improve Photo Cleaner?');
+  });
+
+  it('popup: allowing usage is saved; reopening remembers it; erase brings back the question after the next scan', async () => {
+    await scannedAndAnalysed(indexedDB);
     const root = await open('popup');
     await click(root, 'Allow usage statistics');
     await shows(root, 'Send optional usage statistics');
@@ -227,6 +251,7 @@ describe('the pages draw', () => {
     expect(reopened.querySelector<HTMLInputElement>('.usage-card input')!.checked).toBe(true);
     for (const mounted of roots.splice(0)) mounted.unmount();
     await eraseAllData(indexedDB, { keys: async () => [] } as unknown as CacheStorage);
+    await scannedAndAnalysed(indexedDB);
     vi.resetModules();
     await shows(await open('popup'), 'Help improve Photo Cleaner?');
   });
@@ -257,23 +282,40 @@ describe('the pages draw', () => {
     await shows(root, 'Scan library');
   });
 
-  it('review tab: Scan, then Duplicates with the burst, then Search with its photos as examples', async () => {
+  it('review tab: Scan, then Duplicates with the burst, then Search with its photos as examples, then Settings', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('review', '?account=account-a');
-    await shows(root, 'Photo Cleaner', 'someone@example.com', 'Never trash photos that are', 'Erase Photo Cleaner');
+    const allProtected = 'Never trashed: favourites, photos in an album and archived photos.';
+    await shows(root, 'Photo Cleaner', 'someone@example.com', 'Scan complete', allProtected);
     expect(root.querySelector('h1')?.textContent).toBe('Photo Cleaner');
-    expect(root.querySelector('.title-line .version')?.textContent).toBe('v1.2.3');
+    // The Scan tab holds the scan only: the choices, diagnostics, erasing and the version are in Settings.
+    expect(root.textContent).not.toContain('Never trash photos that are');
+    expect(root.textContent).not.toContain('Erase Photo Cleaner');
+    expect(root.textContent).not.toContain('Something not working?');
+    expect(root.querySelector('.version')).toBeNull();
 
     await click(root, '2 · Duplicates');
     await vi.waitFor(() => expect(root.querySelectorAll('.duplicates:not([hidden]) .tiles > *')).toHaveLength(3), { timeout: 3_000 });
     await shows(root, 'D · Trash selected');
+    expect(root.querySelector('.duplicates:not([hidden]) .protection-line')?.textContent).toBe(`${allProtected} Change`);
 
     await click(root, 'Search more like these');
     await vi.waitFor(() => expect(root.querySelectorAll('.search-grid > *').length).toBeGreaterThan(0), { timeout: 3_000 });
     await shows(root, 'More like:');
+    expect(root.querySelector('.search:not([hidden]) .protection-line')?.textContent).toBe(`${allProtected} Change`);
+
+    await click(root, 'Settings');
+    await vi.waitFor(() => expect(root.querySelector('.settings-tab')?.hasAttribute('hidden')).toBe(false));
+    const settings = root.querySelector<HTMLElement>('.settings-tab')!;
+    await shows(settings, 'Never trash photos that are', 'Help improve Photo Cleaner?', 'Something not working?', 'Erase Photo Cleaner');
+    const write = settings.querySelector<HTMLAnchorElement>('.feedback-card a[href^="mailto:"]')!;
+    expect(write.textContent).toBe('nomadworkz@gmail.com');
+    expect(write.getAttribute('href')).toBe('mailto:nomadworkz@gmail.com?subject=Photo%20Cleaner%20feedback%20(v1.2.3)');
+    expect(settings.querySelector('.version')?.textContent).toBe('v1.2.3');
+    expect(settings.lastElementChild?.classList.contains('version')).toBe(true); // at the foot, below Erase
 
     await click(root, '1 · Scan');
-    await shows(root, 'Never trash photos that are');
+    await vi.waitFor(() => expect(root.querySelector('.settings-tab')?.hasAttribute('hidden')).toBe(true));
   });
 
   it('review tab: Duplicates says how many photos are not analysed yet', async () => {
@@ -295,7 +337,10 @@ describe('the pages draw', () => {
   it('after the data was erased the review tab says so, and offers erasing even with no account signed in', async () => {
     account = NO_TAB;
     const root = await open('review', '?erased=1');
-    await shows(root, 'erased', 'No account yet', 'Erase Photo Cleaner');
+    await shows(root, 'erased', 'No account yet');
+    await click(root, 'Settings');
+    await shows(root, 'Erase Photo Cleaner', 'Something not working?');
+    expect(root.textContent).not.toContain('Never trash photos that are'); // no account, so no choices
   });
 });
 
@@ -644,19 +689,34 @@ describe('clicks and keys reach what they should', () => {
     await shows(root, "They go to Google Photos' trash, where they stay for 30 days.");
   }, 15_000);
 
-  it('Scan tab: the protection checkboxes are saved and change the counts; the Scan button starts a scan', async () => {
+  it('Settings: the protection checkboxes are saved and change the Scan counts and the line on each tab; Change opens them; the Scan button starts a scan', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('review', '?account=account-a');
     await shows(root, 'Eligible5');
-    const favourites = root.querySelector<HTMLInputElement>('.protection-card input[type="checkbox"]')!;
+    root.querySelector<HTMLButtonElement>('.scan-tab .protection-line button')!.click();
+    const favourites = await vi.waitFor(() => {
+      const box = root.querySelector<HTMLInputElement>('.settings-tab:not([hidden]) .protection-card input[type="checkbox"]');
+      expect(box).not.toBeNull();
+      return box!;
+    });
     expect(favourites.checked).toBe(true);
 
     favourites.click();
-    await shows(root, 'Eligible6');
+    await shows(root, 'Eligible6', 'Never trashed: photos in an album and archived photos.');
     expect(await new IndexedDbPreferences(indexedDB).protection('account-a')).toEqual({ favourites: false, albums: true, archived: true });
     favourites.click();
-    await shows(root, 'Eligible5');
+    await shows(root, 'Eligible5', 'Never trashed: favourites, photos in an album and archived photos.');
 
+    await click(root, '2 · Duplicates');
+    const change = await vi.waitFor(() => {
+      const button = root.querySelector<HTMLButtonElement>('.duplicates:not([hidden]) .protection-line button');
+      expect(button).not.toBeNull();
+      return button!;
+    });
+    change.click();
+    await vi.waitFor(() => expect(root.querySelector('.settings-tab')?.hasAttribute('hidden')).toBe(false));
+
+    await click(root, '1 · Scan');
     await click(root, 'Check for new photos');
     await vi.waitFor(() => expect(requests('app-wake-engine')).toHaveLength(1));
     expect((await new IndexedDbJobStore(indexedDB).get(jobId('library-scan', 'account-a')))!.status).toBe('running');
@@ -720,6 +780,9 @@ describe('clicks and keys reach what they should', () => {
     expect(dupTiles(root)).toHaveLength(0); // Duplicates hidden
     location.hash = 'duplicates';
     await vi.waitFor(() => expect(labels(root)).toHaveLength(3)); // the same page: its groups kept
+    expect(location.hash).toBe('');
+    location.hash = 'settings';
+    await vi.waitFor(() => expect(root.querySelector('.settings-tab')?.hasAttribute('hidden')).toBe(false));
     expect(location.hash).toBe('');
   });
 
@@ -1010,7 +1073,9 @@ describe('clicks and keys reach what they should', () => {
   it('review: Copy diagnostics is always there, also with nothing stopped and with no account; the Scan card offers it only after a stop', async () => {
     await scannedAndAnalysed(indexedDB);
     const root = await open('review', '?account=account-a');
-    await shows(root, 'Scan complete', 'Something not working?');
+    await shows(root, 'Scan complete');
+    await click(root, 'Settings');
+    await shows(root, 'Something not working?');
     await ready(root.querySelector<HTMLElement>('.diagnostics-card')!, 'Copy diagnostics');
     expect(root.querySelector('.scan-card .diagnostics')).toBeNull();
     for (const r of roots.splice(0)) r.unmount();
@@ -1018,7 +1083,9 @@ describe('clicks and keys reach what they should', () => {
 
     account = NO_TAB;
     const empty = await open('review');
-    await shows(empty, 'No account yet', 'Something not working?');
+    await shows(empty, 'No account yet');
+    await click(empty, 'Settings');
+    await shows(empty, 'Something not working?');
     await ready(empty, 'Copy diagnostics');
   });
 
@@ -1030,8 +1097,9 @@ describe('clicks and keys reach what they should', () => {
     expect(requests('app-open-review')).toEqual([{ kind: 'app-open-review', account: 'account-a', tab: 'scan' }]);
   });
 
-  it('erase (in the review tab) takes two clicks; Cancel goes back; a failure is shown and can be tried again', async () => {
+  it('erase (in the review tab’s Settings) takes two clicks; Cancel goes back; a failure is shown and can be tried again', async () => {
     const root = await open('review', '?account=account-a');
+    await click(root, 'Settings');
     await click(root, "Erase Photo Cleaner's data");
     await shows(root, 'Your photos in Google Photos are not touched', 'Confirm to erase');
     expect(requests('app-erase-all')).toEqual([]);

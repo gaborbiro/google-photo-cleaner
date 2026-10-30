@@ -4,6 +4,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { searchKey, searchViewerKey } from '../duplicates/keys';
 import { SORTS, type ExampleView, type SearchModel, type SearchTile } from '../search/searchModel';
+import { ProtectionLine } from '../ui/JobCard';
 import { SizeButtons, tileSizeStyle, Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
 
 
@@ -47,7 +48,9 @@ function Examples({ label, examples, model }: { label: string; examples: Example
 }
 
 /** [active]: shown and answering keys; a hidden tab keeps its state but ignores the keyboard. */
-export function Search({ model, active, openScan }: { model: SearchModel; active: boolean; openScan: () => void }) {
+export function Search({ model, active, protectionText, openScan, openSettings }: {
+  model: SearchModel; active: boolean; protectionText: string | null; openScan: () => void; openSettings: () => void;
+}) {
   const view = useSyncExternalStore(model.subscribe, model.getView);
   const field = useRef<HTMLInputElement>(null);
   const grid = useRef<HTMLDivElement>(null);
@@ -112,6 +115,7 @@ export function Search({ model, active, openScan }: { model: SearchModel; active
         <Examples label="More like:" examples={view.more} model={model} />
         <Examples label="Less like:" examples={view.less} model={model} />
         {view.hiddenText && <p className="muted small">{view.hiddenText}</p>}
+        <ProtectionLine text={protectionText} openSettings={openSettings} />
       </section>
       <div className="search-body">
         <section className="pinned-bar" ref={bar} onMouseDown={() => field.current?.blur()}>

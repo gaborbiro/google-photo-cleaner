@@ -1,11 +1,36 @@
 // The only analytics network sender. Best effort, bounded, and independent of Photos writes.
+// Before the user answers, events are kept on this computer only and nothing is sent: at most
+// MAX_KEPT, none older than KEEP_MS. Allowing sends them, dated when they happened; declining drops them.
 import { BUILT_VERSION } from './version';
-import { checkedUsage, type UsageAnswer, type UsageConfig } from './usage';
-import { IndexedDbUsageStore, type UsageState } from './usageStore';
+import { checkedUsage, type UsageAnswer, type UsageConfig, type UsageEvent } from './usage';
+import { IndexedDbUsageStore, type KeptUsage, type UsageState } from './usageStore';
 
 export interface UsageEnvelope { event: unknown; epoch: string; atMs: number; receipt?: string; engagementMs?: number }
 const SESSION_MS = 30 * 60_000;
 const MAX_RECEIPTS = 1024;
+/** Enough for a first launch and scan; later events wait for the answer. */
+export const MAX_KEPT = 200;
+/** Google Analytics accepts events dated at most 72 hours back. */
+export const KEEP_MS = 72 * 60 * 60_000;
+/** Google Analytics takes at most 25 events in one request. */
+const BATCH = 25;
+
+interface Outgoing { event: UsageEvent; sessionId: number; engagementMs?: number; atMs?: number }
+
+/** The kept events still young enough to send, each in its session as if it had been sent then. */
+function keptOutgoing(kept: KeptUsage[], now: number): Outgoing[] {
+  const items: Outgoing[] = [];
+  let sessionId = 0;
+  let last = 0;
+  for (const k of kept) {
+    const event = checkedUsage(k.event);
+    if (!event || now - k.atMs >= KEEP_MS) continue;
+    if (!sessionId || k.atMs - last >= SESSION_MS) sessionId = Math.max(Math.floor(k.atMs / 1000), sessionId + 1);
+    last = k.atMs;
+    items.push({ event, sessionId, atMs: k.atMs });
+  }
+  return items;
+}
 
 export class UsageSender {
   private pending = Promise.resolve();
@@ -32,15 +57,32 @@ export class UsageSender {
     for (const active of this.active) active.abort();
     this.active.clear();
   }
+  /** Yes sends the events kept while the question was open; no drops them. */
   async consent(answer: Exclude<UsageAnswer, 'unknown'>, setupState: UsageState['setupState'] = 'unknown'): Promise<UsageState> {
     this.stop();
     const generation = this.generation;
     return this.serial(async () => {
-      const state = await this.store.change(() => ({
-        id: 'settings', answer, epoch: crypto.randomUUID(), answeredAt: this.now(),
-        clientId: answer === 'yes' ? crypto.randomUUID() : null, setupState, sessionId: 0, lastEventAt: 0, receipts: [],
-      }));
+      const now = this.now();
+      let replay: Outgoing[] = [];
+      const state = await this.store.change((previous) => {
+        const firstAnswer = previous.answer === 'unknown';
+        replay = answer === 'yes' && firstAnswer ? keptOutgoing(previous.kept, now) : [];
+        const last = replay[replay.length - 1];
+        return {
+          id: 'settings', answer, epoch: crypto.randomUUID(), answeredAt: now,
+          clientId: answer === 'yes' ? crypto.randomUUID() : null, setupState,
+          sessionId: last?.sessionId ?? 0, lastEventAt: last?.atMs ?? 0,
+          // Milestones already kept count as reported, so a yes doesn't send them twice.
+          receipts: answer === 'yes' && firstAnswer ? previous.receipts : [], kept: [],
+        };
+      });
       if (generation === this.generation) this.suspended = answer !== 'yes';
+      if (this.config && generation === this.generation) {
+        for (let i = 0; i < replay.length; i += BATCH) {
+          this.sent++;
+          this.post(state, replay.slice(i, i + BATCH));
+        }
+      }
       return state;
     });
   }
@@ -59,38 +101,54 @@ export class UsageSender {
       if (input.atMs > now + 1000 || input.atMs < now - 60_000) return;
       const minute = Math.floor(now / 60_000);
       if (minute !== this.minute) { this.minute = minute; this.sent = 0; }
-      if (this.sent >= 120 || this.active.size >= 8) return;
-      let accepted = false;
+      const network = this.sent < 120 && this.active.size < 8;
+      let send = false;
       const state = await this.store.change((state) => {
-        if (state.answer !== 'yes' || state.epoch !== input.epoch || input.atMs < state.answeredAt ||
-          (input.receipt && state.receipts.includes(input.receipt))) return state;
-        accepted = true;
+        if (state.epoch !== input.epoch || (input.receipt && state.receipts.includes(input.receipt))) return state;
+        const receipts = input.receipt ? [...state.receipts, input.receipt].slice(-MAX_RECEIPTS) : state.receipts;
+        if (state.answer === 'unknown') {
+          // Kept, not sent. Engagement ticks every 15 seconds would crowd out the steps that matter.
+          const kept = state.kept.filter((k) => now - k.atMs < KEEP_MS);
+          if (event.name === 'surface_engagement' || kept.length >= MAX_KEPT) return state;
+          return { ...state, receipts, kept: [...kept, { event, atMs: input.atMs }] };
+        }
+        if (state.answer !== 'yes' || input.atMs < state.answeredAt || !network) return state;
+        send = true;
         const newSession = !state.sessionId || now - state.lastEventAt >= SESSION_MS;
-        return { ...state, lastEventAt: now, sessionId: newSession ? Math.max(Math.floor(now / 1000), state.sessionId + 1) : state.sessionId,
-          receipts: input.receipt ? [...state.receipts, input.receipt].slice(-MAX_RECEIPTS) : state.receipts };
+        return { ...state, lastEventAt: now, sessionId: newSession ? Math.max(Math.floor(now / 1000), state.sessionId + 1) : state.sessionId, receipts };
       });
-      if (!accepted || generation !== this.generation) return;
+      if (!send || generation !== this.generation) return;
       this.sent++;
-      const controller = new AbortController();
-      this.active.add(controller);
-      const timer = setTimeout(() => controller.abort(), 5000);
-      const url = new URL('https://www.google-analytics.com/mp/collect');
-      url.searchParams.set('measurement_id', this.config!.measurementId);
-      url.searchParams.set('api_secret', this.config!.apiSecret);
-      // Do not include the envelope/receipt, URLs, raw errors, referrers or account data.
-      try {
-        // Native browser fetch requires Window/WorkerGlobalScope, not this UsageSender, as its receiver.
-        void this.fetcher.call(globalThis, url.href, {
-          method: 'POST', mode: 'no-cors', credentials: 'omit', referrerPolicy: 'no-referrer',
-          headers: { 'Content-Type': 'text/plain' }, signal: controller.signal,
-          body: JSON.stringify({ client_id: state.clientId,
-            consent: { ad_user_data: 'DENIED', ad_personalization: 'DENIED' },
-            events: [{ name: event.name, params: { ...event.params, schema_version: '1', extension_version: BUILT_VERSION,
-              setup_state: state.setupState, session_id: state.sessionId,
-              ...(event.name === 'surface_engagement' && input.engagementMs ? { engagement_time_msec: Math.round(input.engagementMs) } : {}),
-              ...(this.config!.debug ? { debug_mode: 1 } : {}) } }] }),
-        }).catch(() => {}).finally(() => { clearTimeout(timer); this.active.delete(controller); });
-      } catch { clearTimeout(timer); this.active.delete(controller); }
+      this.post(state, [{ event, sessionId: state.sessionId, engagementMs: input.engagementMs }]);
     }).catch(() => {}).finally(() => { this.waiting--; });
+  }
+  /** One bounded request; kept events carry the time they happened ([Outgoing.atMs]). */
+  private post(state: UsageState, items: Outgoing[]): void {
+    const controller = new AbortController();
+    this.active.add(controller);
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const url = new URL('https://www.google-analytics.com/mp/collect');
+    url.searchParams.set('measurement_id', this.config!.measurementId);
+    url.searchParams.set('api_secret', this.config!.apiSecret);
+    const dated = items[0]!.atMs;
+    // Do not include the envelope/receipt, URLs, raw errors, referrers or account data.
+    try {
+      // Native browser fetch requires Window/WorkerGlobalScope, not this UsageSender, as its receiver.
+      void this.fetcher.call(globalThis, url.href, {
+        method: 'POST', mode: 'no-cors', credentials: 'omit', referrerPolicy: 'no-referrer',
+        headers: { 'Content-Type': 'text/plain' }, signal: controller.signal,
+        body: JSON.stringify({ client_id: state.clientId,
+          ...(dated !== undefined ? { timestamp_micros: dated * 1000 } : {}),
+          consent: { ad_user_data: 'DENIED', ad_personalization: 'DENIED' },
+          events: items.map(({ event, sessionId, engagementMs, atMs }) => ({
+            name: event.name,
+            params: { ...event.params, schema_version: '1', extension_version: BUILT_VERSION,
+              setup_state: state.setupState, session_id: sessionId,
+              ...(event.name === 'surface_engagement' && engagementMs ? { engagement_time_msec: Math.round(engagementMs) } : {}),
+              ...(this.config!.debug ? { debug_mode: 1 } : {}) },
+            ...(atMs !== undefined ? { timestamp_micros: atMs * 1000 } : {}),
+          })) }),
+      }).catch(() => {}).finally(() => { clearTimeout(timer); this.active.delete(controller); });
+    } catch { clearTimeout(timer); this.active.delete(controller); }
   }
 }

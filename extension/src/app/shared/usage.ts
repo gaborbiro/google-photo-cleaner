@@ -1,5 +1,7 @@
 // Optional usage statistics. Only this closed vocabulary may leave the computer.
-const surfaces = ['popup', 'panel', 'review', 'scan', 'duplicates', 'search'] as const;
+import type { Job } from './job';
+
+const surfaces = ['popup', 'panel', 'review', 'scan', 'duplicates', 'search', 'settings'] as const;
 const features = ['scan', 'analysis', 'duplicates', 'search', 'trash', 'engine'] as const;
 const reasons = ['unknown', 'user', 'photos_closed', 'signed_out', 'google_changed', 'network', 'rate_limit', 'model', 'storage', 'stale_scan', 'unfinished_scan', 'not_scanned', 'protection', 'gentle', 'launch'] as const;
 const durations = ['under_10s', '10s_1m', '1m_5m', '5m_30m', '30m_2h', '2h_8h', '8h_plus', 'unknown'] as const;
@@ -65,12 +67,34 @@ export function durationBucket(ms: number): typeof durations[number] {
   return durations[[10_000, 60_000, 300_000, 1_800_000, 7_200_000, 28_800_000].findIndex((edge) => ms < edge)] ?? '8h_plus';
 }
 
-export function usageView(answer: UsageAnswer, configured: boolean) {
+/**
+ * Whether the person answering set Photo Cleaner up after the reporting began: new when nothing was
+ * scanned yet, or when the first kept event (see [UsageSender]) came before every scan started.
+ */
+export function setupStateOf(jobStartsMs: number[], firstKeptAtMs: number | null): 'new' | 'existing' {
+  if (jobStartsMs.length === 0) return 'new';
+  return firstKeptAtMs !== null && firstKeptAtMs <= Math.min(...jobStartsMs) ? 'new' : 'existing';
+}
+
+/**
+ * Where the usage card is. `setting`: the review tab's Settings, always there. `surface`: the popup and
+ * the panel, asking once a scan has finished, then keeping the checkbox as a quiet second chance.
+ * `question`: the review tab's Scan tab, only asking, once a scan has finished.
+ */
+export type UsagePlace = 'setting' | 'surface' | 'question';
+
+/** Whether a library scan has finished for any account: the moment to ask, after the app has shown what it does. */
+export function anyScanFinished(jobs: Job[]): boolean {
+  return jobs.some((j) => j.kind === 'library-scan' && j.status === 'finished');
+}
+
+export function usageView(answer: UsageAnswer, configured: boolean, place: UsagePlace = 'setting', scanFinished = true) {
   return {
+    shown: place === 'setting' || (answer === 'unknown' ? scanFinished : place === 'surface'),
     ask: answer === 'unknown',
     enabled: answer === 'yes',
     title: 'Help improve Photo Cleaner?',
-    description: 'If you agree, send usage events to Google Analytics about which features you use, how far you get, and whether they work. Never your photos, searches, albums or Google account.',
+    description: 'Photo Cleaner is made by one person, and Google changes Google Photos without warning. Usage statistics show me quickly when something stops working for you: if you agree, Google Analytics gets which features you use, how far you get and whether they work. Never your photos, searches, albums or Google account.',
     setting: 'Send optional usage statistics',
     status: configured ? 'You can change this at any time.' : 'Reporting is not configured in this build; nothing will be sent.',
   };

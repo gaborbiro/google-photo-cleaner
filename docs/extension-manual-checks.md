@@ -83,7 +83,7 @@ and copy the console (right-click the page → Inspect → Console).
    With the photo list more than a day old, Duplicates still shows its groups with a banner: **F**
    and **S** work, **D** refuses until **Check for new photos** has run.
 8. Note the speed (photos per second) and how long the full library took.
-9. Copy diagnostics (review tab, Scan tab, the card above Erase): under **Recent runs** there is one
+9. Copy diagnostics (review tab, Settings, the card above the version): under **Recent runs** there is one
    entry for the library read (pages and time per listing) and one for the analysis (photos done,
    where the time went, detail, full speed, the graphics card). The times roughly match what you
    noted above. An analysis still running shows "running" and is updated every 5 minutes.
@@ -95,7 +95,7 @@ and copy the console (right-click the page → Inspect → Console).
 
 From here on, approving moves photos to Google Photos' trash: use photos you don't mind losing.
 
-1. On the Scan tab, untick **favourites**. The panel and popup show the change without a reload;
+1. In the review tab's Settings (the gear at the end of the tabs), untick **favourites**. The line under Scan, Duplicates and Search no longer names favourites; the panel and popup show the change without a reload;
    Protection details count favourites as eligible.
 2. Tick it again. Duplicates and Search no longer offer favourites.
 3. With favourites unticked, approve a favourite for the trash: the trash queue line counts it in the
@@ -178,7 +178,7 @@ for 30 days.
 
 ## 6. Erase Photo Cleaner's data
 
-1. Popup → **Erase Photo Cleaner's data from this computer**: the explanation appears with
+1. Review tab → Settings → **Erase Photo Cleaner's data from this computer**: the explanation appears with
    **Confirm to erase** and **Cancel**. Cancel: nothing happens.
 2. With the review tab and a panel open, confirm: "Erasing…", then every open page starts over;
    the review tab says the data has been erased from this computer. Nothing changes in Google Photos.
@@ -217,7 +217,7 @@ and to check for an update.
    the scan stopped, and lists the problem with its request (e.g. `listAlbumsPage (Z5xsfc)`),
    "Gave up at: …" and the structure of Google's answer. Keep it for the fix.
 3. Close Chrome, open it again, and open the review tab: the same problem is still under
-   **Copy diagnostics** (the card above Erase is always there).
+   **Copy diagnostics** (always there in the review tab's Settings).
 4. "What it copies" unfolds to show the same text.
 
 ## 9. Privacy

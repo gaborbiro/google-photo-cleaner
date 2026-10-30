@@ -44,7 +44,7 @@ page and confirm the new fixes or improvements are loaded.
 
 | Path | What |
 |---|---|
-| `extension/src/app/` | The extension. `background/` service worker, `engine/` hidden background page (scans and AI), `content/` + `page/` scripts in photos.google.com, `popup/`, `panel/` (Chrome's side panel beside Google Photos), `review/` (the review tab: Scan, Duplicates, Search) |
+| `extension/src/app/` | The extension. `background/` service worker, `engine/` hidden background page (scans and AI), `content/` + `page/` scripts in photos.google.com, `popup/`, `panel/` (Chrome's side panel beside Google Photos), `review/` (the review tab: Scan, Duplicates, Search, Settings) |
 | `extension/src/app/{scan,ai,duplicates,search,shared}` | The logic: models and stores. Screens only draw what these work out |
 | `extension/test/` | The extension's tests (vitest, fake-indexeddb, fakes in `test/app/fakes.ts`) |
 | `extension/local-icons/` | The red icons of a local build (`npm run build`), so it can be told from the store version (`scripts/localBuild.mjs`) |

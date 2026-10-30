@@ -6,6 +6,7 @@ import { gridKey } from '../duplicates/keys';
 import { DuplicatesReview, type DuplicatesView, type TileView } from '../duplicates/reviewModel';
 import { recoverInterrupted } from '../duplicates/trash';
 import { trashQueueDeps, trashQueuePass } from '../duplicates/session';
+import { ProtectionLine } from '../ui/JobCard';
 import { SizeButtons, tileSizeStyle, Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
 
 const TRASH_QUEUE_EVERY_MS = 2_000;
@@ -73,10 +74,11 @@ function Tile({ tile, focusPulse, review }: { tile: TileView; focusPulse: number
   );
 }
 
-function Status({ view, openScan }: { view: DuplicatesView; openScan: () => void }) {
+function Status({ view, protectionText, openScan, openSettings }: { view: DuplicatesView; protectionText: string | null; openScan: () => void; openSettings: () => void }) {
   return (
     <section className="collapsing status-lines">
       {view.ruleText && <p>{view.ruleText}</p>}
+      <ProtectionLine text={protectionText} openSettings={openSettings} />
       {/* Why nothing can be reviewed yet (in the place of the counts), or why nothing can be trashed yet. */}
       {view.blockedText && (
         <div className="banner tone-caution">
@@ -105,19 +107,21 @@ const BUTTONS: { key: string; label: string; act: (r: DuplicatesReview) => void;
  * The Duplicates tab. [refreshKey]: null while the jobs are still loading; the groups are (re)built
  * when it becomes or changes to a value. [onSearchLike]: "Search more like these" with the group's photos.
  */
-export function Duplicates({ review, active, refreshKey, openScan, onSearchLike }: {
-  review: DuplicatesReview; active: boolean; refreshKey: string | null; openScan: () => void; onSearchLike: (mediaKeys: string[]) => void;
+export function Duplicates({ review, active, refreshKey, protectionText, openScan, openSettings, onSearchLike }: {
+  review: DuplicatesReview; active: boolean; refreshKey: string | null; protectionText: string | null;
+  openScan: () => void; openSettings: () => void; onSearchLike: (mediaKeys: string[]) => void;
 }) {
   // Built when the tab opens, and again when a library scan or analysis finishes.
   useEffect(() => {
     if (refreshKey !== null) review.show();
   }, [review, refreshKey]);
-  return <DuplicatesScreen review={review} active={active} openScan={openScan} onSearchLike={onSearchLike} />;
+  return <DuplicatesScreen review={review} active={active} protectionText={protectionText} openScan={openScan} openSettings={openSettings} onSearchLike={onSearchLike} />;
 }
 
 /** What the Duplicates tab shows and how it answers keys and clicks. [active]: shown and answering keys. */
-export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
-  review: DuplicatesReview; active: boolean; openScan: () => void; onSearchLike: (mediaKeys: string[]) => void;
+export function DuplicatesScreen({ review, active, protectionText, openScan, openSettings, onSearchLike }: {
+  review: DuplicatesReview; active: boolean; protectionText: string | null;
+  openScan: () => void; openSettings: () => void; onSearchLike: (mediaKeys: string[]) => void;
 }) {
   const view = useSyncExternalStore(review.subscribe, review.getView);
   useEffect(() => { review.setUsageActive(active); return () => review.setUsageActive(false); }, [review, active]);
@@ -153,7 +157,7 @@ export function DuplicatesScreen({ review, active, openScan, onSearchLike }: {
 
   return (
     <div className="duplicates" hidden={!active} style={tileSizeStyle(view.tilePx)}>
-      <Status view={view} openScan={openScan} />
+      <Status view={view} protectionText={protectionText} openScan={openScan} openSettings={openSettings} />
       <div className="duplicates-body">
         <section className="pinned-bar" ref={bar}>
           {view.problemText && <div className="banner tone-negative" role="alert"><strong>{view.problemText}</strong></div>}

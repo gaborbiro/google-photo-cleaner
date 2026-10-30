@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NO_ANALYSIS } from '../../src/app/ai/analysis';
 import { endJob, markAlive, NO_PROGRESS, NOT_RESPONDING_TEXT, pauseJob, reportProgress, setFullSpeed, startAnalysisJob, startScanJob } from '../../src/app/shared/job';
 import type { ReportView } from '../../src/app/scan/report';
-import { accountLabel, checkedText, copyReportText, documentTitle, launchButton, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView, versionLabel, versionLine } from '../../src/app/shared/jobView';
+import { accountLabel, checkedText, copyReportText, documentTitle, launchButton, protectionText, reviewAccount, reviewPageView, scanTabTitle, scanView, surfaceView, versionLabel, versionLine } from '../../src/app/shared/jobView';
 import { accountAnswer, panelOptions, panelTab, photosTabOf, requestedReviewTab, reviewUrl } from '../../src/app/shared/messages';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
 
@@ -301,7 +301,9 @@ describe('the review tab', () => {
     });
     expect(page.accountName).toBe('someone@example.com');
     expect(page.versionLabel).toBe('v0.4.14');
-    expect(page.tabLabels).toEqual({ scan: '1 · Scan (needed)', duplicates: '2 · Duplicates', search: 'Search' });
+    expect(page.tabLabels).toEqual({ scan: '1 · Scan (needed)', duplicates: '2 · Duplicates', search: 'Search', settings: 'Settings' });
+    expect(page.protectionText).toBe('Never trashed: favourites, photos in an album and archived photos.');
+    expect(page.feedback.mailto).toBe('mailto:nomadworkz@gmail.com?subject=Photo%20Cleaner%20feedback%20(v0.4.14)');
     expect(page.otherAccounts).toEqual([{ account: 'acc2-0123456789', href: '?account=acc2-0123456789', label: 'account acc2-012…', scanTitle: 'Photos not analysed yet' }]);
   });
 
@@ -310,6 +312,15 @@ describe('the review tab', () => {
     expect(versionLabel('0.4.61', true)).toBe('v0.4.61 · local build');
     const page = reviewPageView({ selected: null, signedIn: null, jobs: [], scan: null, analysis: null, choices: ALL_PROTECTED, nowMs: NOW, version: '0.4.61', localBuild: true });
     expect(page.versionLabel).toBe('v0.4.61 · local build');
+  });
+
+  it('names which photos are never trashed, since the choices themselves are in Settings', () => {
+    expect(protectionText({ favourites: true, albums: false, archived: true })).toBe('Never trashed: favourites and archived photos.');
+    expect(protectionText({ favourites: false, albums: true, archived: false })).toBe('Never trashed: photos in an album.');
+    expect(protectionText({ favourites: false, albums: false, archived: false })).toBe('Favourites, photos in an album and archived photos may all be offered for the trash.');
+    const input = { selected: 'acc1', signedIn: null, jobs: [], scan: null, analysis: null, choices: ALL_PROTECTED, nowMs: NOW, version: '0.4.14', localBuild: false };
+    expect(reviewPageView({ ...input, choices: undefined }).protectionText).toBeNull(); // still loading
+    expect(reviewPageView({ ...input, selected: null }).protectionText).toBeNull(); // no account
   });
 
   it('builds the groups again only when a scan or the analysis finishes, or the choices change', () => {
@@ -405,6 +416,7 @@ describe("the review tab's address", () => {
   it('is read back for the tab asked for, and nothing else', () => {
     expect(requestedReviewTab('#duplicates')).toBe('duplicates');
     expect(requestedReviewTab('#search')).toBe('search');
+    expect(requestedReviewTab('#settings')).toBe('settings');
     expect(requestedReviewTab('')).toBeNull();
     expect(requestedReviewTab('#trash')).toBeNull();
   });

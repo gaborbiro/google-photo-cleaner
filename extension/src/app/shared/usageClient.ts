@@ -27,10 +27,13 @@ if (USAGE_CONFIG) {
 let local: ((event: UsageEvent, receipt?: string) => void) | null = null;
 /** The worker uses its own sender, rather than sending runtime messages to itself. */
 export function bindUsageEmitter(emit: (event: UsageEvent, receipt?: string) => void): void { local = emit; }
-/** No background replay. The authoritative worker checks this consent epoch again before sending. */
+/**
+ * After a yes, to be sent; before any answer, to be kept on this computer (see [UsageSender]); after a
+ * no, nothing. The authoritative worker checks this consent epoch again before keeping or sending.
+ */
 export function emitUsage(event: UsageEvent, receipt?: string, engagementMs?: number): void {
   if (local) { try { local(event, receipt); } catch { /* best effort */ } return; }
-  if (!USAGE_CONFIG || snapshot?.answer !== 'yes') return;
+  if (!USAGE_CONFIG || !snapshot || snapshot.answer === 'no') return;
   const atMs = Date.now();
   try {
     void chrome.runtime.sendMessage({ kind: 'app-usage-event', input: { event, epoch: snapshot.epoch, atMs, receipt, engagementMs } }).catch(() => {});

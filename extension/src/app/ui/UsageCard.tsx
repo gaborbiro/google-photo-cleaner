@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { CHANGES_CHANNEL } from '../shared/constants';
-import { USAGE_CONFIG, USAGE_POLICY, usageView, type UsageAnswer, type UsageSurface } from '../shared/usage';
+import { anyScanFinished, USAGE_CONFIG, USAGE_POLICY, usageView, type UsageAnswer, type UsagePlace, type UsageSurface } from '../shared/usage';
+import { useAllJobs } from './hooks';
 import { emitUsage, refreshUsageConsent } from '../shared/usageClient';
 import { IndexedDbUsageStore } from '../shared/usageStore';
 
-/** Consent is global and available before connecting Google Photos or starting a scan. */
-export function UsageCard() {
+/** Consent is global; Settings offers it at any time, other places ask once a scan has finished (see [usageView]). */
+export function UsageCard({ place = 'setting' }: { place?: UsagePlace }) {
+  const scanFinished = anyScanFinished(useAllJobs());
   const [answer, setAnswer] = useState<UsageAnswer | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState(false);
@@ -19,7 +21,7 @@ export function UsageCard() {
     return () => { alive = false; channel.close(); };
   }, []);
   if (answer === null) return null;
-  const view = usageView(answer, USAGE_CONFIG !== null);
+  const view = usageView(answer, USAGE_CONFIG !== null, place, scanFinished);
   const choose = async (next: 'yes' | 'no') => {
     setBusy(true);
     try {
@@ -31,6 +33,7 @@ export function UsageCard() {
     } catch { setProblem(true); }
     finally { setBusy(false); }
   };
+  if (!view.shown) return null;
   return <section className="card usage-card" aria-label="Optional usage statistics">
     {view.ask ? <>
       <strong>{view.title}</strong><p>{view.description}</p>

@@ -7,7 +7,7 @@ import { UsageSender } from '../shared/usageSender';
 import { IndexedDbUsageStore } from '../shared/usageStore';
 import type { UsageState } from '../shared/usageStore';
 import { UsageLaunches } from '../shared/usageLaunches';
-import { USAGE_CONFIG } from '../shared/usage';
+import { setupStateOf, USAGE_CONFIG } from '../shared/usage';
 import { bindUsageEmitter, emitUsage } from '../shared/usageClient';
 import { pauseRunningJobs, resumeWaitingForPhotos } from '../shared/actions';
 import { CHANGES_CHANNEL } from '../shared/constants';
@@ -29,7 +29,8 @@ const usageLaunches = new UsageLaunches((input) => { void usage.record(input); }
 let usageContext: UsageState | null = null;
 if (USAGE_CONFIG) void usageStore.get().then((state) => { usageContext = state; }).catch(() => {});
 bindUsageEmitter((event, receipt) => {
-  if (!USAGE_CONFIG || usageContext?.answer !== 'yes') return;
+  // Before an answer the sender keeps the event on this computer; after a no, nothing.
+  if (!USAGE_CONFIG || !usageContext || usageContext.answer === 'no') return;
   usageLaunches.record({ event, receipt, epoch: usageContext.epoch, atMs: Date.now() });
 });
 keepProblemsHere();
@@ -357,7 +358,8 @@ async function handle(request: AppRequest, sender: chrome.runtime.MessageSender)
       usageContext = null;
       usageLaunches.clear();
       usage.stop();
-      const setupState = await store.all().then((jobs) => jobs.length > 0 ? 'existing' as const : 'new' as const, () => 'unknown' as const);
+      const firstKept = await usageStore.get().then((state) => state.kept[0]?.atMs ?? null, () => null);
+      const setupState = await store.all().then((jobs) => setupStateOf(jobs.map((j) => j.startedAtMs), firstKept), () => 'unknown' as const);
       const state = await usage.consent(request.answer, setupState);
       usageContext = state;
       const channel = new BroadcastChannel(CHANGES_CHANNEL);

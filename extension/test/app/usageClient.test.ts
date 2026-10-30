@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 
-it('configured producers drop events before consent, never replay them, and attach the current consent epoch', async () => {
+it('configured producers pass events on before an answer (the worker keeps them, unsent), nothing after a no, and attach the current consent epoch', async () => {
   const client = await import('../../src/app/shared/usageClient');
   const { IndexedDbUsageStore } = await import('../../src/app/shared/usageStore');
   const { UsageSender } = await import('../../src/app/shared/usageSender');
@@ -24,18 +24,20 @@ it('configured producers drop events before consent, never replay them, and atta
   const sender = new UsageSender(store, null);
   await client.refreshUsageConsent();
   client.emitUsage({ name: 'scan_started', params: {} });
-  expect(send).not.toHaveBeenCalled();
+  expect(send).toHaveBeenCalledExactlyOnceWith({ kind: 'app-usage-event', input: {
+    event: { name: 'scan_started', params: {} }, epoch: '', atMs: expect.any(Number), receipt: undefined, engagementMs: undefined,
+  } });
   const state = await sender.consent('yes');
   await client.refreshUsageConsent();
-  expect(send).not.toHaveBeenCalled();
+  expect(send).toHaveBeenCalledOnce(); // the page never sends again what the worker kept
   client.emitUsage({ name: 'scan_started', params: {} }, 'local-only-key');
-  expect(send).toHaveBeenCalledExactlyOnceWith({ kind: 'app-usage-event', input: {
+  expect(send).toHaveBeenLastCalledWith({ kind: 'app-usage-event', input: {
     event: { name: 'scan_started', params: {} }, epoch: state.epoch, atMs: expect.any(Number), receipt: 'local-only-key', engagementMs: undefined,
   } });
   await sender.consent('no');
   await client.refreshUsageConsent();
   client.emitUsage({ name: 'scan_started', params: {} });
-  expect(send).toHaveBeenCalledOnce();
+  expect(send).toHaveBeenCalledTimes(2);
 });
 
 it('a stopped or restarting worker cannot turn a producer error into an application error', async () => {

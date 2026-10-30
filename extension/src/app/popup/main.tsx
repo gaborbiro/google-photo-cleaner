@@ -17,7 +17,7 @@ function Popup() {
         {view.accountName && <p className="account mono" title="The Google account signed in to Google Photos">{view.accountName}</p>}
       </header>
       <StorageProblem />
-      {view.state !== 'looking' && <UsageCard />}
+      {view.state !== 'looking' && <UsageCard place="surface" />}
       {view.state === 'looking' && <p className="muted">Looking for Google Photos…</p>}
       {view.state === 'no-photos' && <p>Photo Cleaner works inside Google Photos. Open it to scan your library.</p>}
       {view.state === 'problem' && <p className="warn">{view.problemText}</p>}

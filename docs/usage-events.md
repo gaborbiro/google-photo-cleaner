@@ -94,7 +94,7 @@ fixed milestone labels or coarse ranges; only protocol identity/session/timestam
 | `surface_open_requested` | User invokes opening the panel/review tab; fixed `source_surface`, `target_surface` = panel/review. Record intent before the launch outcome, without delaying the launch. |
 | `surface_open_result` | Chrome launch APIs complete or reject; `source_surface`, `target_surface`, `result` = accepted/failed, fixed `reason` on failure. Accepted does not mean visible or rendered. |
 | `surface_ready` | Destination confirms first usable render while visible; `surface`, `entry_kind` = requested/direct, fixed `connection_state`. Once per local launch attempt, including reused review tabs; independent of account/scan readiness. |
-| `surface_view` | Popup/panel/review Scan/Duplicates/Search actually becomes visible; `surface`, fixed `connection_state`. No hidden mounts or rerender counts. |
+| `surface_view` | Popup/panel/review Scan/Duplicates/Search/Settings actually becomes visible; `surface`, fixed `connection_state`. No hidden mounts or rerender counts. |
 | `scan_requested` | Start/restart request successfully saved; `entry_surface`, `attempt_kind` = initial/refresh. |
 | `scan_started` / `scan_finished` | Engine begins/completes library read; `duration_bucket` on completion. Resume is distinct. |
 | `analysis_started` | Engine starts analysis; `work_kind` = new_work/no_work. |
@@ -123,18 +123,30 @@ net photos cleared or distinct groups permanently decided. Keep that definition 
 
 ## Consent and privacy
 
-Put the same nonblocking consent question in the toolbar popup as well as the panel and review Scan
-tab, plus a setting available even without a connected Google account. This extends the earlier
-panel/review-only proposal: consent there alone would miss first launch failures. The popup must
-still let people open the panel or review without answering. Persist unknown/yes/no globally.
-No analytics ID, event history or request before yes. Remember refusal. Agreement during work
-observes future transitions only. After opt-in, observe the popup's current visibility without
-backdating its original open or replaying earlier launch attempts. People whose popup never loads,
-who decline, or who fail to open a destination before consenting remain unmeasured.
+Since 2026-10-30 (0.4.72) the question waits until a library scan has finished, when people have
+seen what the app does and say yes more readily; first launch is still measured, for those who agree.
+Until the answer, the same events are kept on this computer only (`kept` in the usage record, at
+most 200, none older than 72 hours, as far back as Google Analytics accepts dated events; the
+15-second engagement ticks are not kept). Allow sends them, each dated when it happened
+(`timestamp_micros`) and in its own session, in batches of 25; No thanks drops them; erasing removes
+them. `setup_state` is `new` when the first kept event came before every scan started. Nothing
+leaves the computer and no analytics ID exists before yes. Still to verify in GA's DebugView: that
+the dated events land at their own times.
 
-Suggested wording: “Help improve Photo Cleaner? If you agree, send usage events to Google Analytics
-about which features you use, how far you get, and whether they work. Never your photos, searches,
-albums or Google account. You can turn this off at any time. [What is sent] [Allow] [No thanks]”.
+The popup, panel and review Scan tab ask once a scan has finished; the review tab's Settings offers
+the choice at any time, even without a connected Google account. The popup must still let people
+open the panel or review without answering. Persist unknown/yes/no globally. Remember refusal.
+People who decline, or who never answer (for example, stuck before their first scan finishes),
+remain unmeasured: their kept events never leave the computer.
+
+Wording (since 2026-10-30, in the developer's own voice, which people say yes to more readily): “Help
+improve Photo Cleaner? Photo Cleaner is made by one person, and Google changes Google Photos without
+warning. Usage statistics show me quickly when something stops working for you: if you agree, Google
+Analytics gets which features you use, how far you get and whether they work. Never your photos,
+searches, albums or Google account. You can change this at any time. [What is sent] [Allow] [No
+thanks]”. Both buttons keep the same weight: no highlighted Allow beside a faint refusal.
+In the review tab the question is on Scan until answered; the setting is then in Settings. The popup
+and panel keep the checkbox after an answer, a quiet second chance.
 
 Say optional usage analytics rather than truly anonymous data: a persistent random ID links events,
 and network services receive connection information such as IP addresses. Never send photo/group

@@ -119,19 +119,19 @@ function Diagnostics({ scan, analysis, report }: { scan: ScanJob | null; analysi
   );
 }
 
-/** Always in the review tab's Scan tab: Copy diagnostics, also for a problem the Scan card doesn't show. */
+/** Always in the review tab's Settings: Copy diagnostics, also for a problem the Scan card doesn't show. */
 export function DiagnosticsCard({ scan, analysis, report }: { scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null }) {
   return (
     <section className="card utility diagnostics-card">
-      <p className="muted">Something not working? Copy what went wrong lately into your problem report. It holds no photos, album names or account details.</p>
+      <p className="muted">Something not working? Copy what went wrong lately and paste it into your email or issue. It holds no photos, album names or account details.</p>
       <Diagnostics scan={scan} analysis={analysis} report={report} />
     </section>
   );
 }
 
 /**
- * Which kinds of photo are never trashed, all ticked unless the user unticks one. Visible rather than
- * tucked away: it decides what Duplicates and Search may offer for the trash.
+ * Which kinds of photo are never trashed, all ticked unless the user unticks one. In Settings, and
+ * named on every work tab by [ProtectionLine]: it decides what Duplicates and Search may offer for the trash.
  */
 export function ProtectionCard({ account, choices }: { account: string; choices: ProtectionChoices }) {
   const box = (key: keyof ProtectionChoices, label: string) => (
@@ -151,6 +151,16 @@ export function ProtectionCard({ account, choices }: { account: string; choices:
         Photos of unknown status, whose details the scan couldn't read, are always kept. Trashing a photo also removes it from every album it's in.
       </p>
     </section>
+  );
+}
+
+/** The protection choices in a line (see [protectionText]), with the way to change them in Settings. */
+export function ProtectionLine({ text, openSettings }: { text: string | null; openSettings: () => void }) {
+  if (text === null) return null;
+  return (
+    <p className="protection-line muted">
+      {text} <button className="link" onClick={openSettings}>Change</button>
+    </p>
   );
 }
 

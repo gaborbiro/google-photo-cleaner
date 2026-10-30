@@ -111,6 +111,12 @@ button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--pc-ac
 /* Trashing: soft red, never purple. */
 button.danger { background: var(--pc-trash-fill); border-color: var(--pc-trash); color: var(--pc-trash); font-weight: 600; }
 button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--pc-trash-fill) 80%, var(--pc-trash)); border-color: var(--pc-trash); }
+/* A button that reads as a link inside a line of text ("Change"). */
+button.link {
+  min-height: 0; padding: 0; border: none; background: transparent; color: var(--pc-accent); text-decoration: underline;
+  text-underline-offset: 2px;
+}
+button.link:hover:not(:disabled) { background: transparent; color: var(--pc-text); }
 button.ghost { border-color: transparent; background: transparent; min-height: 32px; width: 32px; padding: 0; font-size: 20px; line-height: 1; }
 button.small { min-height: 32px; padding: 4px 10px; font-size: 14px; }
 button:disabled { opacity: 0.5; cursor: default; }
@@ -144,8 +150,7 @@ body.review .card.utility { padding: var(--space-4) var(--space-5); }
 /* --- Surface headers (popup, panel, review) --- */
 
 .surface-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
-/* The title with the version beside it, quietly, on the title's baseline. */
-.title-line { display: flex; align-items: baseline; gap: var(--space-2); }
+/* The version, quietly: in the panel's foot and in the review tab's Settings. */
 .version { color: var(--pc-muted); font-size: 13px; }
 /* The Google account whose library this is: just its email, quietly. */
 .account { color: var(--pc-muted); overflow-wrap: anywhere; margin-top: var(--space-1); }
@@ -241,7 +246,7 @@ input[type='file']::file-selector-button:hover { background: var(--pc-hover); bo
 table.counts thead th:not(:first-child) { text-align: right; padding-right: 0; padding-left: var(--space-4); }
 table.counts tr.recommended td { color: var(--pc-accent); font-weight: 600; }
 
-/* The protection choices on the Scan tab. */
+/* The protection choices in Settings, and named on every work tab. */
 .protection-boxes { justify-content: flex-start; gap: var(--space-2) var(--space-6); }
 
 /* Erasing Photo Cleaner's data: a red confirm button only after the first click. */
@@ -277,7 +282,13 @@ button.tab {
 }
 button.tab:hover:not(:disabled) { background: transparent; color: var(--pc-text); border-bottom-color: var(--pc-border); }
 button.tab.selected, button.tab.selected:hover { color: var(--pc-text); border-bottom-color: var(--pc-accent); }
+/* Settings stands apart from the work tabs, at the far end, with its gear. */
+button.settings-tab-button { margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-2); }
+.tab-icon { flex: none; }
 .scan-tab { display: flex; flex-direction: column; gap: var(--space-5); padding-top: var(--space-5); }
+.protection-line { margin: 0; }
+.settings-heading { margin-top: var(--space-3); font-size: 16px; color: var(--pc-muted); }
+.settings-tab .version { margin: 0; }
 
 /* Below the status lines at least a screen tall, so a shorter next group never pulls them (or the
    page header) back into view: only scrolling up does. */

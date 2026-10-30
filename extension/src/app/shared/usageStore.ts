@@ -1,5 +1,8 @@
 import { committed, openDatabase, request, STORES } from './db';
-import type { UsageAnswer } from './usage';
+import type { UsageAnswer, UsageEvent } from './usage';
+
+/** An event from before the question was answered, kept on this computer only (see [UsageSender]). */
+export interface KeptUsage { event: UsageEvent; atMs: number }
 
 export interface UsageState {
   id: 'settings';
@@ -11,9 +14,16 @@ export interface UsageState {
   sessionId: number;
   lastEventAt: number;
   receipts: string[];
+  /** Before an answer: the events so far, sent if the answer is yes and dropped if it is no. */
+  kept: KeptUsage[];
 }
 
-export const NO_USAGE: UsageState = { id: 'settings', answer: 'unknown', epoch: '', answeredAt: 0, clientId: null, setupState: 'unknown', sessionId: 0, lastEventAt: 0, receipts: [] };
+export const NO_USAGE: UsageState = { id: 'settings', answer: 'unknown', epoch: '', answeredAt: 0, clientId: null, setupState: 'unknown', sessionId: 0, lastEventAt: 0, receipts: [], kept: [] };
+
+/** A fresh copy of what is saved, with the fields that came later (kept) filled in for older records. */
+function filled(saved: UsageState | undefined): UsageState {
+  return { ...NO_USAGE, receipts: [], kept: [], ...saved };
+}
 
 /** Everything is in the app database, so erase removes consent, identity and receipts together. */
 export class IndexedDbUsageStore {
@@ -25,12 +35,12 @@ export class IndexedDbUsageStore {
   }
   async get(): Promise<UsageState> {
     const tx = (await this.database()).transaction(STORES.usage, 'readonly');
-    return (await request(tx.objectStore(STORES.usage).get('settings') as IDBRequest<UsageState | undefined>)) ?? { ...NO_USAGE, receipts: [] };
+    return filled(await request(tx.objectStore(STORES.usage).get('settings') as IDBRequest<UsageState | undefined>));
   }
   async change(update: (state: UsageState) => UsageState): Promise<UsageState> {
     const tx = (await this.database()).transaction(STORES.usage, 'readwrite');
     const store = tx.objectStore(STORES.usage);
-    const previous = (await request(store.get('settings') as IDBRequest<UsageState | undefined>)) ?? { ...NO_USAGE, receipts: [] };
+    const previous = filled(await request(store.get('settings') as IDBRequest<UsageState | undefined>));
     const next = update(previous);
     store.put(next);
     await committed(tx);

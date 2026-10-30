@@ -1,20 +1,23 @@
 // The review tab: the workbench. Scan shows the selected account's library scan, its full protection
 // report and the analysis; Duplicates reviews the duplicate groups; Search finds photos by
-// description or example and sweeps them to the trash queue.
+// description or example and sweeps them to the trash queue. Settings, apart at the far end, holds
+// what applies to all of them: the protection choices, usage statistics, diagnostics, the version
+// and erasing.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { documentTitle, reviewAccount, reviewPageView, scanView } from '../shared/jobView';
-import { REVIEW_TABS, requestedReviewTab, type ReviewTab } from '../shared/messages';
+import { REVIEW_TABS, WORK_TABS, requestedReviewTab, type ReviewTab } from '../shared/messages';
 import { LOCAL_BUILD } from '../shared/version';
 import { extensionVersion, openPhotos, useAccount, useAllJobs, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useSpinningTabIcon, useStartOverWhenErased } from '../ui/hooks';
-import { DiagnosticsCard, EraseCard, ProtectionCard, ScanCard, StorageProblem } from '../ui/JobCard';
+import { ProtectionLine, ScanCard, StorageProblem } from '../ui/JobCard';
 import { DuplicatesReview } from '../duplicates/reviewModel';
 import { reviewDeps } from '../duplicates/session';
 import { SearchModel } from '../search/searchModel';
 import { searchDeps } from '../search/session';
 import { Duplicates, useTrashQueue } from './Duplicates';
 import { Search } from './Search';
+import { Settings } from './Settings';
 import { usePinnedHeight } from '../ui/Workbench';
 import { UsageCard, useUsageSurface } from '../ui/UsageCard';
 
@@ -48,6 +51,16 @@ function afterErase(): void {
 }
 
 const ERASED = new URLSearchParams(location.search).has('erased');
+
+/** The Settings tab's gear (Tabler's "settings" icon, MIT). */
+function GearIcon() {
+  return (
+    <svg className="tab-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
 
 function Review() {
   useStartOverWhenErased(afterErase);
@@ -119,6 +132,7 @@ function Review() {
   // The pinned action bars sit right under the tabs, however tall they wrap.
   const tabs = useRef<HTMLElement>(null);
   usePinnedHeight(tabs, '--tabs-h');
+  const openSettings = () => open('settings');
   const searchLike = (mediaKeys: string[]) => {
     open('search');
     search?.searchLike(mediaKeys);
@@ -128,10 +142,7 @@ function Review() {
       <header className="collapsing page-header">
         <div className="surface-header">
           <div>
-            <div className="title-line">
-              <h1>Photo Cleaner</h1>
-              <span className="version mono muted" title="Photo Cleaner's version">{page.versionLabel}</span>
-            </div>
+            <h1>Photo Cleaner</h1>
             {page.accountName && <p className="account mono" title="The Google account whose library this is">{page.accountName}</p>}
           </div>
           <button onClick={() => void openPhotos()}>Open Google Photos <span aria-hidden="true">↗</span></button>
@@ -145,31 +156,35 @@ function Review() {
         )}
       </header>
       <nav className="tabs" ref={tabs}>
-        {TABS.map((t) => (
+        {WORK_TABS.map((t) => (
           <button key={t} tabIndex={-1} className={t === tab ? 'tab selected' : 'tab'} aria-current={t === tab ? 'page' : undefined} onClick={() => open(t)}>{page.tabLabels[t]}</button>
         ))}
+        <button tabIndex={-1} className={tab === 'settings' ? 'tab settings-tab-button selected' : 'tab settings-tab-button'} aria-current={tab === 'settings' ? 'page' : undefined} onClick={() => open('settings')}>
+          <GearIcon />{page.tabLabels.settings}
+        </button>
       </nav>
+      {opened.has('settings') && (
+        <Settings
+          account={selected} choices={choices} scan={selected === null ? null : job} analysis={selected === null ? null : analysis} report={report}
+          feedback={page.feedback} versionLabel={page.versionLabel} active={tab === 'settings'}
+        />
+      )}
       {selected === null ? (
-        <div className="scan-tab">
+        <div className="scan-tab" hidden={tab === 'settings'}>
           <p className="muted">No account yet: open Google Photos and start a scan from the panel.</p>
-          {/* Diagnostics and erasing cover every account, so they are here even when none is signed in. */}
-          <DiagnosticsCard scan={null} analysis={null} report={null} />
-          <EraseCard />
-          <UsageCard />
+          <UsageCard place="question" />
         </div>
       ) : (
         <>
           {opened.has('duplicates') && duplicates && (
-            <Duplicates review={duplicates} active={tab === 'duplicates'} refreshKey={refreshKey} openScan={() => open('scan')} onSearchLike={searchLike} />
+            <Duplicates review={duplicates} active={tab === 'duplicates'} refreshKey={refreshKey} protectionText={page.protectionText} openScan={() => open('scan')} openSettings={openSettings} onSearchLike={searchLike} />
           )}
-          {opened.has('search') && search && <Search model={search} active={tab === 'search'} openScan={() => open('scan')} />}
+          {opened.has('search') && search && <Search model={search} active={tab === 'search'} protectionText={page.protectionText} openScan={() => open('scan')} openSettings={openSettings} />}
           {opened.has('scan') && (
             <div className="scan-tab" hidden={tab !== 'scan'}>
-              <UsageCard />
+              <UsageCard place="question" />
               {job !== undefined && analysis !== undefined && <ScanCard account={selected} scan={job} analysis={analysis} report={report} surface="tab" />}
-              {choices !== undefined && <ProtectionCard account={selected} choices={choices} />}
-              {job !== undefined && analysis !== undefined && <DiagnosticsCard scan={job} analysis={analysis} report={report ?? null} />}
-              <EraseCard />
+              <ProtectionLine text={page.protectionText} openSettings={openSettings} />
             </div>
           )}
         </>

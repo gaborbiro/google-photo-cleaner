@@ -25,7 +25,7 @@ function Panel() {
         </div>
       </header>
       <StorageProblem />
-      <UsageCard />
+      <UsageCard place="surface" />
       {view.state === 'looking' && <p className="muted">Checking which account is signed in…</p>}
       {view.problemText && <p className="warn">{view.problemText}</p>}
       {view.account && scan !== undefined && analysis !== undefined && <ScanCard account={view.account} scan={scan} analysis={analysis} report={report} surface="panel" />}

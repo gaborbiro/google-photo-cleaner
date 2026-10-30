@@ -1,10 +1,17 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { builtManifest, isLocal, LOCAL_ICONS_DIR } from '../scripts/localBuild.mjs';
+import { builtManifest, builtPage, isLocal, LOCAL_ICONS_DIR } from '../scripts/localBuild.mjs';
 
 const extension = resolve(import.meta.dirname, '..');
 const manifest = JSON.parse(readFileSync(join(extension, 'static-app', 'manifest.json'), 'utf8'));
+const pages = readdirSync(join(extension, 'static-app')).filter((file) => file.endsWith('.html'))
+  .map((file) => ({ file, html: readFileSync(join(extension, 'static-app', file), 'utf8') }));
+
+/** The files a page's tab icons name. */
+function tabIcons(html: string): string[] {
+  return [...html.matchAll(/<link rel="icon"[^>]*\shref="([^"]+)"/g)].map((match) => match[1]);
+}
 
 describe('a local build', () => {
   it('names itself in Chrome\'s extensions page and its toolbar button\'s tooltip, within the length Chrome allows', () => {
@@ -30,9 +37,21 @@ describe('a local build', () => {
     }
   });
 
-  it('is not what the release build gets: that keeps the manifest as it is', () => {
+  it('shows its own icon on its tabs, each one in local-icons/', () => {
+    expect(tabIcons(pages.find((page) => page.file === 'review.html')!.html)).toEqual(['icon32.png']);
+    for (const { file, html } of pages) {
+      const local = builtPage(html, false);
+      expect(tabIcons(local), file).toEqual(tabIcons(html).map((icon) => `${LOCAL_ICONS_DIR}/${icon}`));
+      for (const icon of tabIcons(html)) expect(existsSync(join(extension, 'local-icons', icon)), `${file}: ${icon}`).toBe(true);
+      // Only the icons change.
+      expect(local.replaceAll(`href="${LOCAL_ICONS_DIR}/`, 'href="'), file).toBe(html);
+    }
+  });
+
+  it('is not what the release build gets: that keeps the manifest and the pages as they are', () => {
     expect(builtManifest(manifest, true)).toEqual(manifest);
     expect(isLocal(manifest)).toBe(false);
+    for (const { html } of pages) expect(builtPage(html, true)).toBe(html);
   });
 
   it('refuses a name longer than Chrome allows', () => {

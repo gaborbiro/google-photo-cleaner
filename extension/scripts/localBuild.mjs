@@ -1,8 +1,9 @@
 // A local build (`npm run build`, loaded unpacked) shows that it is one: it has the red icons of
-// local-icons/ (copied to dist-app/local/), Chrome's extensions page lists it as "… (local build)" and
-// its toolbar button's tooltip says the same, so it can't be mistaken for the store version installed
-// beside it. A release build (`npm run package`) keeps the manifest as it is, and the store package
-// refuses a manifest marked local (scripts/package.mjs).
+// local-icons/ (copied to dist-app/local/), in Chrome's extensions page, on its toolbar button and on
+// its own tabs (the review tab); Chrome's extensions page lists it as "… (local build)" and its toolbar
+// button's tooltip says the same, so it can't be mistaken for the store version installed beside it.
+// A release build (`npm run package`) keeps the manifest and the pages as they are, and the store
+// package refuses a manifest marked local (scripts/package.mjs).
 
 export const LOCAL_MARK = ' (local build)';
 
@@ -28,6 +29,15 @@ export function builtManifest(manifest, release) {
     icons: localIcons(manifest.icons),
     action: { ...manifest.action, default_title: manifest.action.default_title + LOCAL_MARK, default_icon: localIcons(manifest.action.default_icon) },
   };
+}
+
+/** A page's tab icon: the link up to its file, the file, and the rest of the link. */
+const TAB_ICON = /(<link rel="icon"[^>]*\shref=")([^"]+)("[^>]*>)/g;
+
+/** The page [html] as built into dist-app: as it is for a release, else with the local build's tab icon. */
+export function builtPage(html, release) {
+  if (release) return html;
+  return html.replace(TAB_ICON, (_, start, file, end) => `${start}${LOCAL_ICONS_DIR}/${file}${end}`);
 }
 
 /** Whether [manifest] is a local build's. */

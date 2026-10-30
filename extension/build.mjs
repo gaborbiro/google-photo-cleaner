@@ -1,7 +1,7 @@
 import { build } from 'esbuild';
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { assertKotlinFresh } from './scripts/kotlinFresh.mjs';
-import { builtManifest, LOCAL_ICONS_DIR } from './scripts/localBuild.mjs';
+import { builtManifest, builtPage, LOCAL_ICONS_DIR } from './scripts/localBuild.mjs';
 import { installedPackages, kotlinVersion, noticesText, shippedLibraries } from './scripts/notices.mjs';
 import { usageConfig } from './scripts/usageConfig.mjs';
 
@@ -61,6 +61,9 @@ const gptkNotice = '/*! Includes code from Google Photos Toolkit (https://github
   });
   cpSync('static-app', outdir, { recursive: true });
   if (!release) cpSync('local-icons', `${outdir}/${LOCAL_ICONS_DIR}`, { recursive: true });
+  for (const page of readdirSync('static-app').filter((file) => file.endsWith('.html'))) {
+    writeFileSync(`${outdir}/${page}`, builtPage(readFileSync(`static-app/${page}`, 'utf8'), release));
+  }
   writeFileSync(`${outdir}/manifest.json`, JSON.stringify(builtManifest(manifest, release), null, 2) + '\n');
   cpSync('vendor/gptk/LICENSE', `${outdir}/THIRD_PARTY_GPTK_LICENSE`);
   const libraries = shippedLibraries(inputs, installedPackages('.'), kotlinVersion(readFileSync('../gradle/libs.versions.toml', 'utf8')));

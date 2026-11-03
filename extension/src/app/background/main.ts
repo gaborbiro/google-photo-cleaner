@@ -17,9 +17,10 @@ import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem, tabProblem } from 
 import { ENGINE_FAILED_TEXT } from '../shared/job';
 import { keepProblemsHere, problemsSaved, recordUnexpectedReport } from '../shared/problemLog';
 import { IndexedDbJobStore } from '../shared/store';
-import { isAppRequest, panelOptions, reviewUrl, type AccountAnswer, type AppRequest, type ReviewTab } from '../shared/messages';
+import { isAppRequest, panelOptions, reviewUrl, SHOW_EMBEDDING_STATS, type AccountAnswer, type AppRequest, type ReviewTab } from '../shared/messages';
 
 const PHOTOS_URL = 'https://photos.google.com/';
+const STATS_MENU_ID = 'photo-cleaner-stats-for-nerds';
 const store = new IndexedDbJobStore();
 const usageStore = new IndexedDbUsageStore();
 const usage = new UsageSender(usageStore, USAGE_CONFIG);
@@ -428,11 +429,24 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 chrome.runtime.onStartup.addListener(() => void wakeEngineIfWorkLeft());
 chrome.runtime.onInstalled.addListener(() => {
   void wakeEngineIfWorkLeft();
+  chrome.contextMenus.create({
+    id: STATS_MENU_ID,
+    title: 'Stats for nerds',
+    contexts: ['image'],
+    documentUrlPatterns: [`${chrome.runtime.getURL('review.html')}*`],
+  });
   // Photos tabs opened before the install get the panel, and the page script once awake.
   void photosTabs().then((tabs) => tabs.forEach((tab) => {
     offerPanel(tab).catch((e) => console.warn('Could not offer the panel in a Photos tab', e));
     if (tab.id !== undefined && !tab.discarded) injectInto(tab.id).catch((e) => console.warn('Could not inject into a Photos tab', e));
   }));
+});
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== STATS_MENU_ID || tab?.id === undefined) return;
+  // runtime.sendMessage reaches the extension's review page without changing or replacing Chrome's menu.
+  void chrome.runtime.sendMessage({ kind: SHOW_EMBEDDING_STATS, tabId: tab.id }).catch((error: unknown) => {
+    console.warn('Photo Cleaner: Stats for nerds could not reach the review tab', error);
+  });
 });
 // Each page that starts loading: Google Photos gets the panel, any other page has it taken away.
 chrome.tabs.onUpdated.addListener((_, info, tab) => {

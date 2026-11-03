@@ -19,6 +19,7 @@ const tab = { id: 42, windowId: 7, url: 'https://photos.google.com/', status: 'c
 let receive: (message: AppRequest, sender: chrome.runtime.MessageSender, reply: (answer: unknown) => void) => boolean;
 let updated: ReturnType<typeof event<[number, chrome.tabs.OnUpdatedInfo, chrome.tabs.Tab]>>;
 let removed: ReturnType<typeof event<[number, chrome.tabs.OnRemovedInfo]>>;
+let contextClicked: ReturnType<typeof event<[chrome.contextMenus.OnClickData, chrome.tabs.Tab?]>>;
 let tabs: {
   query: ReturnType<typeof vi.fn>;
   create: ReturnType<typeof vi.fn>;
@@ -28,6 +29,8 @@ let tabs: {
 };
 let executeScript: ReturnType<typeof vi.fn>;
 let focusWindow: ReturnType<typeof vi.fn>;
+let runtimeSend: ReturnType<typeof vi.fn>;
+let contextCreate: ReturnType<typeof vi.fn>;
 let installed: () => void;
 /** Chrome's side panel, with the options set for each tab so far. */
 let sidePanel: { options: Map<number, chrome.sidePanel.PanelOptions>; getOptions: ReturnType<typeof vi.fn>; setOptions: ReturnType<typeof vi.fn> };
@@ -38,6 +41,7 @@ beforeEach(async () => {
   vi.resetModules();
   updated = event();
   removed = event();
+  contextClicked = event();
   tabs = {
     query: vi.fn().mockResolvedValue([tab]),
     create: vi.fn().mockResolvedValue(tab),
@@ -47,6 +51,8 @@ beforeEach(async () => {
   };
   executeScript = vi.fn().mockResolvedValue([]);
   focusWindow = vi.fn().mockResolvedValue(undefined);
+  runtimeSend = vi.fn().mockResolvedValue(undefined);
+  contextCreate = vi.fn();
   offscreen = {
     open: true,
     hasDocument: vi.fn(async () => offscreen.open),
@@ -65,6 +71,7 @@ beforeEach(async () => {
       id: 'photo-cleaner',
       getURL: (path: string) => `chrome-extension://photo-cleaner/${path}`,
       getManifest: () => ({ version: '9.8.7' }),
+      sendMessage: runtimeSend,
       onMessage: { addListener: (listener: typeof receive) => { receive = listener; } },
       onStartup: { addListener: vi.fn() },
       onInstalled: { addListener: (listener: () => void) => { installed = listener; } },
@@ -73,6 +80,7 @@ beforeEach(async () => {
     windows: { update: focusWindow },
     scripting: { executeScript },
     sidePanel,
+    contextMenus: { create: contextCreate, onClicked: contextClicked },
     offscreen,
   });
   await import('../../src/app/background/main');
@@ -178,6 +186,26 @@ describe('opening the review tab', () => {
     expect(tabs.create).not.toHaveBeenCalled();
     expect(tabs.update).toHaveBeenCalledExactlyOnceWith(9, { active: true, url: `${open.url}#duplicates` });
     expect(focusWindow).toHaveBeenCalledWith(3, { focused: true });
+  });
+});
+
+describe('Stats for nerds', () => {
+  it('adds one native image-menu item only on the review page and tells that page when it is chosen', async () => {
+    installed();
+    expect(contextCreate).toHaveBeenCalledExactlyOnceWith({
+      id: 'photo-cleaner-stats-for-nerds',
+      title: 'Stats for nerds',
+      contexts: ['image'],
+      documentUrlPatterns: ['chrome-extension://photo-cleaner/review.html*'],
+    });
+    contextClicked.emit({ menuItemId: 'photo-cleaner-stats-for-nerds', editable: false, mediaType: 'image' }, tab);
+    await vi.waitFor(() => expect(runtimeSend).toHaveBeenCalledExactlyOnceWith({ kind: 'app-show-embedding-stats', tabId: 42 }));
+  });
+
+  it('ignores other context-menu items', async () => {
+    contextClicked.emit({ menuItemId: 'something-else', editable: false }, tab);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(runtimeSend).not.toHaveBeenCalled();
   });
 });
 describe('which account is signed in', () => {

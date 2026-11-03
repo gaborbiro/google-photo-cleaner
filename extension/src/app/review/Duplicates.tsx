@@ -8,6 +8,7 @@ import { recoverInterrupted } from '../duplicates/trash';
 import { trashQueueDeps, trashQueuePass } from '../duplicates/session';
 import { ProtectionLine } from '../ui/JobCard';
 import { SizeButtons, tileSizeStyle, Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
+import type { EmbeddingStats } from './embeddingStats';
 
 const TRASH_QUEUE_EVERY_MS = 2_000;
 /** The space between the pinned bar and the group (the gap in .duplicates-body). */
@@ -52,13 +53,13 @@ export function useTrashQueue(account: string | null, review: DuplicatesReview |
   }, [account, review]);
 }
 
-function Tile({ tile, focusPulse, review }: { tile: TileView; focusPulse: number; review: DuplicatesReview }) {
+function Tile({ tile, focusPulse, review, stats }: { tile: TileView; focusPulse: number; review: DuplicatesReview; stats: EmbeddingStats }) {
   const ref = useRef<HTMLElement>(null);
   const image = useRef<HTMLDivElement>(null);
   useFocusFeedback(ref, image, tile.focused, tile.current, focusPulse);
   return (
     <figure ref={ref} className={`tile tone-${tile.tone}${tile.focused ? ' focused' : ''}`}>
-      <div className="tile-image" ref={image} onClick={(e) => review.tileClicked(tile.mediaKey, e.shiftKey, e.ctrlKey || e.metaKey)}>
+      <div className="tile-image" ref={image} onContextMenu={() => stats.pointAt(tile.mediaKey)} onClick={(e) => review.tileClicked(tile.mediaKey, e.shiftKey, e.ctrlKey || e.metaKey)}>
         {tile.imageUrl ? <img src={tile.imageUrl} alt="" draggable={false} /> : <span className="muted small">{tile.error ?? 'Loading…'}</span>}
         {tile.newBadge && <span className="new-badge">NEW</span>}
         <button className="expand" title="View large (Enter)" aria-label="View large" tabIndex={-1} onClick={(e) => { e.stopPropagation(); review.openViewer(tile.mediaKey); }}>⤢</button>
@@ -107,20 +108,22 @@ const BUTTONS: { key: string; label: string; act: (r: DuplicatesReview) => void;
  * The Duplicates tab. [refreshKey]: null while the jobs are still loading; the groups are (re)built
  * when it becomes or changes to a value. [onSearchLike]: "Search more like these" with the group's photos.
  */
-export function Duplicates({ review, active, refreshKey, protectionText, openScan, openSettings, onSearchLike }: {
+export function Duplicates({ review, stats, active, refreshKey, protectionText, openScan, openSettings, onSearchLike }: {
   review: DuplicatesReview; active: boolean; refreshKey: string | null; protectionText: string | null;
+  stats: EmbeddingStats;
   openScan: () => void; openSettings: () => void; onSearchLike: (mediaKeys: string[]) => void;
 }) {
   // Built when the tab opens, and again when a library scan or analysis finishes.
   useEffect(() => {
     if (refreshKey !== null) review.show();
   }, [review, refreshKey]);
-  return <DuplicatesScreen review={review} active={active} protectionText={protectionText} openScan={openScan} openSettings={openSettings} onSearchLike={onSearchLike} />;
+  return <DuplicatesScreen review={review} stats={stats} active={active} protectionText={protectionText} openScan={openScan} openSettings={openSettings} onSearchLike={onSearchLike} />;
 }
 
 /** What the Duplicates tab shows and how it answers keys and clicks. [active]: shown and answering keys. */
-export function DuplicatesScreen({ review, active, protectionText, openScan, openSettings, onSearchLike }: {
+export function DuplicatesScreen({ review, stats, active, protectionText, openScan, openSettings, onSearchLike }: {
   review: DuplicatesReview; active: boolean; protectionText: string | null;
+  stats: EmbeddingStats;
   openScan: () => void; openSettings: () => void; onSearchLike: (mediaKeys: string[]) => void;
 }) {
   const view = useSyncExternalStore(review.subscribe, review.getView);
@@ -185,13 +188,13 @@ export function DuplicatesScreen({ review, active, protectionText, openScan, ope
         {view.group && (
           <section className="group" ref={card}>
             <div className="tiles" ref={grid}>
-              {view.group.tiles.map((t) => <Tile key={t.mediaKey} tile={t} focusPulse={view.group!.focusPulse} review={review} />)}
+              {view.group.tiles.map((t) => <Tile key={t.mediaKey} tile={t} focusPulse={view.group!.focusPulse} review={review} stats={stats} />)}
             </div>
           </section>
         )}
       </div>
       {view.viewer && (
-        <Viewer viewer={view.viewer} onPrevious={() => review.viewerStep(-1)} onNext={() => review.viewerStep(1)} onToggle={() => review.viewerToggle()} onRotate={(d) => review.viewerRotate(d)} onClose={() => review.viewerClose()} />
+        <Viewer viewer={view.viewer} onContextPhoto={(mediaKey) => stats.pointAt(mediaKey)} onPrevious={() => review.viewerStep(-1)} onNext={() => review.viewerStep(1)} onToggle={() => review.viewerToggle()} onRotate={(d) => review.viewerRotate(d)} onClose={() => review.viewerClose()} />
       )}
       <Toast notice={view.notice} />
     </div>

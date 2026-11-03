@@ -126,6 +126,11 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
    in Google Photos: it is not turned there.
 9. **−** and **+** (keys or buttons) make the photos smaller and larger; the outlined photo stays
    in view and larger photos sharpen after a moment. Reload the tab: the size is kept.
+10. Right-click a photo: Chrome's usual image menu items are unchanged and **Stats for nerds** is
+    also present (Chrome chooses its position). Open it: the dialog names the model and dimensions,
+    shows the quality measurements and the complete embedding vector. **Esc**, × and the dark area
+    close it. Repeat on another Duplicates photo, a Search result and a large-viewer photo; each shows
+    that photo's vector.
 
 ## 5. Search
 

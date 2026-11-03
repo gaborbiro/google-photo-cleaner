@@ -118,7 +118,7 @@ export function SizeButtons({ canShrink, canGrow, onResize }: { canShrink: boole
 
 export interface ViewerProps {
   viewer: {
-    imageUrl: string | null; loading: boolean; statusText: string | null; infoText: string; selectionText: string; tone: string; link: string;
+    mediaKey: string; imageUrl: string | null; loading: boolean; statusText: string | null; infoText: string; selectionText: string; tone: string; link: string;
     rotationDeg: number; sideways: boolean; rotationText: string | null;
     toggleText?: string;
   };
@@ -127,15 +127,16 @@ export interface ViewerProps {
   onToggle: () => void;
   onRotate: (delta: 1 | -1) => void;
   onClose: () => void;
+  onContextPhoto: (mediaKey: string) => void;
 }
 
 /** One photo large, framed in what will happen to it; turned for viewing when asked (nothing is saved). */
-export function Viewer({ viewer, onPrevious, onNext, onToggle, onRotate, onClose }: ViewerProps) {
+export function Viewer({ viewer, onPrevious, onNext, onToggle, onRotate, onClose, onContextPhoto }: ViewerProps) {
   return (
-    <div className="viewer" role="dialog" aria-modal="true" aria-label="Photo" onContextMenu={(e) => { e.preventDefault(); onClose(); }}>
+    <div className="viewer" role="dialog" aria-modal="true" aria-label="Photo">
       <div className={`viewer-photo tone-${viewer.tone}`}>
         {viewer.imageUrl
-          ? <img src={viewer.imageUrl} alt="" className={viewer.sideways ? 'sideways' : ''} style={{ transform: `rotate(${viewer.rotationDeg}deg)` }} />
+          ? <img src={viewer.imageUrl} alt="" onContextMenu={() => onContextPhoto(viewer.mediaKey)} className={viewer.sideways ? 'sideways' : ''} style={{ transform: `rotate(${viewer.rotationDeg}deg)` }} />
           : <span className="muted">Loading…</span>}
         {viewer.loading && viewer.imageUrl && <div className="spinner" />}
       </div>

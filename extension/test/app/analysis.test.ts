@@ -121,6 +121,8 @@ describe('AI analysis', () => {
     const saved = await env.store.embeddings(modelKey(140), 'account-a');
     expect(saved).toHaveLength(10);
     expect(saved[0]!.quality).toMatchObject({ width: 1, height: 1 });
+    expect(await env.store.embedding(modelKey(140), 'account-a', saved[0]!.mediaKey)).toEqual(saved[0]);
+    expect(await env.store.embedding(modelKey(140), 'account-b', saved[0]!.mediaKey)).toBeNull();
     expect(await env.store.photoInfo('account-a')).toHaveLength(10);
   });
 

@@ -437,6 +437,25 @@ details[open]:has(> .clutter-sample-title) { padding-bottom: var(--space-6); }
 .viewer-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .spinner { position: absolute; width: 48px; height: 48px; border: 4px solid #ffffff4d; border-top-color: #fff; border-radius: 50%; animation: spin 0.9s linear infinite; }
 
+/* --- Stats for nerds: the locally stored fingerprint behind a photo --- */
+
+.stats-backdrop {
+  position: fixed; inset: 0; z-index: 120; padding: var(--space-6); background: #090b10e8;
+  display: flex; align-items: center; justify-content: center;
+}
+.stats-dialog {
+  width: min(880px, 100%); max-height: 100%; overflow: auto; padding: var(--space-6);
+  border: 1px solid var(--pc-border); border-radius: var(--radius-card); background: var(--pc-surface);
+  box-shadow: 0 24px 80px #0009; display: flex; flex-direction: column; gap: var(--space-4);
+}
+.stats-dialog > header { display: flex; align-items: start; justify-content: space-between; gap: var(--space-4); }
+.stats-dialog h2, .stats-dialog p { margin: 0; }
+.stats-dialog > header > button { flex: 0 0 auto; font-size: 22px; }
+.stats-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px var(--space-5); margin: 0; }
+.stats-grid dt { color: var(--pc-muted); }
+.stats-grid dd { margin: 0; overflow-wrap: anywhere; }
+.embedding-vector { width: 100%; min-height: 320px; resize: vertical; white-space: pre; }
+
 /* --- Toasts: bottom right, a semantic edge on a lightly tinted surface --- */
 
 .toast {

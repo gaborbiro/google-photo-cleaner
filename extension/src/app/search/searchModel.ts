@@ -99,6 +99,7 @@ export interface ExampleView {
 }
 
 export interface ViewerView {
+  mediaKey: string;
   imageUrl: string | null;
   loading: boolean;
   statusText: string | null;
@@ -902,6 +903,7 @@ export class SearchModel {
     const failed = large === 'failed';
     const selected = this.selected.has(hit.mediaKey);
     return {
+      mediaKey: hit.mediaKey,
       imageUrl: (large && !failed ? large : null) ?? this.thumbs.get(hit.mediaKey)?.url ?? null,
       loading: large === null || large === undefined,
       statusText: failed ? 'The large preview could not be loaded; showing the thumbnail.' : large ? null : 'Loading the large preview…',

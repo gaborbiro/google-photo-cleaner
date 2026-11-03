@@ -7,7 +7,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { documentTitle, reviewAccount, reviewPageView, scanView } from '../shared/jobView';
-import { REVIEW_TABS, WORK_TABS, requestedReviewTab, type ReviewTab } from '../shared/messages';
+import { isShowEmbeddingStats, REVIEW_TABS, WORK_TABS, requestedReviewTab, type ReviewTab } from '../shared/messages';
 import { LOCAL_BUILD } from '../shared/version';
 import { extensionVersion, openPhotos, useAccount, useAllJobs, useAnalysisJob, useProtectionChoices, useReport, useScanJob, useSpinningTabIcon, useStartOverWhenErased } from '../ui/hooks';
 import { ProtectionLine, ScanCard, StorageProblem } from '../ui/JobCard';
@@ -20,6 +20,8 @@ import { Search } from './Search';
 import { Settings } from './Settings';
 import { usePinnedHeight } from '../ui/Workbench';
 import { UsageCard, useUsageSurface } from '../ui/UsageCard';
+import { EmbeddingStats, embeddingStatsDeps } from './embeddingStats';
+import { EmbeddingStatsDialog } from './EmbeddingStatsDialog';
 
 type Tab = ReviewTab;
 const TABS = REVIEW_TABS;
@@ -115,6 +117,23 @@ function Review() {
   // The workbenches, once per account; the trash queue runs for both whichever tab is open.
   const duplicates = useMemo(() => (selected === null ? null : new DuplicatesReview(reviewDeps(selected))), [selected]);
   const search = useMemo(() => (selected === null ? null : new SearchModel(searchDeps(selected))), [selected]);
+  const stats = useMemo(() => (selected === null ? null : new EmbeddingStats(embeddingStatsDeps(selected))), [selected]);
+  useEffect(() => {
+    if (stats === null) return;
+    let alive = true;
+    let show: ((message: unknown, sender: chrome.runtime.MessageSender) => void) | null = null;
+    void chrome.tabs.getCurrent().then((current) => {
+      if (!alive || current?.id === undefined) return;
+      show = (message, sender) => {
+        if (sender.id === chrome.runtime.id && isShowEmbeddingStats(message) && message.tabId === current.id) stats.openTarget();
+      };
+      chrome.runtime.onMessage.addListener(show);
+    });
+    return () => {
+      alive = false;
+      if (show) chrome.runtime.onMessage.removeListener(show);
+    };
+  }, [stats]);
   useTrashQueue(selected, duplicates);
   useEffect(() => {
     if (refreshKey !== null) search?.libraryChanged();
@@ -138,7 +157,7 @@ function Review() {
     search?.searchLike(mediaKeys);
   };
   return (
-    <main className="review">
+    <main className="review" onContextMenuCapture={() => stats?.clearTarget()}>
       <header className="collapsing page-header">
         <div className="surface-header">
           <div>
@@ -176,10 +195,10 @@ function Review() {
         </div>
       ) : (
         <>
-          {opened.has('duplicates') && duplicates && (
-            <Duplicates review={duplicates} active={tab === 'duplicates'} refreshKey={refreshKey} protectionText={page.protectionText} openScan={() => open('scan')} openSettings={openSettings} onSearchLike={searchLike} />
+          {opened.has('duplicates') && duplicates && stats && (
+            <Duplicates review={duplicates} stats={stats} active={tab === 'duplicates'} refreshKey={refreshKey} protectionText={page.protectionText} openScan={() => open('scan')} openSettings={openSettings} onSearchLike={searchLike} />
           )}
-          {opened.has('search') && search && <Search model={search} active={tab === 'search'} protectionText={page.protectionText} openScan={() => open('scan')} openSettings={openSettings} />}
+          {opened.has('search') && search && stats && <Search model={search} stats={stats} active={tab === 'search'} protectionText={page.protectionText} openScan={() => open('scan')} openSettings={openSettings} />}
           {opened.has('scan') && (
             <div className="scan-tab" hidden={tab !== 'scan'}>
               <UsageCard place="question" />
@@ -205,6 +224,7 @@ function Review() {
           </table>
         </section>
       )}
+      {stats && <EmbeddingStatsDialog stats={stats} />}
     </main>
   );
 }

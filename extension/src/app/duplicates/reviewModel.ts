@@ -89,6 +89,7 @@ export interface GroupView {
 }
 
 export interface ViewerView {
+  mediaKey: string;
   imageUrl: string | null;
   loading: boolean;
   statusText: string | null;
@@ -794,6 +795,7 @@ export class DuplicatesReview {
       ? ['Selected for the trash', 'negative']
       : m.selectable ? ['Kept (not selected)', 'positive'] : ['Always kept', 'neutral'];
     return {
+      mediaKey: m.mediaKey,
       imageUrl: (large && !failed ? large : null) ?? this.previews.get(m.mediaKey)?.url ?? null,
       loading: large === null || large === undefined,
       statusText: failed ? 'The large preview could not be loaded; showing the thumbnail.' : large ? null : 'Loading the large preview…',

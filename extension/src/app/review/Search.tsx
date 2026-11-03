@@ -6,9 +6,10 @@ import { searchKey, searchViewerKey } from '../duplicates/keys';
 import { SORTS, type ExampleView, type SearchModel, type SearchTile } from '../search/searchModel';
 import { ProtectionLine } from '../ui/JobCard';
 import { SizeButtons, tileSizeStyle, Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
+import type { EmbeddingStats } from './embeddingStats';
 
 
-function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: number; focusPulse: number; model: SearchModel }) {
+function Tile({ tile, index, focusPulse, model, stats }: { tile: SearchTile; index: number; focusPulse: number; model: SearchModel; stats: EmbeddingStats }) {
   const ref = useRef<HTMLElement>(null);
   const image = useRef<HTMLDivElement>(null);
   useFocusFeedback(ref, image, tile.current, tile.current, focusPulse);
@@ -22,7 +23,7 @@ function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: num
   }, [model, tile.mediaKey, tile.imageWanted]);
   return (
     <figure ref={ref} className={`search-tile${tile.selected ? ' selected' : ''}`}>
-      <div className="search-tile-image" ref={image} onClick={(e) => model.tileClicked(index, e.shiftKey, e.ctrlKey || e.metaKey)}>
+      <div className="search-tile-image" ref={image} onContextMenu={() => stats.pointAt(tile.mediaKey)} onClick={(e) => model.tileClicked(index, e.shiftKey, e.ctrlKey || e.metaKey)}>
         {tile.imageUrl ? <img src={tile.imageUrl} alt="" draggable={false} /> : <span className="muted small">{tile.error ?? '…'}</span>}
         <button className="expand" title="View large (Enter)" aria-label="View large" tabIndex={-1} onClick={(e) => { e.stopPropagation(); model.openViewer(index); }}>⤢</button>
         <button className="hide-result" title="Hide this result (nothing is trashed)" aria-label="Hide this result" onClick={(e) => { e.stopPropagation(); model.hideResult(tile.mediaKey); }}>×</button>
@@ -32,14 +33,14 @@ function Tile({ tile, index, focusPulse, model }: { tile: SearchTile; index: num
   );
 }
 
-function Examples({ label, examples, model }: { label: string; examples: ExampleView[]; model: SearchModel }) {
+function Examples({ label, examples, model, stats }: { label: string; examples: ExampleView[]; model: SearchModel; stats: EmbeddingStats }) {
   if (examples.length === 0) return null;
   return (
     <div className="examples">
       <span className="muted">{label}</span>
       {examples.map((e) => (
         <span key={e.mediaKey} className="example">
-          {e.imageUrl ? <img src={e.imageUrl} alt="" /> : <span className="muted small">…</span>}
+          {e.imageUrl ? <img src={e.imageUrl} alt="" onContextMenu={() => stats.pointAt(e.mediaKey)} /> : <span className="muted small">…</span>}
           <button className="remove" title="No longer an example" aria-label="Remove this example" tabIndex={-1} onClick={() => model.removeExample(e.mediaKey)}>×</button>
         </span>
       ))}
@@ -48,8 +49,8 @@ function Examples({ label, examples, model }: { label: string; examples: Example
 }
 
 /** [active]: shown and answering keys; a hidden tab keeps its state but ignores the keyboard. */
-export function Search({ model, active, protectionText, openScan, openSettings }: {
-  model: SearchModel; active: boolean; protectionText: string | null; openScan: () => void; openSettings: () => void;
+export function Search({ model, stats, active, protectionText, openScan, openSettings }: {
+  model: SearchModel; stats: EmbeddingStats; active: boolean; protectionText: string | null; openScan: () => void; openSettings: () => void;
 }) {
   const view = useSyncExternalStore(model.subscribe, model.getView);
   const field = useRef<HTMLInputElement>(null);
@@ -112,8 +113,8 @@ export function Search({ model, active, protectionText, openScan, openSettings }
           {view.canStartOver && <button type="button" tabIndex={-1} disabled={view.searching} onClick={() => model.startOver()}>Start over</button>}
         </form>
         {view.progressText && <p className="working" role="status"><span className="spinner-inline" />{view.progressText}</p>}
-        <Examples label="More like:" examples={view.more} model={model} />
-        <Examples label="Less like:" examples={view.less} model={model} />
+        <Examples label="More like:" examples={view.more} model={model} stats={stats} />
+        <Examples label="Less like:" examples={view.less} model={model} stats={stats} />
         {view.hiddenText && <p className="muted small">{view.hiddenText}</p>}
         <ProtectionLine text={protectionText} openSettings={openSettings} />
       </section>
@@ -155,12 +156,12 @@ export function Search({ model, active, protectionText, openScan, openSettings }
           )}
         </section>
         <div className="search-grid" ref={grid} onMouseDown={() => field.current?.blur()}>
-          {view.tiles.map((t, i) => <Tile key={t.mediaKey} tile={t} index={i} focusPulse={view.focusPulse} model={model} />)}
+          {view.tiles.map((t, i) => <Tile key={t.mediaKey} tile={t} index={i} focusPulse={view.focusPulse} model={model} stats={stats} />)}
         </div>
         {view.showMoreVisible && <div className="show-more"><button disabled={view.searching} onClick={() => model.showMore()}>Show more</button></div>}
       </div>
       {view.viewer && (
-        <Viewer viewer={view.viewer} onPrevious={() => model.viewerStep(-1)} onNext={() => model.viewerStep(1)} onToggle={() => model.viewerToggle()} onRotate={(d) => model.viewerRotate(d)} onClose={() => model.viewerClose()} />
+        <Viewer viewer={view.viewer} onContextPhoto={(mediaKey) => stats.pointAt(mediaKey)} onPrevious={() => model.viewerStep(-1)} onNext={() => model.viewerStep(1)} onToggle={() => model.viewerToggle()} onRotate={(d) => model.viewerRotate(d)} onClose={() => model.viewerClose()} />
       )}
       <Toast notice={view.notice} />
     </div>

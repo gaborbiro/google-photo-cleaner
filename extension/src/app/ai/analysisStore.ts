@@ -82,6 +82,13 @@ export class IndexedDbAnalysisStore {
     return request(tx.objectStore(STORES.fingerprints).getAll(prefixRange(account, modelKey)) as IDBRequest<StoredEmbedding[]>);
   }
 
+  /** One photo's fingerprint, without reading a large library's other fingerprints. */
+  async embedding(modelKey: string, account: string, mediaKey: string): Promise<StoredEmbedding | null> {
+    const tx = await this.tx([STORES.fingerprints], 'readonly');
+    const key = [account, modelKey, mediaKey];
+    return (await request(tx.objectStore(STORES.fingerprints).get(key) as IDBRequest<StoredEmbedding | undefined>)) ?? null;
+  }
+
   async savePhotoInfo(info: PhotoInfo[]): Promise<void> {
     if (info.length === 0) return;
     const tx = await this.tx([STORES.photoInfo], 'readwrite');

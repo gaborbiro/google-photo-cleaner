@@ -45,6 +45,7 @@ let sent: { kind: string; [key: string]: unknown }[];
 let eraseAnswer: { ok?: true; error?: string };
 /** What the pages asked of Chrome's side panel, in order. */
 let sidePanelCalls: [string, unknown][];
+let runtimeListeners: Set<(message: unknown, sender: chrome.runtime.MessageSender) => void>;
 /** Google Photos' trash. */
 let google: FakeGoogle;
 let errors: MockInstance;
@@ -54,6 +55,7 @@ function pretendExtension() {
   const usage = new UsageSender(new IndexedDbUsageStore(indexedDB), null);
   vi.stubGlobal('chrome', {
     runtime: {
+      id: 'photo-cleaner',
       sendMessage: async (request: { kind: string; op?: PageOp; account?: string; params?: Record<string, unknown>; answer?: 'yes' | 'no' }) => {
         sent.push(request);
         if (request.kind === 'app-usage-consent') {
@@ -71,11 +73,16 @@ function pretendExtension() {
       },
       getURL: (path: string) => `chrome-extension://photo-cleaner/${path}`,
       getManifest: () => ({ version: '1.2.3' }),
+      onMessage: {
+        addListener: (listener: (message: unknown, sender: chrome.runtime.MessageSender) => void) => { runtimeListeners.add(listener); },
+        removeListener: (listener: (message: unknown, sender: chrome.runtime.MessageSender) => void) => { runtimeListeners.delete(listener); },
+      },
     },
     sidePanel: {
       setOptions: async (options: unknown) => { sidePanelCalls.push(['setOptions', options]); },
       open: async (options: unknown) => { sidePanelCalls.push(['open', options]); },
     },
+    tabs: { getCurrent: async () => ({ id: 99 }) },
   });
 }
 
@@ -164,6 +171,7 @@ beforeEach(() => {
   sent = [];
   eraseAnswer = { ok: true };
   sidePanelCalls = [];
+  runtimeListeners = new Set();
   google = new FakeGoogle();
   pretendExtension();
   pretendLayout();
@@ -372,6 +380,25 @@ async function searchShown() {
 }
 
 describe('clicks and keys reach what they should', () => {
+  it('right-click leaves Chrome\'s menu alone and Stats for nerds shows the complete embedding', async () => {
+    const root = await duplicatesShown();
+    const image = dupTiles(root)[1]!.querySelector('img')!;
+    const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    image.dispatchEvent(menu);
+    expect(menu.defaultPrevented).toBe(false);
+
+    for (const listener of runtimeListeners) listener({ kind: 'app-show-embedding-stats', tabId: 100 }, { id: 'photo-cleaner' });
+    expect(root.querySelector('#embedding-vector')).toBeNull();
+    for (const listener of runtimeListeners) listener({ kind: 'app-show-embedding-stats', tabId: 99 }, { id: 'photo-cleaner' });
+    await shows(root, 'Stats for nerds', 'Full embedding vector', 'Dimensions2');
+    expect(root.querySelector<HTMLTextAreaElement>('#embedding-vector')!.value).toBe(JSON.stringify([
+      Math.fround(Math.cos(2 * Math.PI / 180)),
+      Math.fround(Math.sin(2 * Math.PI / 180)),
+    ], null, 2));
+    press('Escape');
+    await vi.waitFor(() => expect(root.querySelector('#embedding-vector')).toBeNull());
+  });
+
   it('Duplicates: arrows move the focus; Space toggles a photo, a click only outlines it; Enter, arrows and Esc work the viewer', async () => {
     const root = await duplicatesShown();
     await vi.waitFor(() => expect(focusedTile(dupTiles(root))).toBe(0));

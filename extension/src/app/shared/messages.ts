@@ -43,6 +43,15 @@ export type AppRequest =
   | { kind: 'app-erase-all' };
 
 export type ReviewTab = 'scan' | 'duplicates' | 'search' | 'settings';
+/** From the service worker's native image menu to the open review page. */
+export const SHOW_EMBEDDING_STATS = 'app-show-embedding-stats';
+
+export function isShowEmbeddingStats(value: unknown): value is { kind: typeof SHOW_EMBEDDING_STATS; tabId: number } {
+  return typeof value === 'object' && value !== null &&
+    (value as { kind?: unknown }).kind === SHOW_EMBEDDING_STATS &&
+    Number.isInteger((value as { tabId?: unknown }).tabId);
+}
+
 /** The tabs for the work, in order; Settings stands apart from them at the far end. */
 export const WORK_TABS: readonly ReviewTab[] = ['scan', 'duplicates', 'search'];
 export const REVIEW_TABS: readonly ReviewTab[] = [...WORK_TABS, 'settings'];

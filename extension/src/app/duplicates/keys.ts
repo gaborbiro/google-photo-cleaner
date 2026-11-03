@@ -9,6 +9,7 @@ export type ViewerAction = 'close' | 'previous' | 'next' | 'toggle' | 'rotate';
 export interface KeyPress {
   key: string;
   repeat: boolean;
+  shiftKey: boolean;
   ctrlKey: boolean;
   altKey: boolean;
   metaKey: boolean;

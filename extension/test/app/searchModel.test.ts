@@ -474,6 +474,25 @@ describe('Search & sweep', () => {
     expect(selected()).toEqual([1]);
   });
 
+  it('a blank-grid click clears the selection; Shift+Arrow extends and shrinks a range', async () => {
+    const { model, view } = await searched();
+    const selected = () => view().tiles.flatMap((t, i) => (t.selected ? [i] : []));
+    model.focusMove(1, 0, false, true);
+    expect(selected()).toEqual([0, 1]);
+    model.focusMove(1, 0, false, true);
+    expect(selected()).toEqual([0, 1, 2]);
+    model.focusMove(-1, 0, false, true);
+    expect(selected()).toEqual([0, 1]);
+
+    model.clearSelection();
+    expect(selected()).toEqual([]);
+    expect(view().resultText).toBe('4 best matches · 0 selected');
+    model.focusMove(1, 0, false, true);
+    expect(selected()).toEqual([1, 2]);
+    model.focusMove(1, 0); // at the row edge, an unshifted arrow returns to one selection in place
+    expect(selected()).toEqual([2]);
+  });
+
   it('with nothing selected, the first arrow selects the photo last clicked without moving', async () => {
     const { model, view } = await searched();
     const selected = () => view().tiles.flatMap((t, i) => (t.selected ? [i] : []));

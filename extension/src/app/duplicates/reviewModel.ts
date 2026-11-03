@@ -206,9 +206,9 @@ export class DuplicatesReview {
   // Focus in the group grid, outlined in white as Search's selection is: at least one photo, the first when a group comes on.
   /** The photo last clicked or moved to with the arrows: where a Shift-click range starts and what Enter opens. */
   private focusedIndex = 0;
-  /** The outlined photos, which Space switches between keep and trash: by a click, Ctrl/Cmd-click, Shift-click, A or the arrows. */
+  /** The photos Space acts on, outlined by a click, Ctrl/Cmd-click, Shift-click, A or the arrows. */
   private outlined = new Set<number>([0]);
-  /** After a Shift-click: where the outlined range starts; it ends at [focusedIndex]. */
+  /** After Shift-click or Shift+Arrow: where the outlined range starts; it ends at [focusedIndex]. */
   private rangeStart: number | null = null;
   private columns = 1;
   private focusPulse = 0;
@@ -421,13 +421,14 @@ export class DuplicatesReview {
    * Arrows: left and right within the row, up and down within the column; at an edge (or with no
    * photo directly below on a short last row) the outline stays put. A fresh tap there bounces it,
    * so the eye finds it; a slide that runs into the edge ([held]: the repeats of a held arrow) just
-   * stops. With several photos outlined (A, Ctrl/Cmd- or Shift-click), the first press returns to
-   * the single outline on the photo last clicked.
+   * stops. With several photos outlined (A, Ctrl/Cmd- or Shift-click), the first unshifted press
+   * returns to the single outline on the photo last clicked. Shift+Arrow extends or shrinks a range
+   * from that photo without changing any trash marks.
    */
-  focusMove(dx: number, dy: number, held = false): void {
+  focusMove(dx: number, dy: number, held = false, extend = false): void {
     const group = this.currentOrSay();
     if (!group) return;
-    if (this.outlined.size !== 1 || !this.outlined.has(this.focusedIndex)) {
+    if (!extend && (this.outlined.size !== 1 || !this.outlined.has(this.focusedIndex))) {
       this.outlineOnly(this.focusedIndex);
     } else {
       const last = group.members.length - 1;
@@ -439,18 +440,24 @@ export class DuplicatesReview {
         this.focusPulse++;
         return this.publish();
       }
+      const start = extend ? this.rangeStart ?? this.focusedIndex : null;
       this.focusedIndex = target;
-      this.outlineOnly(target);
+      if (start === null) this.outlineOnly(target);
+      else {
+        this.outlined.clear();
+        for (let i = Math.min(start, target); i <= Math.max(start, target); i++) this.outlined.add(i);
+        this.rangeStart = start;
+      }
     }
     this.focusPulse++;
     this.publish();
   }
 
   /**
-   * Clicks outline photos as in Search; only Space switches them between keep and trash. A click
-   * outlines just this photo. Ctrl/Cmd-click adds or removes it without changing the others (the
-   * last outlined photo stays). Shift outlines the range from the photo last clicked; Ctrl/Cmd with
-   * Shift adds the range.
+   * A plain click outlines just this photo and switches it between keep and trash. Ctrl/Cmd-click
+   * adds or removes it from the outline without changing any trash marks (the last outlined photo
+   * stays). Shift outlines the range from the photo last clicked; Ctrl/Cmd with Shift adds the
+   * range, again without changing trash marks.
    */
   tileClicked(mediaKey: string, shift = false, additive = false): void {
     const group = this.pending[0];
@@ -475,6 +482,15 @@ export class DuplicatesReview {
       this.rangeStart = null;
     }
     this.focusedIndex = index;
+    if (!shift && !additive) return this.toggleOrExplain(mediaKey);
+    this.publish();
+  }
+
+  /** A click on blank tab space removes the outline without changing trash marks. */
+  clearOutline(): void {
+    if (this.outlined.size === 0) return;
+    this.outlined.clear();
+    this.rangeStart = null;
     this.publish();
   }
 
@@ -501,6 +517,7 @@ export class DuplicatesReview {
     const group = this.currentOrSay();
     if (!group) return;
     const members = group.members.filter((_, index) => this.outlined.has(index));
+    if (members.length === 0) return this.sayAndPublish('Select photos to toggle between keep and trash first.', 'caution');
     if (members.length === 1) return this.toggleOrExplain(members[0]!.mediaKey);
     const selectable = members.filter((m) => m.selectable).map((m) => m.mediaKey);
     if (selectable.length === 0) return this.sayAndPublish('These photos are always kept: each is protected or has an unknown status.', 'caution');

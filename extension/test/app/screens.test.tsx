@@ -145,9 +145,9 @@ async function click(root: HTMLElement, label: string) {
 }
 
 /** A key pressed and let go, as the keyboard sends it (to the page, or to [target] such as a text field). */
-function press(key: string, target: EventTarget = window) {
-  target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
-  target.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true }));
+function press(key: string, target: EventTarget = window, init: KeyboardEventInit = {}) {
+  target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
+  target.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true, ...init }));
 }
 
 const requests = (kind: string) => sent.filter((r) => r.kind === kind);
@@ -399,10 +399,12 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(root.querySelector('#embedding-vector')).toBeNull());
   });
 
-  it('Duplicates: arrows move the focus; Space toggles a photo, a click only outlines it; Enter, arrows and Esc work the viewer', async () => {
+  it('Duplicates: arrows move the focus; Space and plain clicks toggle photos; Enter, arrows and Esc work the viewer', async () => {
     const root = await duplicatesShown();
     await vi.waitFor(() => expect(focusedTile(dupTiles(root))).toBe(0));
     await shows(root, '2 of 3 photos selected for the trash');
+    expect([...root.querySelectorAll('.duplicates .buttons > button')].slice(0, 2).map((b) => b.textContent)).toEqual(['D · Trash selected', 'Space · Toggle trash']);
+    await shows(root, 'A · Select all photos');
 
     press('ArrowRight');
     await vi.waitFor(() => expect(focusedTile(dupTiles(root))).toBe(1));
@@ -411,18 +413,18 @@ describe('clicks and keys reach what they should', () => {
     await shows(root, '1 of 3 photos selected for the trash');
     dupTiles(root)[2]!.querySelector<HTMLElement>('.tile-image')!.click();
     await vi.waitFor(() => expect(focusedTile(dupTiles(root))).toBe(2));
-    expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'KEEP (your choice)', 'TRASH']);
+    expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'KEEP (your choice)', 'KEEP (your choice)']);
     dupTiles(root)[1]!.querySelector<HTMLElement>('.tile-image')!.click();
     await vi.waitFor(() => expect(focusedTile(dupTiles(root))).toBe(1));
-    press(' ');
-    await vi.waitFor(() => expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'TRASH', 'TRASH']));
+    await vi.waitFor(() => expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'TRASH', 'KEEP (your choice)']));
 
     press('Enter');
     await shows(root, '2 of 3 · Proposed for the trash', 'Selected for the trash');
     press('ArrowRight');
     await shows(root, '3 of 3 · Proposed for the trash');
-    press(' ');
     await shows(root, 'Kept (not selected)');
+    press(' ');
+    await shows(root, 'Selected for the trash');
     const turn = () => root.querySelector<HTMLElement>('.viewer-photo img')!.style.transform;
     press('r');
     await vi.waitFor(() => expect(turn()).toBe('rotate(90deg)'));
@@ -433,7 +435,7 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(turn()).toBe('rotate(90deg)'));
     press('Escape');
     await vi.waitFor(() => expect(root.querySelector('.viewer')).toBeNull());
-    expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'TRASH', 'KEEP (your choice)']);
+    expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'TRASH', 'TRASH']);
     expect(await decisions()).toEqual([]); // looking and choosing decide nothing
   });
 
@@ -549,10 +551,28 @@ describe('clicks and keys reach what they should', () => {
     await vi.waitFor(() => expect(outlined()).toEqual([true, true, false]));
     image(2).dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true, ctrlKey: true }));
     await vi.waitFor(() => expect(outlined()).toEqual([true, true, true]));
-    expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'TRASH', 'TRASH']); // clicks mark nothing
+    expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'KEEP (your choice)', 'TRASH']); // only the plain click changed a mark
     press(' ');
-    await vi.waitFor(() => expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'KEEP (your choice)', 'KEEP (your choice)']));
+    await vi.waitFor(() => expect(labels(root)).toEqual(['KEEP · protected (favourite)', 'TRASH', 'TRASH']));
     expect(await decisions()).toEqual([]);
+  });
+
+  it('Duplicates and Search: clicking blank tab space clears outlines; Shift+Arrow selects ranges', async () => {
+    const root = await duplicatesShown();
+    root.querySelector<HTMLElement>('.duplicates-body')!.click();
+    await vi.waitFor(() => expect(dupTiles(root).every((t) => !t.classList.contains('focused'))).toBe(true));
+    press('ArrowRight', window, { shiftKey: true });
+    await vi.waitFor(() => expect(dupTiles(root).map((t) => t.classList.contains('focused'))).toEqual([true, true, false]));
+
+    await click(root, 'Search more like these');
+    await vi.waitFor(() => expect(searchTiles(root).length).toBeGreaterThanOrEqual(3));
+    searchTiles(root)[0]!.querySelector<HTMLElement>('.search-tile-image')!.click();
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(1));
+    root.querySelector<HTMLElement>('.search-body')!.click();
+    await vi.waitFor(() => expect(selectedCount(root)).toBe(0));
+    press('ArrowRight', window, { shiftKey: true });
+    await vi.waitFor(() => expect(searchTiles(root).slice(0, 2).every((t) => t.classList.contains('selected'))).toBe(true));
+    expect(selectedCount(root)).toBe(2);
   });
 
   it('Search: clicks select one, Ctrl/Cmd-click toggles individuals, and Shift-click selects a range without trash decisions', async () => {
@@ -643,7 +663,7 @@ describe('clicks and keys reach what they should', () => {
     expect(root.querySelector('.viewer')).not.toBeNull();
     press('Escape');
     await vi.waitFor(() => expect(root.querySelector('.viewer')).toBeNull());
-    await click(root, 'A · Select all');
+    await click(root.querySelector<HTMLElement>('.search')!, 'A · Select all');
     await vi.waitFor(() => expect(selectedCount(root)).toBe(before - 1));
     press('Enter');
     await vi.waitFor(() => expect(root.querySelector('.viewer')).not.toBeNull());

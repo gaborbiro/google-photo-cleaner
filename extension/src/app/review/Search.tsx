@@ -68,7 +68,7 @@ export function Search({ model, stats, active, protectionText, openScan, openSet
       hide: () => model.hideSelected(),
       cancel: () => model.cancel(), more: () => model.addExamples('more'), less: () => model.addExamples('less'), undo: () => model.undo(),
       smaller: () => model.resize(-1), larger: () => model.resize(1),
-      left: (h) => model.focusMove(-1, 0, h), right: (h) => model.focusMove(1, 0, h), up: (h) => model.focusMove(0, -1, h), down: (h) => model.focusMove(0, 1, h),
+      left: (h, s) => model.focusMove(-1, 0, h, s), right: (h, s) => model.focusMove(1, 0, h, s), up: (h, s) => model.focusMove(0, -1, h, s), down: (h, s) => model.focusMove(0, 1, h, s),
     },
     onViewer: {
       close: () => model.viewerClose(), previous: () => model.viewerStep(-1), next: () => model.viewerStep(1), toggle: () => model.viewerToggle(),
@@ -97,7 +97,10 @@ export function Search({ model, stats, active, protectionText, openScan, openSet
   }, [model, view.more, view.less]);
 
   return (
-    <div className="search" hidden={!active} style={tileSizeStyle(view.tilePx)}>
+    <div className="search" hidden={!active} style={tileSizeStyle(view.tilePx)} onClick={(e) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.search-tile-image, button, a, input, select, textarea')) model.clearSelection();
+    }}>
       <section className="collapsing search-head">
         <label htmlFor="search-query">Describe the photos</label>
         <p className="muted">{view.introText}</p>

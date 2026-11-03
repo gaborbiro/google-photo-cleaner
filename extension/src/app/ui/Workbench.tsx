@@ -7,7 +7,7 @@ import { HeldArrow, repeatsWhenHeld, viewerKey, type KeyPress, type KeyResult, t
 function pressOf(e: KeyboardEvent): KeyPress {
   const target = e.target as HTMLElement | null;
   const inTextField = !!target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
-  return { key: e.key, repeat: e.repeat, ctrlKey: e.ctrlKey, altKey: e.altKey, metaKey: e.metaKey, inTextField };
+  return { key: e.key, repeat: e.repeat, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, altKey: e.altKey, metaKey: e.metaKey, inTextField };
 }
 
 /**
@@ -18,7 +18,7 @@ export function useWorkbenchKeys<A extends string, V extends string = ViewerActi
   active: boolean;
   viewerOpen: boolean;
   gridKey: (press: KeyPress) => KeyResult<A>;
-  onGrid: Record<A, (held: boolean) => void>;
+  onGrid: Record<A, (held: boolean, shift: boolean) => void>;
   viewerKey?: (press: KeyPress) => KeyResult<V>;
   onViewer: Record<V, () => void>;
 }): void {
@@ -34,9 +34,9 @@ export function useWorkbenchKeys<A extends string, V extends string = ViewerActi
       return () => clearTimeout(timer);
     });
     /** Acts once now; a held arrow then keeps acting at our pace ([wasHeld] true for those repeats). */
-    const act = (key: string, action: (wasHeld: boolean) => void) => {
-      action(false);
-      if (repeatsWhenHeld(key)) held.hold(key, () => action(true));
+    const act = (key: string, shift: boolean, action: (wasHeld: boolean, shift: boolean) => void) => {
+      action(false, shift);
+      if (repeatsWhenHeld(key)) held.hold(key, () => action(true, shift));
       else held.release();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -45,8 +45,8 @@ export function useWorkbenchKeys<A extends string, V extends string = ViewerActi
       if (result.kind === 'ignore') return;
       e.preventDefault();
       if (result.kind === 'swallow') return;
-      if (viewerOpen) return act(press.key, handlers.current.onViewer[result.action as V]);
-      act(press.key, handlers.current.onGrid[result.action as A]);
+      if (viewerOpen) return act(press.key, false, handlers.current.onViewer[result.action as V]);
+      act(press.key, press.shiftKey, handlers.current.onGrid[result.action as A]);
     };
     const onKeyUp = (e: KeyboardEvent) => held.released(e.key);
     const onBlur = () => held.release();

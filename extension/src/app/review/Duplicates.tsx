@@ -97,10 +97,10 @@ function Status({ view, protectionText, openScan, openSettings }: { view: Duplic
 
 const BUTTONS: { key: string; label: string; act: (r: DuplicatesReview) => void; trash?: boolean }[] = [
   { key: 'D', label: 'Trash selected', act: (r) => r.approve(), trash: true },
+  { key: 'Space', label: 'Toggle trash', act: (r) => r.toggleFocused() },
   { key: 'F', label: 'Keep all', act: (r) => r.keep() },
   { key: 'S', label: 'Skip', act: (r) => r.defer() },
-  { key: 'A', label: 'Focus all', act: (r) => r.focusAll() },
-  { key: 'Space', label: 'Toggle trash', act: (r) => r.toggleFocused() },
+  { key: 'A', label: 'Select all photos', act: (r) => r.focusAll() },
   { key: 'Z', label: 'Undo', act: (r) => r.undo() },
 ];
 
@@ -136,7 +136,7 @@ export function DuplicatesScreen({ review, stats, active, protectionText, openSc
       approve: () => review.approve(), keep: () => review.keep(), defer: () => review.defer(), focusAll: () => review.focusAll(),
       undo: () => review.undo(), open: () => review.openFocused(), toggle: () => review.toggleFocused(),
       smaller: () => review.resize(-1), larger: () => review.resize(1),
-      left: (h) => review.focusMove(-1, 0, h), right: (h) => review.focusMove(1, 0, h), up: (h) => review.focusMove(0, -1, h), down: (h) => review.focusMove(0, 1, h),
+      left: (h, s) => review.focusMove(-1, 0, h, s), right: (h, s) => review.focusMove(1, 0, h, s), up: (h, s) => review.focusMove(0, -1, h, s), down: (h, s) => review.focusMove(0, 1, h, s),
     },
     onViewer: {
       close: () => review.viewerClose(), previous: () => review.viewerStep(-1), next: () => review.viewerStep(1), toggle: () => review.viewerToggle(),
@@ -159,7 +159,10 @@ export function DuplicatesScreen({ review, stats, active, protectionText, openSc
   }, [review, view.group !== null]);
 
   return (
-    <div className="duplicates" hidden={!active} style={tileSizeStyle(view.tilePx)}>
+    <div className="duplicates" hidden={!active} style={tileSizeStyle(view.tilePx)} onClick={(e) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.tile-image, button, a, input, select, textarea')) review.clearOutline();
+    }}>
       <Status view={view} protectionText={protectionText} openScan={openScan} openSettings={openSettings} />
       <div className="duplicates-body">
         <section className="pinned-bar" ref={bar}>

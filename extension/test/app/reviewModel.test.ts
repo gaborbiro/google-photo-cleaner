@@ -252,19 +252,48 @@ describe('the Duplicates review', () => {
     expect(view().group!.focusPulse).toBe(pulse + 3);
   });
 
-  it('a click only outlines, as in Search: it never switches keep and trash, and bounces only when the outline changes', async () => {
+  it('a blank-grid click removes every outline without changing trash marks; Shift+Arrow selects a range', async () => {
+    const { review, view } = await opened();
+    const outlined = () => view().group!.tiles.flatMap((t, i) => (t.focused ? [i] : []));
+    review.focusMove(1, 0, false, true);
+    expect(outlined()).toEqual([0, 1]);
+    review.focusMove(1, 0, false, true);
+    expect(outlined()).toEqual([0, 1, 2]);
+    review.focusMove(-1, 0, false, true);
+    expect(outlined()).toEqual([0, 1]);
+    expect(view().group!.selectionText).toBe('1 of 3 photos selected for the trash');
+
+    review.clearOutline();
+    expect(outlined()).toEqual([]);
+    expect(view().group!.selectionText).toBe('1 of 3 photos selected for the trash');
+    review.toggleFocused();
+    expect(view().notice!.text).toBe('Select photos to toggle between keep and trash first.');
+    review.focusMove(1, 0); // first unshifted arrow restores the outline at the last position
+    expect(outlined()).toEqual([1]);
+  });
+
+  it('a plain click outlines one photo and toggles its trash mark, bouncing only when the outline changes', async () => {
     const { review, view } = await opened();
     const pulse = view().group!.focusPulse;
-    review.tileClicked('a'); // already the one outlined: nothing changes
+    review.tileClicked('a'); // already the one outlined: only its trash mark changes
     expect(view().group!.focusPulse).toBe(pulse);
-    review.tileClicked('b'); // moves the outline
+    expect(view().group!.tiles[0]!.label).toBe('TRASH (was the recommended keeper)');
+    review.tileClicked('b'); // moves the outline and keeps b
     expect(view().group!.focusPulse).toBe(pulse + 1);
     expect(view().group!.tiles.map((t) => [t.focused, t.current])).toEqual([[false, false], [true, true], [false, false]]);
     review.focusAll();
-    review.tileClicked('b'); // from the whole group back to one photo
+    review.tileClicked('b'); // from the whole group back to one photo, and marks b again
     expect(view().group!.focusPulse).toBe(pulse + 3);
+    expect(view().group!.selectionText).toBe('2 of 3 photos selected for the trash');
+    expect(view().group!.tiles.map((t) => t.label)).toEqual(['TRASH (was the recommended keeper)', 'TRASH', 'KEEP · protected (favourite)']);
+  });
+
+  it('a plain click on an always-kept photo focuses it and explains why it cannot be trashed', async () => {
+    const { review, view } = await opened();
+    review.tileClicked('c');
+    expect(view().group!.tiles.map((t) => t.focused)).toEqual([false, false, true]);
+    expect(view().notice!.text).toBe('This photo is a favourite, so it is always kept.');
     expect(view().group!.selectionText).toBe('1 of 3 photos selected for the trash');
-    expect(view().group!.tiles.map((t) => t.label)).toEqual(['KEEP (recommended)', 'TRASH', 'KEEP · protected (favourite)']);
   });
 
   it('Ctrl/Cmd-click adds or removes a photo from the outline, never the last one; Space then marks them all', async () => {
@@ -289,7 +318,7 @@ describe('the Duplicates review', () => {
     fakes.pending = [group('big', member('k', 'KEEPER'), ...['p1', 'p2', 'p3', 'p4'].map((k) => member(k, 'PROPOSED')))];
     const { review, view } = await opened(fakes);
     const outlined = () => view().group!.tiles.map((t) => t.focused);
-    review.tileClicked('p1');
+    review.tileClicked('p1', false, true); // set the range end without changing a trash mark
     review.tileClicked('p3', true);
     expect(outlined()).toEqual([false, true, true, true, false]);
     review.tileClicked('k', true); // the range keeps its start

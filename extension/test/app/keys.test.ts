@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { gridKey, HELD_STEP_MS, HeldArrow, HOLD_DELAY_MS, repeatsWhenHeld, searchKey, searchViewerKey, viewerKey, type KeyPress } from '../../src/app/duplicates/keys';
 
-const press = (key: string, opts: Partial<KeyPress> = {}): KeyPress => ({ key, repeat: false, ctrlKey: false, altKey: false, metaKey: false, inTextField: false, ...opts });
+const press = (key: string, opts: Partial<KeyPress> = {}): KeyPress => ({ key, repeat: false, shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, inTextField: false, ...opts });
 
 describe('Duplicates keys', () => {
   it('the left hand decides: D trash, F (or K) keep, S skip, A all, Z (or U) undo', () => {
@@ -20,6 +20,8 @@ describe('Duplicates keys', () => {
 
   it('arrows, Enter and Space work the grid', () => {
     expect(gridKey(press('ArrowUp'))).toEqual({ kind: 'act', action: 'up' });
+    expect(gridKey(press('ArrowRight', { shiftKey: true }))).toEqual({ kind: 'act', action: 'right' });
+    expect(searchKey(press('ArrowRight', { shiftKey: true }))).toEqual({ kind: 'act', action: 'right' });
     expect(gridKey(press('Enter'))).toEqual({ kind: 'act', action: 'open' });
     expect(gridKey(press(' '))).toEqual({ kind: 'act', action: 'toggle' });
   });

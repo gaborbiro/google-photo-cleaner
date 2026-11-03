@@ -245,7 +245,7 @@ export class SearchModel {
 
   /** The photo last clicked or moved to with the arrows: where a Shift-click range starts and what Enter opens. Not drawn: only the selection is. */
   private focusedIndex = 0;
-  /** After a Shift-click: where the selected range starts; it ends at [focusedIndex]. */
+  /** After Shift-click or Shift+Arrow: where the selected range starts; it ends at [focusedIndex]. */
   private rangeStart: number | null = null;
   private columns = 1;
   /** The width the grid last measured; the columns follow it and the photo size. */
@@ -553,23 +553,33 @@ export class SearchModel {
 
   /**
    * Arrows: the selection moves to the next photo within the row and the column, one photo at a time,
-   * as in a file manager. With nothing selected, the first press selects the photo last clicked (at
-   * first, the first result). A tap at the edge bounces, a slide into it just stops.
+   * as in a file manager. With nothing selected, the first unshifted press selects the photo last
+   * clicked (at first, the first result). Shift+Arrow extends or shrinks a range from that photo.
+   * A tap at the edge bounces, a slide into it just stops.
    */
-  focusMove(dx: number, dy: number, held = false): void {
+  focusMove(dx: number, dy: number, held = false, extend = false): void {
     if (!this.resultsOrSay()) return;
-    this.rangeStart = null;
-    if (this.selected.size > 0) {
+    if (this.selected.size > 0 || extend) {
       const column = this.focusedIndex % this.columns;
       const target = this.focusedIndex + dx + dy * this.columns;
       if (column + dx < 0 || column + dx >= this.columns || target < 0 || target >= this.shown.length) {
         if (held) return;
-        this.selectOnly(this.focusedIndex);
+        if (!extend) this.selectOnly(this.focusedIndex);
         this.focusPulse++;
         return this.publish();
       }
+      const start = extend ? this.rangeStart ?? this.focusedIndex : null;
       this.focusedIndex = target;
+      if (start !== null) {
+        this.selected.clear();
+        for (const i of this.rangeIndices(start, target)) this.selected.add(this.shown[i]!.mediaKey);
+        this.rangeStart = start;
+        this.confirming = null;
+        this.focusPulse++;
+        return this.publish();
+      }
     }
+    this.rangeStart = null;
     this.selectOnly(this.focusedIndex);
     this.focusPulse++;
     this.publish();
@@ -602,6 +612,15 @@ export class SearchModel {
       this.rangeStart = null;
     }
     this.focusedIndex = index;
+    this.confirming = null;
+    this.publish();
+  }
+
+  /** A click on blank tab space clears the selection. */
+  clearSelection(): void {
+    if (this.selected.size === 0 && this.confirming === null) return;
+    this.selected.clear();
+    this.rangeStart = null;
     this.confirming = null;
     this.publish();
   }

@@ -109,11 +109,13 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
    a missing preview says why underneath.
 2. Arrows move the focus. Holding an arrow, after a short wait, slides along the row or column and
    stops at the end without bouncing. Tapping an arrow at an edge bounces the photo once. Down on
-   the bottom row stays in its column.
-3. **A** focuses the whole group (every photo bounces); **A** again unfocuses. **Space** toggles
-   trash on the focused photos, and only Space does. A click focuses just that photo, as in Search,
-   and changes no TRASH or KEEP; **Ctrl/Cmd-click** adds or removes a photo (the last one stays),
-   **Shift-click** focuses a range from the photo last clicked, and Space then toggles them together.
+   the bottom row stays in its column. **Shift+Arrow** extends or shrinks the outlined range.
+3. **A** (**Select all photos**) outlines the whole group (every photo bounces); **A** again returns
+   to one outline. A plain click outlines just that photo and toggles it between TRASH and KEEP.
+   **Ctrl/Cmd-click** adds or removes a photo without changing any TRASH or KEEP mark (the last one
+   stays); **Shift-click** outlines a range from the photo last clicked without changing the marks.
+   **Space** then toggles all outlined photos together. Its button is second, beside **Trash selected**.
+   Clicking blank, non-interactive space in the tab removes every outline without changing TRASH or KEEP.
 4. **D** trashes the selection, **F** keeps all, **S** skips. **Z** undoes, with a
    spinner while it works.
 5. In a long group scrolled down, the next long group brings its top row into view without opening
@@ -141,10 +143,11 @@ From here on, approving moves photos to Google Photos' trash: use photos you don
    **Start over** clears everything.
    A plain click selects just one photo (clicking it again keeps it selected); **Ctrl/Cmd-click**
    adds or removes a photo (a removed one loses its outline), **Shift-click** selects a range from
-   the photo last clicked. The arrows move a single selected photo. **A** selects all, and again
-   clears. Only selected photos have the thin outline; nothing is marked for the trash until **D**
-   and confirmation. With the library scan more than a day old, searching still works but **D**
-   refuses; after **Check for new photos** it works again.
+   the photo last clicked. The arrows move a single selected photo; **Shift+Arrow** extends or
+   shrinks a range. Clicking blank, non-interactive space in the tab clears the selection. **A** selects all,
+   and again clears. Only selected photos have the thin outline; nothing is marked for the trash
+   until **D** and confirmation. With the library scan more than a day old, searching still works
+   but **D** refuses; after **Check for new photos** it works again.
 3. **D** asks to confirm; **Enter** moves them to the trash queue, **Esc** cancels.
    **Z** undoes it.
 4. From Duplicates, **Search more like these** opens Search with that group as examples.

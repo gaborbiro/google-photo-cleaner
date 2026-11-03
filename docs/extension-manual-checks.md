@@ -34,7 +34,7 @@ and copy the console (right-click the page → Inspect → Console).
    (or **Review N groups ↗** once groups are waiting) and **Open panel in Google Photos ↗**. Texts
    are comfortably readable (not tiny).
 6. **Open in tab**: the review tab opens on **1 · Scan**, with the heading "Photo Cleaner", the
-   account's email, and the tabs **1 · Scan**, **2 · Duplicates**, **Search**.
+   account's email, and the tabs **1 · Scan**, **2 · Duplicates**, **Search** and **Settings**.
 7. With groups waiting, the popup's and the panel's button says **Review N groups** and opens
    **2 · Duplicates**. With the review tab already open on another tab, and a few photos selected in
    Duplicates: the button brings that tab forward and switches it to Duplicates without reloading
@@ -228,7 +228,7 @@ and to check for an update.
 2. DevTools → Network on the review tab: requests go only to Google Photos (through its tab) and,
    for the AI models, Hugging Face. In a configured build, only after opting in, the service worker
    may also send the allowlisted usage events directly to Google Analytics (see section 10).
-3. Copy diagnostics (review tab, Scan) and read what it copied: no photo or album keys
+3. Copy diagnostics (review tab, Settings) and read what it copied: no photo or album keys
    (`AF1Qip…`), addresses, album titles, tokens, your email or the account's fingerprint.
 
 ## 10. Optional usage statistics (0.4.49)
@@ -236,8 +236,10 @@ and to check for an update.
 Follow [usage reporting setup](usage-events-setup.md) with a test GA property before a configured
 release. These checks remain manual; automated tests do not contact Google Analytics.
 
-1. In popup, panel and review Scan, decline reporting without a signed-in account. Reopen: the
-   choice persists. Enable/disable the setting. Before yes and after no there are no GA requests.
+1. Before a scan has finished, the popup, panel and review Scan do not ask; Settings offers the
+   choice even without a signed-in account. Erase Photo Cleaner's data, finish a scan, and confirm
+   the question then appears in the popup, panel and review Scan. Decline, then reopen: the choice
+   persists. Enable/disable the setting. Before yes and after no there are no GA requests.
 2. From the popup open the panel and review tab. Confirm requested, accepted/failed and actual
    visible-render events separately. Repeat with the review tab already open; hidden internal
    tabs and ordinary rerenders must not count as opening a new screen. Side-panel opening must

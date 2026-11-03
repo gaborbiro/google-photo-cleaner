@@ -54,14 +54,18 @@ It signs in to Google without a stored key: GitHub proves to Google that the job
 repository's master branch (Workload Identity Federation), and gets a short-lived token for a
 service account that the store lets manage the listing.
 
-One-time setup, with the Google account that owns the listing (it needs 2-step verification):
+One-time setup (done on 2026-10-29, in Google Cloud project `photo-cleaner-cws-13383`). Step 2 needs
+the Google account that owns the listing (it needs 2-step verification); the Cloud project can be on
+any of your accounts.
 
-1. In a Google Cloud project (any; a new one is fine), run in Cloud Shell, with your project ID:
+1. In a Google Cloud project (any; a new one is fine), run in Cloud Shell, with your project ID.
+   In a project created a minute ago, the pool command can fail with PERMISSION_DENIED while the new
+   project's rights settle: wait a minute and run it again.
 
    ```
    PROJECT=your-project-id
    REPO=gaborbiro/google-photo-cleaner
-   gcloud services enable chromewebstore.googleapis.com iamcredentials.googleapis.com sts.googleapis.com --project=$PROJECT
+   gcloud services enable chromewebstore.googleapis.com iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com cloudresourcemanager.googleapis.com --project=$PROJECT
    gcloud iam service-accounts create photo-cleaner-publisher --project=$PROJECT
    gcloud iam workload-identity-pools create github --location=global --project=$PROJECT
    gcloud iam workload-identity-pools providers create-oidc photo-cleaner --project=$PROJECT \
@@ -76,16 +80,17 @@ One-time setup, with the Google account that owns the listing (it needs 2-step v
    echo "projects/$NUMBER/locations/global/workloadIdentityPools/github/providers/photo-cleaner"
    ```
 
-2. Developer Dashboard → Account: add `photo-cleaner-publisher@<project>.iam.gserviceaccount.com`
-   as the service account (the store allows one).
+2. Developer Dashboard → Publisher → **Settings**: add
+   `photo-cleaner-publisher@<project>.iam.gserviceaccount.com` as the service account (the store
+   allows one).
 3. GitHub → Settings → Secrets and variables → Actions → **Variables** (none of these is secret):
 
    | Name | Value |
    |---|---|
    | `CWS_WORKLOAD_IDENTITY_PROVIDER` | The `projects/…/providers/photo-cleaner` line printed above |
    | `CWS_SERVICE_ACCOUNT` | `photo-cleaner-publisher@<project>.iam.gserviceaccount.com` |
-   | `CWS_PUBLISHER_ID` | Developer Dashboard → Account → Publisher ID |
-   | `CWS_EXTENSION_ID` | The store's ID of the item (32 letters, in its dashboard and store URL) |
+   | `CWS_PUBLISHER_ID` | Developer Dashboard → Publisher → Settings (also in the dashboard's address: `…/devconsole/<publisher ID>`) |
+   | `CWS_EXTENSION_ID` | The store's ID of the item (32 letters a–p, in its dashboard and store URL) |
 
 4. Optional: Settings → Environments → `chrome-web-store` (the first run creates it) → Required
    reviewers, so each run waits for a click of approval.

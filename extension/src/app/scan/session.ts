@@ -290,10 +290,16 @@ class ScanSession {
     if (cursor?.completed) return;
     let token = cursor?.nextPageToken ?? null;
     let usingSavedToken = token !== null;
+    const seenTokens = new Set<string>();
     for (;;) {
+      if (token !== null) seenTokens.add(token);
       let next: string | null;
       try {
-        next = await this.request(label, () => fetchAndSave(token));
+        next = await this.request(label, async () => {
+          const candidate = await fetchAndSave(token);
+          if (candidate !== null && seenTokens.has(candidate)) throw new SourceError('PROTOCOL', `${label} repeated a page token`);
+          return candidate;
+        });
       } catch (e) {
         if (!(e instanceof RpcFailed)) throw e;
         if (!usingSavedToken) {
@@ -305,6 +311,7 @@ class ScanSession {
         await this.deps.store.resetPhase(this.run.id, phase, scope);
         token = null;
         usingSavedToken = false;
+        seenTokens.clear();
         continue;
       }
       usingSavedToken = false;

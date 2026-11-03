@@ -211,6 +211,11 @@ describe('archive pages', () => {
 });
 
 describe('the album list', () => {
+  it('continues past an empty intermediate page when Google supplies another page token', () => {
+    const next = marker('after-empty-page');
+    expect(normalizeAlbumsPage([null, next])).toEqual({ albums: [], nextPageToken: next });
+  });
+
   it('keeps kind, shared flag and reported count raw', () => {
     const regular = albumKey('regular');
     const shared = albumKey('shared', true);

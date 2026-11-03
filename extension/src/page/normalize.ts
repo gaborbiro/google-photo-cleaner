@@ -127,14 +127,14 @@ const ALBUM_KEY = /^AF1Qip(?:[A-Za-z0-9_-]{38}|[A-Za-z0-9_-]{64})$/;
 type ListEnd = 'absent' | 'empty-string';
 
 /**
- * The marker at [index], or null when the listing has ended. A page without items can only be
- * the last one; a page with items and anything but a real marker or the listing's own end is
- * refused.
+ * The marker at [index], or null when the listing has ended. Most pages without items can only be
+ * the last one; the album list has also been seen returning an empty intermediate page with a real
+ * marker. A page with anything but a real marker or the listing's own end is refused.
  */
-function nextMarker(raw: unknown[], index: number, end: ListEnd, itemCount: number, what: string): string | null {
+function nextMarker(raw: unknown[], index: number, end: ListEnd, itemCount: number, what: string, emptyCanContinue = false): string | null {
   const value = raw[index];
   if (typeof value === 'string' && MARKER.test(value)) {
-    if (itemCount === 0) throw protocol(`${what}: a page with no items says more follow`, [index]);
+    if (itemCount === 0 && !emptyCanContinue) throw protocol(`${what}: a page with no items says more follow`, [index]);
     return value;
   }
   const ended = itemCount === 0
@@ -332,7 +332,7 @@ export function normalizeAlbumsPage(payload: unknown): AlbumsPageDto {
       };
     })),
     // The last page is just [albums].
-    nextPageToken: nextMarker(raw, 1, 'absent', rawAlbums.length, 'Albums page'),
+    nextPageToken: nextMarker(raw, 1, 'absent', rawAlbums.length, 'Albums page', true),
   };
 }
 

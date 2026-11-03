@@ -41,6 +41,44 @@ describe('library scan', () => {
     expect(photos(result)).toMatchObject({ total: 10, protectedTotal: 5, protectedByFavouriteAndAlbum: 1, eligible: 5, unknown: 0 });
   });
 
+  it('continues after an empty album-list page that has another page token', async () => {
+    const store = newStore();
+    const source = standardAccount();
+    source.albumsPage = async (token) => {
+      source.calls.push('albums');
+      if (token === null) return { entries: [source.albums[0]!.album], nextPageToken: 'empty-page', accountFingerprint: source.accountFingerprint };
+      if (token === 'empty-page') return { entries: [], nextPageToken: 'last-page', accountFingerprint: source.accountFingerprint };
+      return { entries: [source.albums[1]!.album], nextPageToken: null, accountFingerprint: source.accountFingerprint };
+    };
+
+    const { outcome, progress } = await scan(source, store);
+    expect(outcome).toEqual({ kind: 'completed' });
+    expect(progress.at(-1)).toMatchObject({ albumsListed: 2, albumsRead: 2, albumsFailed: 0 });
+    expect(eligibleIndexes(await classifyLatest(store))).toEqual([0, 6, 7, 8, 9]);
+  });
+
+  it('fails safely when a listing repeats a page token instead of looping forever', async () => {
+    const store = newStore();
+    const source = standardAccount();
+    source.albumsPage = async (token) => {
+      source.calls.push('albums');
+      return {
+        entries: token === null ? source.albums.map((a) => a.album) : [],
+        nextPageToken: 'repeated-page',
+        accountFingerprint: source.accountFingerprint,
+      };
+    };
+    let stopChecks = 0;
+
+    const { outcome, progress } = await scan(source, store, { shouldStop: async () => ++stopChecks > 25 });
+    expect(outcome).toEqual({ kind: 'failed', reason: INCOMPATIBLE_TEXT });
+    expect(progress.at(-1)!.googleProblem).toMatchObject({
+      where: 'scan: album list',
+      kind: 'PROTOCOL',
+      message: 'album list repeated a page token',
+    });
+  });
+
   it('album entries protect through the dedup key, not the album-scoped media key', async () => {
     const store = newStore();
     await scan(standardAccount(), store);

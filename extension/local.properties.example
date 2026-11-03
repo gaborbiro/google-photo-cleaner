@@ -1,0 +1,4 @@
+# Copy this file to local.properties to build a release ZIP locally.
+# local.properties is git-ignored. Never commit the real values.
+PHOTO_CLEANER_GA4_MEASUREMENT_ID=G-REPLACE_ME
+PHOTO_CLEANER_GA4_API_SECRET=replace_me

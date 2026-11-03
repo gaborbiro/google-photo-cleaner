@@ -21,9 +21,12 @@ before the answer land at the times they happened.
    for that rebuild. Reload the extension and your Photos tab. Ordinary `npm run build` or
    `npm run check` produces a silent build even when a config file is present.
 5. Release ZIPs are built on GitHub after master pushes; see [automatic releases](github-releases.md).
-   `npm run package` uses production environment settings only: `PHOTO_CLEANER_GA4_MEASUREMENT_ID`
-   and `PHOTO_CLEANER_GA4_API_SECRET`, supplied from the repository variable/secret. Debug is forced
-   off; the local test file is never a release fallback. Packaging itself does not publish anything.
+   GitHub supplies `PHOTO_CLEANER_GA4_MEASUREMENT_ID` and `PHOTO_CLEANER_GA4_API_SECRET` from the
+   repository variable/secret. To run `npm run package` locally, copy `local.properties.example` to
+   the git-ignored `local.properties` and fill in the same two properties. Environment settings take
+   precedence when present, so a partial CI configuration still fails instead of falling back to a
+   developer's file. Debug is always forced off, and the local test `usage.config.json` is never a
+   release fallback. Packaging itself does not publish anything.
 
 ## Verify real collection before release
 

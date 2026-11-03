@@ -26,8 +26,10 @@ No laptop packaging is needed for this normal flow.
 
    Either location works for the Measurement ID; if both exist, the variable takes precedence.
    The local `extension/usage.config.json` stays git-ignored and is used only for explicit local
-   debug builds. CI production builds use the two environment settings exclusively and force
-   `debug: false`. They refuse missing/invalid settings rather than falling back to the test file.
+   debug builds. CI production builds use the two environment settings and force `debug: false`.
+   Local packaging can instead read the same names from git-ignored `extension/local.properties`
+   (copy `local.properties.example`); environment settings take precedence and a partial environment
+   configuration is refused. Production builds never fall back to the test file.
    The secret is encrypted by GitHub in repository settings, but remains extractable from the
    public extension ZIP, as agreed for direct Analytics collection.
 3. Allow GitHub Actions in repository settings. The workflow requests `contents: read` for the

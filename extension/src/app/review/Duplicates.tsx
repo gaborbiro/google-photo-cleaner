@@ -4,13 +4,12 @@
 import { type RefObject, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { gridKey } from '../duplicates/keys';
 import { DuplicatesReview, type DuplicatesView, type TileView } from '../duplicates/reviewModel';
-import { recoverInterrupted } from '../duplicates/trash';
-import { trashQueueDeps, trashQueuePass } from '../duplicates/session';
+import { trashQueueStatus } from '../duplicates/session';
+import { onJobsChanged } from '../shared/store';
 import { ProtectionLine } from '../ui/JobCard';
 import { SizeButtons, tileSizeStyle, Toast, useFocusFeedback, usePinnedHeight, useWorkbenchKeys, Viewer } from '../ui/Workbench';
 import type { EmbeddingStats } from './embeddingStats';
 
-const TRASH_QUEUE_EVERY_MS = 2_000;
 /** The space between the pinned bar and the group (the gap in .duplicates-body). */
 const GAP_PX = 24;
 
@@ -28,27 +27,23 @@ function useTopRowInView(groupId: string | null, bar: RefObject<HTMLElement | nu
 }
 
 /**
- * Runs the trash queue while the review tab is open and reports its counts: for sweeps from Search
- * as well as Duplicates' decisions, so it runs whichever tab is open.
+ * Reads the background trash queue's status for sweeps from Search as well as Duplicates' decisions.
  */
-export function useTrashQueue(account: string | null, review: DuplicatesReview | null): void {
+export function useTrashQueueStatus(account: string | null, review: DuplicatesReview | null): void {
   useEffect(() => {
     if (account === null || review === null) return;
     let alive = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const pass = async () => {
-      try {
-        const status = await trashQueuePass(account);
-        if (alive) review.setQueueStatus(status);
-      } catch (error) {
-        console.error('Photo Cleaner: the trash queue stopped for now', error);
-      }
-      if (alive) timer = setTimeout(() => void pass(), TRASH_QUEUE_EVERY_MS);
+    const load = () => {
+      void trashQueueStatus(account).then(
+        (status) => alive && review.setQueueStatus(status),
+        (error: unknown) => console.error('Photo Cleaner: could not read the trash queue', error),
+      );
     };
-    void recoverInterrupted(trashQueueDeps(account)).then(pass, (error: unknown) => console.error('Photo Cleaner: could not check interrupted trash requests', error));
+    load();
+    const stop = onJobsChanged(load);
     return () => {
       alive = false;
-      clearTimeout(timer);
+      stop();
     };
   }, [account, review]);
 }

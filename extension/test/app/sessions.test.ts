@@ -36,10 +36,11 @@ async function library() {
     await search.analysis.saveEmbedding({ modelKey: modelKey(140), mediaKey: `lib-${i}`, account: 'account-a', vector: at(d), quality, createdAtMs: NOW });
   }
   const now = () => NOW;
+  const wake = () => {};
   return {
     source,
-    search: searchDeps('account-a', search, now),
-    review: reviewDeps('account-a', duplicates, now),
+    search: searchDeps('account-a', search, now, wake),
+    review: reviewDeps('account-a', duplicates, now, wake),
     queue: trashQueueDeps('account-a', duplicates, now),
     refreshSummary: () => refreshReviewSummary('account-a', duplicates, now),
     queuePass: () => trashQueuePass('account-a', duplicates, now),

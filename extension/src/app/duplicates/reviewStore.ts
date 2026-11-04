@@ -175,6 +175,14 @@ export class IndexedDbReviewStore {
     for (const job of await this.jobs(account, ALL_STATES)) counts[job.state] = (counts[job.state] ?? 0) + 1;
     return counts;
   }
+
+  /** Accounts with trash or restore work that the background page still needs to carry out. */
+  async trashWorkAccounts(): Promise<string[]> {
+    const tx = await this.tx([STORES.trashJobs], 'readonly');
+    const all = await request(tx.objectStore(STORES.trashJobs).getAll() as IDBRequest<TrashJob[]>);
+    const active = new Set<TrashJobState>(['QUEUED', 'SENDING', 'UNCERTAIN', 'RESTORE_REQUESTED']);
+    return [...new Set(all.filter((job) => active.has(job.state)).map((job) => job.account))].sort();
+  }
 }
 
 export const ALL_STATES: TrashJobState[] = ['QUEUED', 'SENDING', 'UNCERTAIN', 'COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED', 'RESTORE_REQUESTED', 'RESTORED'];

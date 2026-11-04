@@ -37,7 +37,7 @@ All source paths below are relative to `extension/src/app/`.
 | Background lifecycle | `engine/main.ts` owns runs; `background/main.ts` starts the engine, resumes jobs and handles erase. Closing the panel does not stop a scan. |
 | Duplicates | `duplicates/reviewModel.ts` and `duplicates/session.ts` build groups and save decisions. Shared Kotlin rules own grouping/protection. They can offer groups from partial analysis. |
 | Search | `search/searchModel.ts` owns search, selection and confirmation; `search/session.ts` loads the text model and rechecks eligibility before a sweep. Text search has a separate model-loading failure point. |
-| Trash and undo | `duplicates/trash.ts`, `googleTrash.ts`, `reviewStore.ts`. Both features share the queue. It runs while a review tab is open (`review/Duplicates.tsx`), whichever inner tab is selected. Approval is not confirmed trashing. |
+| Trash and undo | `duplicates/trash.ts`, `googleTrash.ts`, `reviewStore.ts`. Both features share the queue. The background page runs it independently of the review tab; the review page only reads its saved status. Approval is not confirmed trashing. |
 | Local diagnostics | `shared/runStats.ts`, `problemLog.ts`, `googleProblems.ts` already record timings and structured failures. Do not upload these records wholesale. |
 | Storage | IndexedDB version 8; existing upgrade/erase and integration tests can be extended. |
 | Analytics | The initial exploration found no sender or consent state. These are now implemented; live GA reporting still requires configuration and verification. |

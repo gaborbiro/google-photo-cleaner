@@ -13,7 +13,7 @@ import { GoogleTrash, type RunPageOp } from './googleTrash';
 import type { LoadedQueue, ReviewDeps } from './reviewModel';
 import { IndexedDbReviewStore } from './reviewStore';
 import { groupingSettings, reviewQueue, type AnalysedPhoto, type ReviewQueue } from './rules';
-import { processTrashQueue, type TrashQueueDeps, type TrashQueueStatus } from './trash';
+import { processTrashQueue, readTrashQueueStatus, type TrashQueueDeps, type TrashQueueStatus } from './trash';
 
 /** The saved data the Duplicates review and the trash queue read and write; tests pass their own. */
 export interface DuplicatesStores {
@@ -37,6 +37,13 @@ export function duplicatesStores(factory: IDBFactory = indexedDB, run: RunPageOp
 
 let shared: DuplicatesStores | null = null;
 const sharedStores = () => (shared ??= duplicatesStores());
+
+/** A saved approval or undo needs the offscreen page even when the review tab closes immediately. */
+export function wakeTrashQueue(): void {
+  void chrome.runtime.sendMessage({ kind: 'app-wake-engine' }).catch((error: unknown) => {
+    console.error('Photo Cleaner: could not start the trash queue in the background', error);
+  });
+}
 
 async function loadQueue({ inventory, analysis, review, preferences }: DuplicatesStores, account: string, nowMs: number): Promise<LoadedQueue> {
   const run = await inventory.latestRun(account);
@@ -71,13 +78,18 @@ async function loadQueue({ inventory, analysis, review, preferences }: Duplicate
   return { ...asScanned, blocked: asScanned.blocked, scanOutOfDate: true };
 }
 
-export function reviewDeps(account: string, stores: DuplicatesStores = sharedStores(), now: () => number = Date.now): ReviewDeps {
+export function reviewDeps(account: string, stores: DuplicatesStores = sharedStores(), now: () => number = Date.now, wake: () => void = wakeTrashQueue): ReviewDeps {
   return {
     loadQueue: () => loadQueue(stores, account, now()),
     record: async (group, kind, items) => {
       await stores.review.recordDecision(account, group.id, kind, items, group.members.map((m) => m.mediaKey), now());
+      if (kind === 'APPROVED') wake();
     },
-    undo: () => stores.review.undoLast(account, now()),
+    undo: async () => {
+      const undone = await stores.review.undoLast(account, now());
+      if (undone?.kind === 'APPROVED') wake();
+      return undone;
+    },
     preview: (thumbUrl, sizePx) => previewDataUrl(account, thumbUrl, sizePx),
     groupsLeft: async (count) => stores.review.saveSummary({ account, groupsToReview: count, atMs: now(), protection: await stores.preferences.protection(account) }),
     sizeMemory: browserSizeMemory('photo-cleaner.duplicates-photo-size'),
@@ -108,4 +120,9 @@ export function trashQueueDeps(account: string, stores: DuplicatesStores = share
 /** One pass of [account]'s trash queue. */
 export function trashQueuePass(account: string, stores: DuplicatesStores = sharedStores(), now: () => number = Date.now): Promise<TrashQueueStatus> {
   return processTrashQueue(trashQueueDeps(account, stores, now));
+}
+
+/** The queue's saved counts and any scan reason it is waiting, without running it. */
+export function trashQueueStatus(account: string, stores: DuplicatesStores = sharedStores(), now: () => number = Date.now): Promise<TrashQueueStatus> {
+  return readTrashQueueStatus(trashQueueDeps(account, stores, now));
 }

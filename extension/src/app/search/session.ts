@@ -3,6 +3,7 @@
 
 import { IndexedDbAnalysisStore } from '../ai/analysisStore';
 import { IndexedDbReviewStore } from '../duplicates/reviewStore';
+import { wakeTrashQueue } from '../duplicates/session';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { classify } from '../scan/report';
 import { IndexedDbPreferences } from '../shared/preferences';
@@ -72,7 +73,7 @@ async function loadLibrary({ inventory, analysis, review, preferences }: SearchS
  * favourited, put in an album or queued elsewhere since the search is left out, never trashed by it;
  * the rest go. Nothing goes while the scan can't be trusted.
  */
-async function sweep(stores: SearchStores, account: string, mediaKeys: string[], nowMs: number): Promise<SweepResult> {
+async function sweep(stores: SearchStores, account: string, mediaKeys: string[], nowMs: number, wake: () => void): Promise<SweepResult> {
   if (mediaKeys.length === 0) throw new Error('Nothing is selected for the trash.');
   const library = await loadLibrary(stores, account, nowMs);
   if (library.blocked) throw new Error('The library scan is no longer usable; check for new photos on the Scan tab, then search again.');
@@ -84,19 +85,24 @@ async function sweep(stores: SearchStores, account: string, mediaKeys: string[],
     const items = [...queued].sort().map((k) => ({ mediaKey: k, dedupKey: library.photos.get(k)!.dedupKey }));
     // A sweep's id never matches a duplicate group's (24 hex characters).
     await stores.review.recordDecision(account, `sweep:${nowMs}`, 'APPROVED', items, queued, nowMs);
+    wake();
   }
   return { queued, leftOut };
 }
 
-export function searchDeps(account: string, stores: SearchStores = (shared ??= searchStores()), now: () => number = Date.now): SearchDeps {
+export function searchDeps(account: string, stores: SearchStores = (shared ??= searchStores()), now: () => number = Date.now, wake: () => void = wakeTrashQueue): SearchDeps {
   return {
     loadLibrary: () => loadLibrary(stores, account, now()),
     embedQuery: async (text, onProgress) => {
       textModel ??= import(/* @vite-ignore */ chrome.runtime.getURL('search-ai.js')) as Promise<TextModel>;
       return (await textModel).embedQuery(text, onProgress);
     },
-    sweep: (mediaKeys) => sweep(stores, account, mediaKeys, now()),
-    undo: () => stores.review.undoLast(account, now()),
+    sweep: (mediaKeys) => sweep(stores, account, mediaKeys, now(), wake),
+    undo: async () => {
+      const undone = await stores.review.undoLast(account, now());
+      if (undone?.kind === 'APPROVED') wake();
+      return undone;
+    },
     preview: (thumbUrl, sizePx) => previewDataUrl(account, thumbUrl, sizePx),
     sizeMemory: browserSizeMemory('photo-cleaner.search-photo-size'),
   };

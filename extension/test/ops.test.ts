@@ -136,7 +136,7 @@ describe('the trash requests', () => {
   });
 
   it('the trash is read page by page as dedup keys', async () => {
-    const page = [[rawTrashItem(dedupKey('dk1'), mediaKey('1')), rawTrashItem(dedupKey('dk2'), mediaKey('2'))], marker()];
+    const page = [[rawTrashItem(dedupKey('dk1'), mediaKey('1')).slice(0, 10), rawTrashItem(dedupKey('dk2'), mediaKey('2'))], marker()];
     const result = await runOp(env(() => envelope('zy0IHe', page)), 'listTrashPage', {});
     expect(result).toEqual({ ok: true, data: { dedupKeys: [dedupKey('dk1'), dedupKey('dk2')], nextPageToken: marker(), accountFingerprint: ACCOUNT } });
     const malformed = await runOp(env(() => envelope('zy0IHe', [[rawTrashItem(null as never)]])), 'listTrashPage', {});

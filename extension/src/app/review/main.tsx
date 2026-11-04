@@ -15,7 +15,7 @@ import { DuplicatesReview } from '../duplicates/reviewModel';
 import { reviewDeps } from '../duplicates/session';
 import { SearchModel } from '../search/searchModel';
 import { searchDeps } from '../search/session';
-import { Duplicates, useTrashQueue } from './Duplicates';
+import { Duplicates, useTrashQueueStatus } from './Duplicates';
 import { Search } from './Search';
 import { Settings } from './Settings';
 import { usePinnedHeight } from '../ui/Workbench';
@@ -114,7 +114,7 @@ function Review() {
   }, [pageTitle]);
   useSpinningTabIcon(scan?.tabStatus === 'scanning');
   const { refreshKey } = page;
-  // The workbenches, once per account; the trash queue runs for both whichever tab is open.
+  // The workbenches, once per account; both show decisions handled by the background trash queue.
   const duplicates = useMemo(() => (selected === null ? null : new DuplicatesReview(reviewDeps(selected))), [selected]);
   const search = useMemo(() => (selected === null ? null : new SearchModel(searchDeps(selected))), [selected]);
   const stats = useMemo(() => (selected === null ? null : new EmbeddingStats(embeddingStatsDeps(selected))), [selected]);
@@ -134,7 +134,7 @@ function Review() {
       if (show) chrome.runtime.onMessage.removeListener(show);
     };
   }, [stats]);
-  useTrashQueue(selected, duplicates);
+  useTrashQueueStatus(selected, duplicates);
   useEffect(() => {
     if (refreshKey !== null) search?.libraryChanged();
   }, [search, refreshKey]);

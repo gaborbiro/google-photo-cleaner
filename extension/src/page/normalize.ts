@@ -247,8 +247,8 @@ const ARCHIVE_ROW_LENGTHS = [10];
 const ALBUM_ENTRY_ROW_LENGTHS = [10, 11, 16];
 /** Album list rows: 9 fields for regular albums, 12 for newer shared ones. */
 const ALBUM_ROW_LENGTHS = [9, 12];
-/** Trash rows: 15 fields. */
-const TRASH_ROW_LENGTHS = [15];
+/** Trash rows: 15 fields in the October capture; Google also returned a shortened 10-field form in November 2026. */
+const TRASH_ROW_LENGTHS = [10, 15];
 
 function libraryItem(raw: unknown[], parsed: { mediaKey?: unknown; dedupKey?: unknown; timestamp?: unknown; creationTimestamp?: unknown; resWidth?: unknown; resHeight?: unknown; thumb?: unknown }): LibraryItemDto {
   const ext = detailsOf(raw);
@@ -375,7 +375,7 @@ export interface TrashPageDto {
 /** zy0IHe: the trash, as GPTK's parser reads it (trashPage: items at 0, next page at 1; trashItemParse: dedup key at 3). */
 export function normalizeTrashPage(payload: unknown): TrashPageDto {
   const raw = asArray(payload, 'Trash page');
-  // Trash rows have 15 fields and, unlike the others, no details object at the end.
+  // Trash rows have 10 or 15 fields and, unlike the others, no details object at the end.
   const items = rows(raw, 0, TRASH_ROW_LENGTHS, 'Trash item', false);
   return {
     dedupKeys: items.map((item, i) => within([0, i, 3], () => requireKey(item[3], DEDUP_KEY, 'dedupKey'))),

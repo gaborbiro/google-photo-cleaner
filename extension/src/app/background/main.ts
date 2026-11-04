@@ -7,6 +7,7 @@ import { UsageSender } from '../shared/usageSender';
 import { IndexedDbUsageStore } from '../shared/usageStore';
 import type { UsageState } from '../shared/usageStore';
 import { UsageLaunches } from '../shared/usageLaunches';
+import { IndexedDbReviewStore } from '../duplicates/reviewStore';
 import { setupStateOf, USAGE_CONFIG } from '../shared/usage';
 import { bindUsageEmitter, emitUsage } from '../shared/usageClient';
 import { pauseRunningJobs, resumeWaitingForPhotos } from '../shared/actions';
@@ -22,6 +23,7 @@ import { isAppRequest, panelOptions, reviewUrl, SHOW_EMBEDDING_STATS, type Accou
 const PHOTOS_URL = 'https://photos.google.com/';
 const STATS_MENU_ID = 'photo-cleaner-stats-for-nerds';
 const store = new IndexedDbJobStore();
+const review = new IndexedDbReviewStore();
 const usageStore = new IndexedDbUsageStore();
 const usage = new UsageSender(usageStore, USAGE_CONFIG);
 const usageLaunches = new UsageLaunches((input) => { void usage.record(input); }, (surface) => {
@@ -219,7 +221,7 @@ async function wakeEngine(): Promise<void> {
 
 async function wakeEngineIfWorkLeft(): Promise<void> {
   const jobs = await store.all();
-  if (jobs.some((job) => job.status === 'running')) await wakeEngine();
+  if (jobs.some((job) => job.status === 'running') || (await review.trashWorkAccounts()).length > 0) await wakeEngine();
 }
 
 /**
@@ -247,7 +249,8 @@ async function restartEngine(): Promise<void> {
 
 async function closeEngineIfIdle(): Promise<void> {
   const jobs = await store.all();
-  if (!jobs.some((job) => job.status === 'running') && (await engineRunning())) await chrome.offscreen.closeDocument();
+  const trashWork = await review.trashWorkAccounts();
+  if (!jobs.some((job) => job.status === 'running') && trashWork.length === 0 && (await engineRunning())) await chrome.offscreen.closeDocument();
 }
 
 /** A Photos tab signed in to [account] answered: jobs that paused for want of one carry on. */

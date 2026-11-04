@@ -1,6 +1,8 @@
 import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ENGINE_FAILED_TEXT, jobId, pauseJob, startScanJob } from '../../src/app/shared/job';
+import { IndexedDbReviewStore } from '../../src/app/duplicates/reviewStore';
 import type { AppRequest } from '../../src/app/shared/messages';
 import { IndexedDbProblemLog } from '../../src/app/shared/problemLog';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
@@ -32,6 +34,7 @@ let focusWindow: ReturnType<typeof vi.fn>;
 let runtimeSend: ReturnType<typeof vi.fn>;
 let contextCreate: ReturnType<typeof vi.fn>;
 let installed: () => void;
+let startup: () => void;
 /** Chrome's side panel, with the options set for each tab so far. */
 let sidePanel: { options: Map<number, chrome.sidePanel.PanelOptions>; getOptions: ReturnType<typeof vi.fn>; setOptions: ReturnType<typeof vi.fn> };
 /** The background page (offscreen document): open until closed. */
@@ -39,6 +42,7 @@ let offscreen: { open: boolean; hasDocument: ReturnType<typeof vi.fn>; closeDocu
 
 beforeEach(async () => {
   vi.resetModules();
+  vi.stubGlobal('indexedDB', new IDBFactory());
   updated = event();
   removed = event();
   contextClicked = event();
@@ -73,7 +77,7 @@ beforeEach(async () => {
       getManifest: () => ({ version: '9.8.7' }),
       sendMessage: runtimeSend,
       onMessage: { addListener: (listener: typeof receive) => { receive = listener; } },
-      onStartup: { addListener: vi.fn() },
+      onStartup: { addListener: (listener: () => void) => { startup = listener; } },
       onInstalled: { addListener: (listener: () => void) => { installed = listener; } },
     },
     tabs: { ...tabs, onUpdated: updated, onRemoved: removed },
@@ -332,6 +336,32 @@ describe('the background page failing', () => {
     expect(await send({ kind: 'app-restart-engine' })).toBe(true);
     expect(offscreen.closeDocument).toHaveBeenCalledOnce();
     expect(offscreen.createDocument).toHaveBeenCalledOnce();
+    expect(offscreen.open).toBe(true);
+  });
+});
+
+describe('background trash work', () => {
+  it('keeps the engine open while the queue has work, then lets it close', async () => {
+    const review = new IndexedDbReviewStore(indexedDB);
+    await review.recordDecision('account-a', 'group-a', 'APPROVED', [{ mediaKey: 'lib-1', dedupKey: 'dedup-1' }], ['lib-1'], Date.now());
+
+    expect(await send({ kind: 'app-engine-idle' })).toBe(true);
+    expect(offscreen.closeDocument).not.toHaveBeenCalled();
+
+    const [queued] = await review.jobs('account-a', ['QUEUED']);
+    await review.transition(queued!.id, 'QUEUED', 'CANCELLED', null, Date.now());
+    expect(await send({ kind: 'app-engine-idle' })).toBe(true);
+    expect(offscreen.closeDocument).toHaveBeenCalledOnce();
+  });
+
+  it('reopens the engine after a browser restart when trash work was saved', async () => {
+    const review = new IndexedDbReviewStore(indexedDB);
+    await review.recordDecision('account-a', 'group-a', 'APPROVED', [{ mediaKey: 'lib-1', dedupKey: 'dedup-1' }], ['lib-1'], Date.now());
+    offscreen.open = false;
+
+    startup();
+
+    await vi.waitFor(() => expect(offscreen.createDocument).toHaveBeenCalledOnce());
     expect(offscreen.open).toBe(true);
   });
 });

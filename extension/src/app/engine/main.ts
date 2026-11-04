@@ -8,7 +8,9 @@ import { NO_ANALYSIS, runAnalysis } from '../ai/analysis';
 import { IndexedDbAnalysisStore } from '../ai/analysisStore';
 import { decodePreview, TransformersEmbedder } from '../ai/embedder';
 import { decidePace, WAIT_CHECK_MS } from '../ai/gentle';
-import { refreshReviewSummary } from '../duplicates/session';
+import { refreshReviewSummary, trashQueueDeps, trashQueuePass } from '../duplicates/session';
+import { IndexedDbReviewStore } from '../duplicates/reviewStore';
+import { recoverInterrupted } from '../duplicates/trash';
 import { IndexedDbInventoryStore } from '../scan/inventoryStore';
 import { runScan } from '../scan/session';
 import { OpPhotosSource } from '../scan/source';
@@ -25,9 +27,11 @@ keepProblemsHere();
 const jobs = new IndexedDbJobStore();
 const inventory = new IndexedDbInventoryStore();
 const analysis = new IndexedDbAnalysisStore();
+const review = new IndexedDbReviewStore();
 const embedder = new TransformersEmbedder();
 const diagnostics = new IndexedDbProblemLog();
 const active = new Set<string>();
+let trashRunning = false;
 
 // --- run summaries (Copy diagnostics) ---
 
@@ -198,6 +202,44 @@ async function runAnalysisJob(job: AnalysisJob): Promise<void> {
   }
 }
 
+// --- trash queue ---
+
+/** The review tab used this interval before the queue moved here. It stays responsive without hammering Google. */
+const TRASH_QUEUE_EVERY_MS = 2_000;
+
+async function runTrashQueues(): Promise<void> {
+  for (;;) {
+    const accounts = await review.trashWorkAccounts();
+    if (accounts.length === 0) return;
+    for (const account of accounts) {
+      try {
+        const deps = trashQueueDeps(account);
+        await recoverInterrupted(deps);
+        await trashQueuePass(account);
+      } catch (error) {
+        // A passing Google/Photos-tab problem is retried on the next pass. The queue's saved states
+        // make every retry safe, including when this page or the browser closes in between.
+        console.warn('Photo Cleaner: the background trash queue will try again', error);
+      }
+    }
+    await sleep(TRASH_QUEUE_EVERY_MS);
+  }
+}
+
+function startTrashQueues(): void {
+  if (trashRunning) return;
+  trashRunning = true;
+  void runTrashQueues()
+    .catch((error: unknown) => {
+      console.error('Photo Cleaner: the background trash queue stopped unexpectedly', error);
+      recordUnexpected('trash queue: stopped unexpectedly', error);
+    })
+    .finally(() => {
+      trashRunning = false;
+      void check();
+    });
+}
+
 /** Starts a run for every running job that doesn't have one (one analysis at a time); asks to be closed when none is left. */
 async function check(): Promise<void> {
   const all = await jobs.all();
@@ -218,7 +260,8 @@ async function check(): Promise<void> {
         void check();
       });
   }
-  if (active.size === 0) {
+  if (!trashRunning && (await review.trashWorkAccounts()).length > 0) startTrashQueues();
+  if (active.size === 0 && !trashRunning) {
     // Closing this page would lose problems not yet saved.
     await problemsSaved();
     await chrome.runtime.sendMessage({ kind: 'app-engine-idle' });

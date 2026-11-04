@@ -160,8 +160,9 @@ React + TypeScript (closest to Compose's model); `extension/` grows into the pro
         by hand with a few photos first (docs/extension-manual-checks.md, 5b)
   - [x] (2026-10-17) The simulated trash and the "Trash for real" switch are gone: approved photos
         always go to Google Photos' trash (a switch could leave a photo undone from the wrong trash)
-  - [ ] Send the queue from the background page, not the review tab: approved photos keep going after
-        the review tab closes (today they wait until it is open again)
+  - [x] (2026-11-04) Send the queue from the background page, not the review tab: approvals and undo
+        wake the background page; interrupted sends are recovered there; approved photos keep going
+        after the review tab closes and after the browser restarts
   - [ ] Work out the "still eligible?" check once per scan and protection setting, not per batch
   - [ ] Reading the trash back gets slower as the trash fills up (one page of the listing per ~500
         photos): use Google's reply once we know what it says, and read back only on surprises
@@ -190,8 +191,6 @@ React + TypeScript (closest to Compose's model); `extension/` grows into the pro
           changed something"
     - [x] (2026-10-15) The trash request is the riskiest one: the result is read back (is the photo
           really in the trash?); a reply Google changed fails with the plain message, never retried
-    - [ ] Early warning: a daily automatic check against a test account (the read requests, a
-          trash and restore) so we hear of a change before users do
     - [ ] A remote "pause trashing" switch (a setting fetched as data, e.g. Firebase Remote
           Config; extensions may fetch data, not code) to stop trashing for everyone while a
           fix ships
@@ -201,6 +200,29 @@ React + TypeScript (closest to Compose's model); `extension/` grows into the pro
         analysis, your decisions) lives only in this browser, and uninstalling deletes it; a fresh
         start means scanning (minutes) and analysing (about an hour) again. Disabling keeps it.
         Consider exporting decisions (a backup) so they survive a reinstall or a new computer
+- [ ] **M7 Live Google Photos compatibility monitoring**: a scheduled end-to-end check against a
+      dedicated test account, so changes to Google's undocumented requests are found before users
+      report them. It runs on a dedicated or self-hosted computer with a real graphics card and a
+      persistent browser profile; a human signs in once, and no Google credentials are kept in the
+      repository or typed by automation
+  - [ ] Seed a small, non-personal library with known cases: free-floating photos, favourites,
+        album members, archived photos, combinations of those protections, duplicates and
+        near-duplicates, similar photos taken far apart, shared or partner-saved photos, videos and
+        enough items to exercise pagination. Include genuine migrated Picasa material if a suitable
+        account exists; that legacy state may not be reproducible in a new account
+  - [ ] Keep the expected aggregate results as a fixture: library, favourite, archive, album,
+        protected, eligible and unknown counts. Never put the account, photo keys, URLs, album
+        titles or images in test output
+  - [ ] Daily read-only sentinel: open Google Photos, confirm the expected account without logging
+        it, read the library, favourites, archive and albums, fetch a few previews, and compare the
+        results with the fixture. A changed answer or count stops the run and raises an alert
+  - [ ] Write canary, daily or weekly: with exact preconditions, approve one known eligible test
+        photo, confirm it by reading Google's trash, restore it, and confirm it is back. Any mismatch
+        stops before another write; nothing in the account is personal or irreplaceable
+  - [ ] Release run: exercise AI analysis, Duplicates, Search, protection, restart/resume and account
+        separation against the same account before publishing a build
+  - [ ] Report only the extension version, stage, outcome and fixed error category. Treat an expired
+        Google session as "human sign-in required", not a product failure
 - [~] Then: Chrome, Edge, Brave on Windows and a Mac; phase 3. Chrome on Windows and on a MacBook work (2026-10-17); Edge and Brave still to test
 
 ### Capability check and minimum specs (provisional until M3 testing)

@@ -65,6 +65,19 @@ export async function processTrashQueue(deps: TrashQueueDeps): Promise<TrashQueu
   return { counts: await deps.review.jobCounts(deps.account), waitingReason };
 }
 
+/** Reads the queue for display without sending, restoring or changing any job. */
+export async function readTrashQueueStatus(deps: TrashQueueDeps): Promise<TrashQueueStatus> {
+  const counts = await deps.review.jobCounts(deps.account);
+  const resting = deps.trash.waitingReason?.() ?? null;
+  if (resting !== null || (counts.QUEUED ?? 0) === 0) return { counts, waitingReason: resting };
+  const classification = await deps.classify();
+  if (classification === null) return { counts, waitingReason: 'Waiting: no library scan.' };
+  const coverage = classification.report.coverage;
+  if (!coverage.isComplete) return { counts, waitingReason: 'Waiting: the library scan is unfinished. Finish it to continue.' };
+  if (coverage.isStale) return { counts, waitingReason: 'Waiting: the library scan is out of date. Check for new photos to continue.' };
+  return { counts, waitingReason: null };
+}
+
 const batch = (deps: TrashQueueDeps) => deps.batchSize ?? 25;
 
 async function activeIds(deps: TrashQueueDeps): Promise<Set<number>> {

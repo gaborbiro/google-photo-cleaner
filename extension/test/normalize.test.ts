@@ -322,6 +322,7 @@ describe('album contents', () => {
 describe('the trash', () => {
   it('reads dedup keys page by page; the last page is just [items]', () => {
     expect(normalizeTrashPage([[rawTrashItem(dedupKey('a'))], marker()])).toEqual({ dedupKeys: [dedupKey('a')], nextPageToken: marker() });
+    expect(normalizeTrashPage([[rawTrashItem(dedupKey('short')).slice(0, 10)]])).toEqual({ dedupKeys: [dedupKey('short')], nextPageToken: null });
     expect(normalizeTrashPage([[rawTrashItem(dedupKey('a')), rawTrashItem(dedupKey('b'))]])).toEqual({ dedupKeys: [dedupKey('a'), dedupKey('b')], nextPageToken: null });
     expect(normalizeTrashPage([]).dedupKeys).toEqual([]);
   });
@@ -330,7 +331,8 @@ describe('the trash', () => {
     for (const value of [...NOT_MARKERS, '']) protocolFailure(() => normalizeTrashPage([[rawTrashItem(dedupKey('a'))], value]));
     protocolFailure(() => normalizeTrashPage([[rawTrashItem('dk 1')]]));
     expect(normalizeTrashPage([[rawTrashItem('abcdefgh:ijklmnopq')]]).dedupKeys).toEqual(['abcdefgh:ijklmnopq']);
-    protocolFailure(() => normalizeTrashPage([[rawTrashItem(dedupKey('a')).slice(0, 6)]]));
+    for (const length of [6, 9, 11, 14]) protocolFailure(() => normalizeTrashPage([[rawTrashItem(dedupKey('a')).slice(0, length)]]));
+    protocolFailure(() => normalizeTrashPage([[[...rawTrashItem(dedupKey('a')), null]]]));
     protocolFailure(() => normalizeTrashPage([[[...rawTrashItem(dedupKey('a')), {}]]]));
   });
 });

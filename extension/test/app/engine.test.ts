@@ -7,9 +7,12 @@ import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ENGINE_STARTED_KEY } from '../../src/app/shared/constants';
 import { ALIVE_EVERY_MS, jobId, startScanJob } from '../../src/app/shared/job';
+import { IndexedDbReviewStore } from '../../src/app/duplicates/reviewStore';
+import { IndexedDbInventoryStore } from '../../src/app/scan/inventoryStore';
 import { IndexedDbProblemLog } from '../../src/app/shared/problemLog';
 import { IndexedDbJobStore } from '../../src/app/shared/store';
-import type { OpResult } from '../../src/shared/protocol';
+import type { OpResult, PageOp } from '../../src/shared/protocol';
+import { fakeDedupKey, fakeItem, FakeGoogle, FakePhotos, NOW, scan } from './fakes';
 
 // The AI model isn't needed to start, nor for a scan.
 vi.mock('../../src/app/ai/embedder', () => ({
@@ -20,11 +23,11 @@ vi.mock('../../src/app/ai/embedder', () => ({
 /** What Chrome gives an offscreen document: runtime messaging. Reaching for anything else fails, as in Chrome. */
 const MESSAGING = new Set(['id', 'getURL', 'sendMessage', 'onMessage', 'connect', 'onConnect']);
 
-function offscreenChrome(answer: (message: { kind: string; op?: string }) => unknown) {
+function offscreenChrome(answer: (message: { kind: string; account?: string; op?: PageOp; params?: Record<string, unknown> }) => unknown) {
   const runtime: Record<string, unknown> = {
     id: 'photo-cleaner',
     getURL: (path: string) => `chrome-extension://photo-cleaner/${path}`,
-    sendMessage: vi.fn(async (message: { kind: string; op?: string }) => answer(message)),
+    sendMessage: vi.fn(async (message: { kind: string; account?: string; op?: PageOp; params?: Record<string, unknown> }) => answer(message)),
     onMessage: { addListener: () => {} },
     connect: () => { throw new Error('not used'); },
     onConnect: { addListener: () => {} },
@@ -97,6 +100,26 @@ describe('the background page', () => {
       stats: { stage: 'library read', listings: { 'session check': { pages: 1 }, library: { pages: 0 } } },
     }]));
     expect(warn).toHaveBeenCalled();
+  }, 10_000);
+
+  it('runs queued trash work without a review tab and closes only after Google confirms it', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW);
+    await scan(new FakePhotos([fakeItem(0), fakeItem(1)]), new IndexedDbInventoryStore(indexedDB));
+    const review = new IndexedDbReviewStore(indexedDB);
+    await review.recordDecision('account-a', 'group-a', 'APPROVED', [{ mediaKey: 'lib-1', dedupKey: fakeDedupKey(1) }], ['lib-0', 'lib-1'], NOW);
+    const google = new FakeGoogle();
+    const { chrome, sendMessage } = offscreenChrome((message) => {
+      if (message.kind !== 'app-run-op') return undefined;
+      return google.run(message.account!, message.op!, message.params ?? {});
+    });
+    vi.stubGlobal('chrome', chrome);
+
+    await import('../../src/app/engine/main');
+
+    await vi.waitFor(async () => expect(await review.jobs('account-a', ['COMPLETED'])).toHaveLength(1), { timeout: 5_000 });
+    expect(google.changes()).toEqual([`moveToTrash: ${fakeDedupKey(1)}`]);
+    expect(google.trash).toEqual(new Set([fakeDedupKey(1)]));
+    await vi.waitFor(() => expect(sentKinds(sendMessage).at(-1)).toBe('app-engine-idle'), { timeout: 5_000 });
   }, 10_000);
 
   it('says it has started, and while a request takes long, keeps saying the job is in hand', async () => {

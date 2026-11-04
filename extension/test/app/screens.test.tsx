@@ -439,7 +439,7 @@ describe('clicks and keys reach what they should', () => {
     expect(await decisions()).toEqual([]); // looking and choosing decide nothing
   });
 
-  it('Duplicates: D trashes the selection (the trash queue sends it), Z undoes (and it comes back out)', async () => {
+  it('Duplicates: D queues the selection and wakes the background page; Z can cancel it before it is sent', async () => {
     const root = await duplicatesShown();
     press('ArrowRight');
     press('ArrowRight');
@@ -449,13 +449,15 @@ describe('clicks and keys reach what they should', () => {
     press('d');
     await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(0));
     expect(await decisions()).toMatchObject([{ kind: 'APPROVED', items: [{ mediaKey: 'lib-1' }] }]);
-    await vi.waitFor(() => expect([...google.trash]).toEqual([fakeDedupKey(1)]), { timeout: 6_000 });
+    await vi.waitFor(() => expect(requests('app-wake-engine')).toHaveLength(1));
+    expect(google.trash.size).toBe(0); // the review page no longer sends trash requests itself
 
     press('z');
     await vi.waitFor(() => expect(dupTiles(root)).toHaveLength(3));
     expect(await decisions()).toEqual([]);
-    await vi.waitFor(() => expect(google.trash.size).toBe(0), { timeout: 6_000 });
-  }, 20_000);
+    expect(await new IndexedDbReviewStore(indexedDB).jobs('account-a', ['CANCELLED'])).toHaveLength(1);
+    expect(requests('app-wake-engine')).toHaveLength(2);
+  });
 
   it('Duplicates: F keeps all, the S · Skip button skips, the Z · Undo button undoes', async () => {
     const root = await duplicatesShown();

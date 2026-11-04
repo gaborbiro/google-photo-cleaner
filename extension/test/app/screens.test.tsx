@@ -897,6 +897,19 @@ describe('clicks and keys reach what they should', () => {
     await photosOpenedWithPanel();
   });
 
+  it('scan paused because Google Photos was closed offers to open it, then opens its panel', async () => {
+    const jobs = new IndexedDbJobStore(indexedDB);
+    const waiting = endJob(startScanJob('account-a', NOW), 'paused', 'Google Photos was closed. Open photos.google.com, signed in to this account; the scan continues by itself.', NOW, true);
+    await jobs.update(waiting.id, () => waiting);
+    const root = await open('review', '?account=account-a');
+    await shows(root, 'Google Photos was closed', 'Open Google Photos');
+    const noticeButton = root.querySelector<HTMLButtonElement>('.scan-step .scan-notice button');
+    expect(noticeButton?.textContent).toBe('Open Google Photos');
+    noticeButton!.click();
+    await photosOpenedWithPanel();
+    expect(await jobs.get(waiting.id)).toMatchObject({ status: 'paused', resumeWhenPhotosOpen: true });
+  });
+
   it.each(['popup', 'panel', 'review'] as const)('%s: Full speed can be chosen in stage 1 and stays checked in stage 2', async (page) => {
     const jobs = new IndexedDbJobStore(indexedDB);
     const reading = startScanJob('account-a', NOW);
@@ -1100,7 +1113,7 @@ describe('clicks and keys reach what they should', () => {
 
     const root = await open('review', '?account=account-a');
     await shows(root, 'Check for new photos');
-    expect(root.querySelector('.scan-title button')?.textContent).toBe('Check for new photos');
+    expect(root.querySelector('.scan-step .scan-notice button')?.textContent).toBe('Check for new photos');
     await click(root, 'Check for new photos');
     await vi.waitFor(async () => expect(await jobs.get(jobId('library-scan', 'account-a'))).toMatchObject({ status: 'running' }));
     expect((await jobs.get(jobId('library-scan', 'account-a')))!.startedAtMs).toBeGreaterThanOrEqual(NOW); // a new read, not the old one

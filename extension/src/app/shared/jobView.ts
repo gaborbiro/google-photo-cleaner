@@ -21,6 +21,8 @@ export function accountLabel(fingerprint: string, email: string | null): string 
   return email ?? `account ${fingerprint.slice(0, 8)}…`;
 }
 
+export type ScanAction = 'start' | 'pause' | 'resume' | 'restart' | 'restart-engine' | 'open-photos';
+
 interface ScanSummary {
   /** "Not scanned yet", "Scanning", "Scan paused", "Scan stopped", "Scan complete" or "Scan out of date". */
   title: string;
@@ -40,7 +42,7 @@ interface ScanSummary {
   /** "Started 14:02 · last step 14:03" while reading the photo list. */
   timesText: string | null;
   /** restart-engine: the background page stopped responding; a new one carries on. */
-  action: 'start' | 'pause' | 'resume' | 'restart' | 'restart-engine';
+  action: ScanAction;
   actionLabel: string;
   /** Which of the two saved jobs the button acts on. */
   target: JobKind;
@@ -76,6 +78,8 @@ export interface ScanStepView {
   indeterminate: boolean;
   waiting: string | null;
   notice: string | null;
+  /** A warning whose remedy can be done now: the button shown with that warning. */
+  noticeAction: { action: ScanAction; actionLabel: string; target: JobKind } | null;
   timesText: string | null;
   fullSpeed: boolean | null;
   protectionKnown: boolean;
@@ -107,7 +111,7 @@ function duration(seconds: number): string {
   return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 }
 
-const NONE = { tone: null, stage: null, percent: null, indeterminate: false, lines: [], waiting: null, notice: null, timesText: null, fullSpeed: null, protectionKnown: false };
+const NONE = { tone: null, stage: null, percent: null, indeterminate: false, lines: [], waiting: null, notice: null, noticeAction: null, timesText: null, fullSpeed: null, protectionKnown: false };
 
 /** The Scan step's tab title with its status, as on the desktop: "1 · Scan (done)". */
 export function scanTabTitle(view: ScanView): string {
@@ -178,6 +182,9 @@ function readingView(scan: ScanJob, fullSpeed: boolean, nowMs: number): ScanSumm
       if (notResponding(scan, nowMs)) return { ...base, ...NOT_RESPONDING };
       return { ...base, title: 'Scanning', indeterminate: true, action: 'pause', actionLabel: 'Pause', tabStatus: 'scanning' };
     case 'paused':
+      if (scan.resumeWhenPhotosOpen === true) {
+        return { ...base, title: 'Scan paused', tone: 'caution', action: 'open-photos', actionLabel: 'Open Google Photos', tabStatus: 'needed' };
+      }
       return { ...base, title: 'Scan paused', tone: 'caution', action: 'resume', actionLabel: 'Resume', tabStatus: 'needed' };
     default:
       return { ...base, title: 'Scan stopped', tone: 'negative', action: 'restart', actionLabel: 'Start a new scan', tabStatus: 'needed' };
@@ -241,6 +248,9 @@ function analysingView(scan: ScanJob, job: AnalysisJob, nowMs: number, surface: 
       if (notResponding(job, nowMs)) return { ...base, ...NOT_RESPONDING };
       return { ...base, title: 'Scanning', waiting: p.waiting, action: 'pause', actionLabel: 'Pause', tabStatus: 'scanning' };
     case 'paused':
+      if (job.resumeWhenPhotosOpen === true) {
+        return { ...base, title: 'Scan paused', tone: 'caution', action: 'open-photos', actionLabel: 'Open Google Photos', tabStatus: 'needed' };
+      }
       return { ...base, title: 'Scan paused', tone: 'caution', action: 'resume', actionLabel: 'Resume', tabStatus: 'needed' };
     default:
       return { ...base, title: 'Scan stopped', tone: 'negative', action: 'restart', actionLabel: 'Try again', tabStatus: 'needed' };
@@ -273,6 +283,7 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
     .map(googleProblemLine);
   const scanStopped = scan !== null && stoppedByProblem(scan);
   const analysisStopped = analysisReady && stoppedByProblem(analysis);
+  const summaryAction = { action: summary.action, actionLabel: summary.actionLabel, target: summary.target };
   return [
     {
       ...NONE,
@@ -290,6 +301,7 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       lines: libraryReady ? [] : library?.lines ?? [],
       indeterminate: scan?.status === 'running' && !scanStalled,
       notice: stale ? (staleMidAnalysis(scan, analysis, nowMs) ? STALE_MID_ANALYSIS_TEXT : STALE_TEXT) : scanStalled ? NOT_RESPONDING_TEXT : scan?.progress.notice ?? null,
+      noticeAction: summary.target === 'library-scan' && (stale || scan?.resumeWhenPhotosOpen === true) ? summaryAction : null,
       timesText: libraryReady ? checkedText(scan.finishedAtMs ?? scan.updatedAtMs, nowMs) : library?.timesText ?? null,
       protectionKnown: libraryReady,
     },
@@ -310,6 +322,7 @@ function scanSteps(scan: ScanJob | null, analysis: AnalysisJob | null, summary: 
       percent: analysisReady ? summary.percent : null,
       waiting: analysisReady ? summary.waiting : 'Starts automatically after step 1.',
       notice: analysisStalled ? NOT_RESPONDING_TEXT : analysisReady ? analysis.progress.notice : null,
+      noticeAction: summary.target === 'analysis' && analysisReady && analysis.resumeWhenPhotosOpen === true ? summaryAction : null,
       fullSpeed: analysis?.fullSpeed ?? false,
     },
   ];

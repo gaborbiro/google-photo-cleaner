@@ -29,7 +29,7 @@ export async function startAnalysis(store: JobStore, send: Send, account: string
 }
 
 /** The Scan card's button: does what its view says ([action] on [target]). */
-export function scanButton(view: Pick<ScanView, 'action' | 'target'>, store: JobStore, send: Send, account: string, nowMs: number): Promise<Job | null> {
+export function scanButton(view: Pick<ScanView, 'action' | 'target'> & { action: Exclude<ScanView['action'], 'open-photos'> }, store: JobStore, send: Send, account: string, nowMs: number): Promise<Job | null> {
   switch (view.action) {
     case 'start':
     case 'restart':

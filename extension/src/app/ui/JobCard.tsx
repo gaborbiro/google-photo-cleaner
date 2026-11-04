@@ -5,21 +5,25 @@ import type { AppRequest } from '../shared/messages';
 import { scanButton, setAnalysisFullSpeed } from '../shared/actions';
 import { ALIVE_EVERY_MS, type AnalysisJob, type ScanJob } from '../shared/job';
 import { diagnosticsText } from '../shared/diagnostics';
-import { copyReportText, offersDiagnostics, scanView, versionLine, type ScanSurface } from '../shared/jobView';
+import { copyReportText, offersDiagnostics, scanView, versionLine, type ScanAction, type ScanSurface } from '../shared/jobView';
 import type { ReportView } from '../scan/report';
 import type { ProtectionChoices } from '../shared/preferences';
-import { extensionVersion, logFailure, send, setProtectionChoices, store, useClock, useProblems, useStorageProblem } from './hooks';
+import { extensionVersion, logFailure, openPhotos, send, setProtectionChoices, store, useClock, useProblems, useStorageProblem } from './hooks';
 
 /** One Scan in two stages: reading the photo list, then analysing the new photos. */
 export function ScanCard({ account, scan, analysis, report, surface }: { account: string; scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null | undefined; surface: ScanSurface }) {
   const view = scanView(scan, analysis, useClock(ALIVE_EVERY_MS), surface);
-  const act = () => void scanButton(view, store, send, account, Date.now()).catch(logFailure(view.actionLabel));
+  const act = (action: ScanAction, target: typeof view.target, actionLabel: string) => {
+    if (action === 'open-photos') void openPhotos();
+    else void scanButton({ action, target }, store, send, account, Date.now()).catch(logFailure(actionLabel));
+  };
+  const noticeHasAction = view.steps.some((step) => step.noticeAction !== null);
   const version = extensionVersion();
   return (
     <section className="card scan-card" aria-live="polite">
       <div className="scan-title">
         <h2>{view.tone && <span className={`dot tone-${view.tone}`} aria-hidden="true" />}{view.title}</h2>
-        <button className={view.action === 'pause' ? '' : 'primary'} onClick={act}>{view.actionLabel}</button>
+        {!noticeHasAction && <button className={view.action === 'pause' ? '' : 'primary'} onClick={() => act(view.action, view.target, view.actionLabel)}>{view.actionLabel}</button>}
       </div>
       <ol className="scan-steps" aria-label="Scan steps">
         {view.steps.map((step) => (
@@ -36,7 +40,12 @@ export function ScanCard({ account, scan, analysis, report, surface }: { account
               {step.percent !== null && <div className="bar"><div style={{ width: `${step.percent}%` }} /></div>}
               {step.lines.length > 0 && <div className="lines">{step.lines.map((line) => <div key={line} className="mono">{line}</div>)}</div>}
               {step.waiting && <p className="muted">{step.waiting}</p>}
-              {step.notice && <p className="warn">{step.notice}</p>}
+              {step.notice && (
+                <div className="scan-notice">
+                  <p className="warn">{step.notice}</p>
+                  {step.noticeAction && <button className="primary" onClick={() => act(step.noticeAction!.action, step.noticeAction!.target, step.noticeAction!.actionLabel)}>{step.noticeAction.actionLabel}</button>}
+                </div>
+              )}
               {step.problemLines.map((line) => <p key={line} className="mono muted support-line">{line}</p>)}
               {offersDiagnostics(step, report) && <Diagnostics scan={scan} analysis={analysis} report={report ?? null} />}
               {step.timesText && <p className="muted mono">{step.timesText}</p>}

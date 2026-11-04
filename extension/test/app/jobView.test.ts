@@ -172,6 +172,18 @@ describe('one Scan in two stages', () => {
     expect(scanView(endJob(reading, 'failed', 'Not understood.', 2_000), null, NOW, 'tab')).toMatchObject({ title: 'Scan stopped', actionLabel: 'Start a new scan', target: 'library-scan' });
   });
 
+  it('offers to open Google Photos when either stage is waiting for it', () => {
+    const waitingForPhotos = 'Google Photos was closed. Open photos.google.com, signed in to this account; the scan continues by itself.';
+    expect(scanView(endJob(reading, 'paused', waitingForPhotos, 2_000, true), null, NOW, 'tab'))
+      .toMatchObject({ title: 'Scan paused', action: 'open-photos', actionLabel: 'Open Google Photos', target: 'library-scan', notice: waitingForPhotos });
+    expect(scanView(scanned, endJob(analysing, 'paused', waitingForPhotos, 2_000, true), NOW, 'tab'))
+      .toMatchObject({ title: 'Scan paused', action: 'open-photos', actionLabel: 'Open Google Photos', target: 'analysis', notice: waitingForPhotos });
+    expect(scanView(endJob(reading, 'paused', waitingForPhotos, 2_000, true), null, NOW, 'tab').steps[0].noticeAction)
+      .toEqual({ action: 'open-photos', actionLabel: 'Open Google Photos', target: 'library-scan' });
+    expect(scanView(scanned, endJob(analysing, 'paused', waitingForPhotos, 2_000, true), NOW, 'tab').steps[1].noticeAction)
+      .toEqual({ action: 'open-photos', actionLabel: 'Open Google Photos', target: 'analysis' });
+  });
+
   it('says "1 entry", not "1 entries"', () => {
     const view = scanView(reportProgress(startScanJob('acc1', 0), { ...NO_PROGRESS, favouriteEntries: 1, archiveEntries: 2 }, 1_000), null, NOW, 'tab');
     expect(view.lines[1]).toBe('Favourite photos: 1 entry');
@@ -247,6 +259,8 @@ describe('one Scan in two stages', () => {
       notice: 'More than a day old: check for new photos before anything can be trashed.',
       actionLabel: 'Check for new photos',
     });
+    expect(scanView(scanned, done, NOW + 2 * 86_400_000, 'tab').steps[0].noticeAction)
+      .toEqual({ action: 'restart', actionLabel: 'Check for new photos', target: 'library-scan' });
   });
 
   it('a photo list read without an analysis yet offers to analyse', () => {

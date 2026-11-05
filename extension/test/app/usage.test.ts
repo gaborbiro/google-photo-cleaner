@@ -142,7 +142,10 @@ describe('optional usage collection', () => {
     const body = JSON.parse(env.fetcher.mock.calls[0][1].body);
     expect(body.client_id).toBe(state.clientId);
     expect(body.events.map((e: { name: string }) => e.name)).toEqual(['scan_started', 'scan_finished']);
-    expect(body.events.map((e: { timestamp_micros: number }) => e.timestamp_micros)).toEqual([start * 1000, (start + 40 * 60_000) * 1000]);
+    expect(body.timestamp_micros).toBe(start * 1000); // request fallback: the first kept event
+    expect(body.events.map((e: { params: { timestamp_micros: number } }) => e.params.timestamp_micros))
+      .toEqual([start * 1000, (start + 40 * 60_000) * 1000]);
+    expect(body.events.every((e: Record<string, unknown>) => !('timestamp_micros' in e))).toBe(true);
     const [first, second] = body.events.map((e: { params: { session_id: number } }) => e.params.session_id);
     expect(second).toBeGreaterThan(first);
     expect(JSON.stringify(body)).not.toContain('local-account');

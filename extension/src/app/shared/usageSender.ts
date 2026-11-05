@@ -144,9 +144,9 @@ export class UsageSender {
             name: event.name,
             params: { ...event.params, schema_version: '1', extension_version: BUILT_VERSION,
               setup_state: state.setupState, session_id: sessionId,
+              ...(atMs !== undefined ? { timestamp_micros: atMs * 1000 } : {}),
               ...(event.name === 'surface_engagement' && engagementMs ? { engagement_time_msec: Math.round(engagementMs) } : {}),
               ...(this.config!.debug ? { debug_mode: 1 } : {}) },
-            ...(atMs !== undefined ? { timestamp_micros: atMs * 1000 } : {}),
           })) }),
       }).catch(() => {}).finally(() => { clearTimeout(timer); this.active.delete(controller); });
     } catch { clearTimeout(timer); this.active.delete(controller); }

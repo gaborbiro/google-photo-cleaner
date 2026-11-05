@@ -9,7 +9,7 @@
 
 import { MAX_TRASH_BATCH, type OpError, type OpResult, type PageOp } from '../../shared/protocol';
 import { INCOMPATIBLE_TEXT, isIncompatible, logGoogleProblem } from '../shared/googleProblems';
-import type { TrashOutcome, TrashService, TrashTarget } from './trash';
+import { StopTrashQueue, type TrashOutcome, type TrashService, type TrashTarget } from './trash';
 
 /** Runs one operation in a Photos tab signed in to [account]. */
 export type RunPageOp = (account: string, op: PageOp, params: Record<string, unknown>) => Promise<OpResult>;
@@ -50,7 +50,13 @@ export class GoogleTrash implements TrashService {
     do {
       if (++pages > MAX_TRASH_PAGES) throw new Error(`The trash is longer than ${MAX_TRASH_PAGES} pages; it can't be checked`);
       const result = await this.call(account, 'listTrashPage', token ? { pageToken: token } : {});
-      if (!result.ok) throw new Error(`The trash could not be read: ${result.error.message}`);
+      if (!result.ok) {
+        if (isIncompatible(result.error.kind)) {
+          this.noteProblem(result.error, 'trash: list');
+          throw new StopTrashQueue(INCOMPATIBLE_TEXT);
+        }
+        throw new Error(`The trash could not be read: ${result.error.message}`);
+      }
       const page = result.data as { dedupKeys: string[]; nextPageToken: string | null; accountFingerprint: string };
       if (page.accountFingerprint !== account) throw new Error('The trash was read in a tab signed in to another account');
       for (const key of page.dedupKeys) if (wanted.has(key)) found.add(key);
@@ -69,11 +75,13 @@ export class GoogleTrash implements TrashService {
         : await this.call(account, op, { account, dedupKeys: keys });
       const problem = answer.ok ? null : answer.error;
       if (problem) this.noteProblem(problem, `trash: ${op}`);
+      if (problem && isIncompatible(problem.kind)) throw new StopTrashQueue(INCOMPATIBLE_TEXT);
 
       let where: Map<string, boolean>;
       try {
         where = await this.inTrash(account, keys);
       } catch (error) {
+        if (error instanceof StopTrashQueue) throw error;
         console.warn('Photo Cleaner: could not check the trash after a trash request', error);
         outcomes.push(...keys.map((dedupKey) => ({ dedupKey, succeeded: false, uncertain: true, error: "Couldn't check Google Photos' trash afterwards" })));
         continue;

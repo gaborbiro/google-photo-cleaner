@@ -41,8 +41,12 @@ export interface TrashJob {
   state: TrashJobState;
   attempts: number;
   lastError: string | null;
+  /** Set when Google answered incompatibly; while present, no work for this account is attempted. */
+  stoppedReason?: string | null;
   updatedAtMs: number;
 }
+
+const TRASH_WORK_STATES: ReadonlySet<TrashJobState> = new Set(['QUEUED', 'SENDING', 'UNCERTAIN', 'RESTORE_REQUESTED']);
 
 type NewRecord<T> = Omit<T, 'id'>;
 
@@ -176,12 +180,36 @@ export class IndexedDbReviewStore {
     return counts;
   }
 
+  /** Why an account's pending writes are stopped after an incompatible Google answer. */
+  async stoppedTrashReason(account: string): Promise<string | null> {
+    const active = await this.jobs(account, [...TRASH_WORK_STATES]);
+    return active.find((job) => job.stoppedReason)?.stoppedReason ?? null;
+  }
+
+  /** Atomically stops every pending write for an account without losing each job's recovery state. */
+  async stopTrashWork(account: string, error: string, atMs: number): Promise<void> {
+    const tx = await this.tx([STORES.trashJobs, STORES.decisions], 'readwrite');
+    const jobs = tx.objectStore(STORES.trashJobs);
+    const affected = (await request(jobs.index('account').getAll(account) as IDBRequest<TrashJob[]>))
+      .filter((job) => TRASH_WORK_STATES.has(job.state));
+    const decisions = await request(tx.objectStore(STORES.decisions).index('account').getAll(account) as IDBRequest<StoredDecision[]>);
+    for (const job of affected) jobs.put({ ...job, lastError: error, stoppedReason: error, updatedAtMs: atMs });
+    await committed(tx);
+    if (affected.length === 0) return;
+    this.announce(account);
+    const byId = new Map(decisions.map((decision) => [decision.id, decision]));
+    for (const job of affected) {
+      const decision = byId.get(job.decisionId);
+      if (decision) emitUsage({ name: 'trash_result', params: { source: decisionSource(decision.groupId), result: 'failed' } }, `decision:${job.decisionId}:STOPPED`);
+    }
+  }
+
   /** Accounts with trash or restore work that the background page still needs to carry out. */
   async trashWorkAccounts(): Promise<string[]> {
     const tx = await this.tx([STORES.trashJobs], 'readonly');
     const all = await request(tx.objectStore(STORES.trashJobs).getAll() as IDBRequest<TrashJob[]>);
-    const active = new Set<TrashJobState>(['QUEUED', 'SENDING', 'UNCERTAIN', 'RESTORE_REQUESTED']);
-    return [...new Set(all.filter((job) => active.has(job.state)).map((job) => job.account))].sort();
+    const stopped = new Set(all.filter((job) => TRASH_WORK_STATES.has(job.state) && job.stoppedReason).map((job) => job.account));
+    return [...new Set(all.filter((job) => TRASH_WORK_STATES.has(job.state) && !stopped.has(job.account)).map((job) => job.account))].sort();
   }
 }
 

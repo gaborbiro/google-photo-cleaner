@@ -32,6 +32,9 @@ export interface TrashQueueStatus {
   waitingReason: string | null;
 }
 
+/** Google Photos answered incompatibly: stop this account's queue instead of trying it again. */
+export class StopTrashQueue extends Error {}
+
 export interface TrashQueueDeps {
   account: string;
   review: IndexedDbReviewStore;
@@ -57,17 +60,27 @@ export async function recoverInterrupted(deps: TrashQueueDeps): Promise<void> {
  *    (now a favourite, in an album, archived, unknown) is BLOCKED; the rest are sent.
  */
 export async function processTrashQueue(deps: TrashQueueDeps): Promise<TrashQueueStatus> {
+  const stopped = await deps.review.stoppedTrashReason(deps.account);
+  if (stopped) return { counts: await deps.review.jobCounts(deps.account), waitingReason: stopped };
   const resting = deps.trash.waitingReason?.() ?? null;
   if (resting !== null) return { counts: await deps.review.jobCounts(deps.account), waitingReason: resting };
-  await reconcileUncertain(deps);
-  await restoreRequested(deps);
-  const waitingReason = await sendQueued(deps);
-  return { counts: await deps.review.jobCounts(deps.account), waitingReason };
+  try {
+    await reconcileUncertain(deps);
+    await restoreRequested(deps);
+    const waitingReason = await sendQueued(deps);
+    return { counts: await deps.review.jobCounts(deps.account), waitingReason };
+  } catch (error) {
+    if (!(error instanceof StopTrashQueue)) throw error;
+    await deps.review.stopTrashWork(deps.account, error.message, deps.now());
+    return { counts: await deps.review.jobCounts(deps.account), waitingReason: error.message };
+  }
 }
 
 /** Reads the queue for display without sending, restoring or changing any job. */
 export async function readTrashQueueStatus(deps: TrashQueueDeps): Promise<TrashQueueStatus> {
   const counts = await deps.review.jobCounts(deps.account);
+  const stopped = await deps.review.stoppedTrashReason(deps.account);
+  if (stopped) return { counts, waitingReason: stopped };
   const resting = deps.trash.waitingReason?.() ?? null;
   if (resting !== null || (counts.QUEUED ?? 0) === 0) return { counts, waitingReason: resting };
   const classification = await deps.classify();

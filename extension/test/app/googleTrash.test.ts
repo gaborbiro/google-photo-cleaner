@@ -6,7 +6,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it, vi } from 'vitest';
 import { GoogleTrash, REST_AFTER_RATE_LIMIT_MS } from '../../src/app/duplicates/googleTrash';
 import { IndexedDbReviewStore } from '../../src/app/duplicates/reviewStore';
-import { processTrashQueue, type TrashQueueDeps } from '../../src/app/duplicates/trash';
+import { processTrashQueue, readTrashQueueStatus, type TrashQueueDeps } from '../../src/app/duplicates/trash';
 import { INCOMPATIBLE_TEXT } from '../../src/app/shared/googleProblems';
 import { classifyLatest, fakeDedupKey, fakeItem, FakeGoogle, FakePhotos, newStore, NOW, scan } from './fakes';
 
@@ -37,7 +37,7 @@ describe('the real trash', () => {
     expect(await new GoogleTrash(google.run).moveToTrash('acc', [target(1)])).toEqual([{ dedupKey: fakeDedupKey(1), succeeded: true, error: null }]);
   });
 
-  it('a passing failure is uncertain (tried again later); a changed answer from Google fails, saying so', async () => {
+  it('a passing failure is uncertain (tried again later); a changed answer from Google stops the queue, saying so', async () => {
     const google = new FakeGoogle();
     const trash = new GoogleTrash(google.run);
     google.fail = { error: { kind: 'TRANSIENT', message: 'connection reset' }, workDone: false };
@@ -45,7 +45,7 @@ describe('the real trash', () => {
 
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     google.fail = { error: { kind: 'PROTOCOL', message: 'shape changed' }, workDone: false };
-    expect(await trash.moveToTrash('acc', [target(2)])).toEqual([{ dedupKey: fakeDedupKey(2), succeeded: false, error: INCOMPATIBLE_TEXT }]);
+    await expect(trash.moveToTrash('acc', [target(2)])).rejects.toThrow(INCOMPATIBLE_TEXT);
 
     // The trash can't be read afterwards: nobody knows, so it is checked again later.
     google.unreadable = true;
@@ -89,6 +89,34 @@ describe('the trash queue with the real trash', () => {
     await processTrashQueue(deps); // sent
     expect(await review.jobs('account-a', ['COMPLETED'])).toHaveLength(1);
     expect(google.trash.has(fakeDedupKey(1))).toBe(true);
+  });
+
+  it('a changed trash-list answer stops the account instead of being retried', async () => {
+    const { review, google, deps } = await setup();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let trashReads = 0;
+    deps.trash = new GoogleTrash(async (account, op, params) => {
+      if (op === 'listTrashPage') {
+        trashReads++;
+        return { ok: false, error: { kind: 'PROTOCOL', message: 'Trash item shape changed' } };
+      }
+      return google.run(account, op, params);
+    });
+    deps.batchSize = 1;
+    await review.recordDecision('account-a', 'g1', 'APPROVED', [target(1), target(2)], ['lib-0', 'lib-1', 'lib-2'], NOW);
+
+    expect((await processTrashQueue(deps)).waitingReason).toBe(INCOMPATIBLE_TEXT);
+    expect((await readTrashQueueStatus(deps)).waitingReason).toBe(INCOMPATIBLE_TEXT);
+    expect((await processTrashQueue(deps)).waitingReason).toBe(INCOMPATIBLE_TEXT);
+
+    expect(trashReads).toBe(1);
+    expect(google.changes()).toEqual([`moveToTrash: ${fakeDedupKey(1)}`]);
+    expect(await review.trashWorkAccounts()).toEqual([]);
+    expect(await review.jobs('account-a', ['SENDING', 'QUEUED'])).toMatchObject([
+      { mediaKey: 'lib-1', state: 'SENDING', stoppedReason: INCOMPATIBLE_TEXT },
+      { mediaKey: 'lib-2', state: 'QUEUED', stoppedReason: INCOMPATIBLE_TEXT },
+    ]);
+    warn.mockRestore();
   });
 
   it('while Google is limiting requests the queue waits, saying so, and contacts Google not at all', async () => {

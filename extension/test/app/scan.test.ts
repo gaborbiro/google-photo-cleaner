@@ -222,6 +222,32 @@ describe('library scan', () => {
       expect(view.noteLines).toEqual(['Album “Album A” count mismatch, not blocking: Google reports 5 entries; 2 read, the same ones on a second read']);
     });
 
+    it('fails safely when the second read repeats a page token instead of looping forever', async () => {
+      const store = newStore();
+      const source = shortAlbum();
+      let reads = 0;
+      source.albumItemsPage = async (albumKey, _authKey, token) => {
+        source.calls.push(`album:${albumKey}`);
+        reads++;
+        return {
+          entries: token === null ? source.albums[0]!.members : [],
+          nextPageToken: reads === 1 ? null : 'repeated-reread-page',
+          accountFingerprint: source.accountFingerprint,
+        };
+      };
+      let stopChecks = 0;
+
+      const { outcome, progress } = await scan(source, store, { shouldStop: async () => ++stopChecks > 30 });
+
+      expect(outcome).toEqual({ kind: 'failed', reason: INCOMPATIBLE_TEXT });
+      expect(albumReads(source)).toBe(3);
+      expect(progress.at(-1)!.googleProblem).toMatchObject({
+        where: 'scan: album contents',
+        kind: 'PROTOCOL',
+        message: 'album contents repeated a page token',
+      });
+    });
+
     it('blocks every unprotected photo when the second read finds different entries', async () => {
       const store = newStore();
       const source = shortAlbum();

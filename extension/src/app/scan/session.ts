@@ -89,6 +89,11 @@ class RpcFailed extends Error {
   }
 }
 
+/** A continuation token already used by this listing would page forever. */
+function refuseRepeatedPageToken(seen: Set<string>, candidate: string | null, label: string): void {
+  if (candidate !== null && seen.has(candidate)) throw new SourceError('PROTOCOL', `${label} repeated a page token`);
+}
+
 export async function runScan(deps: ScanDeps): Promise<ScanOutcome> {
   return new ScanSession(deps).execute();
 }
@@ -262,9 +267,15 @@ class ScanSession {
     // mediaKey -> dedupKey, the first of each, as the first read saved them.
     const entries = new Map<string, string>();
     let token: string | null = null;
+    const seenTokens = new Set<string>();
     try {
       do {
-        const page = await this.request('album contents', () => this.deps.source.albumItemsPage(album.albumKey, album.authKey, token));
+        if (token !== null) seenTokens.add(token);
+        const page = await this.request('album contents', async () => {
+          const candidate = await this.deps.source.albumItemsPage(album.albumKey, album.authKey, token);
+          refuseRepeatedPageToken(seenTokens, candidate.nextPageToken, 'album contents');
+          return candidate;
+        });
         this.verifyAccount(page.accountFingerprint);
         for (const entry of page.entries) if (!entries.has(entry.mediaKey)) entries.set(entry.mediaKey, entry.dedupKey);
         token = page.nextPageToken;
@@ -297,7 +308,7 @@ class ScanSession {
       try {
         next = await this.request(label, async () => {
           const candidate = await fetchAndSave(token);
-          if (candidate !== null && seenTokens.has(candidate)) throw new SourceError('PROTOCOL', `${label} repeated a page token`);
+          refuseRepeatedPageToken(seenTokens, candidate, label);
           return candidate;
         });
       } catch (e) {

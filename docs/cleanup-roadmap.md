@@ -150,6 +150,101 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
   cover every case. Later, the user protects what the suggestions get wrong with their own tool: e.g.
   search "selfies", put them in an album (protected), dissolve it later. Album edits are a new write,
   which `AGENTS.md` allows only when asked for, so that is its own change.
+- 2026-11-13, going through the categories one by one on my library (about 17,000 photos), raw scores,
+  minimum score 0.
+- **Products and shopping**: very good. With the lead over the next category at 0.02, the counted photos
+  are right, and so are almost all of "just missed": on hover their runners-up are other clutter
+  categories, the case the lead over the other kind counts. Two close calls were rightly left out
+  (a drink, Ordinary scenes close behind; a gym ball in its packaging, "a sports game"). 0.018 adds
+  about 100 photos, still right. Switched to the **lead over the other kind**:
+  - 0.02: 840 photos (about 200 more), still right; most of "just missed" could go too.
+  - 0.01: 917, about 5 wrong (selfies in or in front of a shop). The rest are products on shelves or in
+    baskets and other objects (things packed for a move): none worth keeping.
+  - 0.008: 934, only 17 more: few photos are nearly tied between clutter and a counterweight. Checked
+    all of them: 16 I'd keep, mostly with a face in them. Rightly left out: my nephew with a screwdriver
+    and bottles of Fanta and Coke, two photos of people in IKEA.
+  - Faces lose too easily: People may need to be a stronger counterweight, or a face check that
+    doesn't depend on describing the scene. This pulls against the decision above (no counterweights
+    mixing people and places); to decide after going through all categories.
+- **Screenshots**: the model spots screens remarkably well, even the back of a phone or a screen turned
+  away, and that is the problem: a photo with a phone in it counts. "Strongest" is right; "just
+  missed" is mostly right to leave out (faces, a view from a plane window that looks like a map, a
+  photo of my skin), though about half of a sample of 10 were real screenshots. "Just counted" and
+  "weakest still counted" catch people holding phones (a man sunbathing with a phone, its screen not
+  visible), matched by "a screenshot of a phone screen".
+  - Lead over the other kind at 0.02: 314 photos, right except 3 at the end (people with a phone in
+    hand). At 0.01: 353, with about 14 wrong at the end (a credit card, faces, driving a boat past its
+    digital display, a gym selfie with People close behind). 0.01 is too loose here.
+  - A real screenshot can score high for People too: a screenshot of someone's Instagram selfie (with
+    Instagram's buttons) scored 0.691 as a screenshot and 0.679 as People. A stronger People counterweight
+    would lose it.
+  - Rethink: phone screenshots are already in Google Photos' own Screenshots folder, so Photo Cleaner
+    needn't suggest them (discussed in an earlier conversation, not recorded). Where it can add something:
+    photos of screens (a monitor, a smartwatch) and screenshots that aren't from this phone (from a
+    desktop, forwarded).
+- **Things to fix or sell**: useful but mixed; kept in the list. At minimum lead 0.01, about 390 photos;
+  at 0.02, about 290 and a bit better.
+  - Right: broken things, furniture for sale, evidence of damage (a rental flat): I take a lot of
+    evidence photos and don't want to keep them.
+  - Wrong, or memories: a friend washing a shoe in a bidet ("a leaking pipe"); photos of a van I wrecked,
+    taken as evidence for the police (broken, but a record to keep); many museum pieces and old buildings.
+    A museum warship's engine went in on "a leaking pipe" (0.647), 0.018 ahead of Old photos and
+    keepsakes ("an old printed photo", 0.629), then Labels and codes ("an appliance model plate"),
+    Meters, Travel ("inside a train"), Ordinary scenes. The category treats old, worn or broken as
+    clutter, but people photograph ruins, history and beauty in imperfection on purpose.
+  - Rightly left out ("just missed"): a run-down staircase in a converted factory with light art (a
+    rave), a castle ruin (Nature close behind), a run-down flat I viewed to buy (Ordinary scenes, "a
+    room in a house"), me in medieval armour (People, "a portrait of a person").
+  - Many IKEA photos: check the overlap with Products and shopping, which may suit things for sale
+    better (though that one is more about buying than selling).
+  - Judging it took care: I'd want to look at every photo before trashing. The question for this
+    category is whether it's consistent enough to be useful.
+- **Signs and timetables**: needs a tighter lead, 0.03 or 0.04.
+  - 0.02: 258 photos. The strongest are right and the first ~108 are good, but quality drops over the
+    last ~30. "Weakest still counted" and "just counted" are poor: only 2 or 3 of 10 are photos of a
+    sign (a no-laptops sign in a café). The rest are city life (people getting on a bus), a friend
+    reading a newspaper, a protest with placards, a carved old door, a cannabis shop's neon signs,
+    labelled museum pieces, a forwarded screenshot of police outside 10 Downing Street, and me next to a
+    poisonous snakes sign in Australia (a memory).
+  - The Sistine Chapel (angels holding banners with text) counted on Signs at 0.647, with Memes, Notes and
+    Documents behind it and Ordinary scenes at 0.623. A near-identical photo of it was "just missed",
+    because "art in a museum" scored 0.629 there: two almost identical photos, opposite results.
+  - Rightly left out: people photos, shop windows, an ordinary building, a digital sign saying "Doge"
+    (Pets and animals).
+  - 0.03: 206 photos. "Just counted" is all right, "weakest still counted" a bit better, and the snake
+    photo appears once. 0.04: 155, and the snake photo is still there.
+- **Photos of screens**: clean, one of the best so far.
+  - 0.02: 220 photos, every one with a screen in it (monitors, a smartwatch, people working on laptops,
+    TV shows I photographed). Unlike Screenshots, no photos that just have a phone in someone's hand and
+    no selfies: its descriptions ("a photo of a computer screen", "a photo of a TV screen") are narrower.
+  - 0.01: 273, still good, but too many people photos towards the end.
+  - Photos to keep (children or family by a computer), with what scored close behind:
+    - #3: Children ("a child playing") 0.670 behind 0.715; lead 0.045.
+    - #74: Children 0.646 behind 0.686; lead 0.040.
+    - #87: People ("friends together") 0.625 and Children 0.623 behind 0.682; lead 0.058.
+    - #115: Ordinary scenes and Children both 0.657 behind 0.678; lead 0.020.
+    - #145: a girl in glasses: People 0.642 and Children 0.641 behind 0.672; lead 0.031.
+    - #166: Ordinary scenes 0.638, People ("a family photo") 0.626 and Children 0.623 behind 0.669;
+      lead 0.030.
+    - #184: a selfie: People 0.614 behind 0.662; lead 0.048.
+  - Photos to trash that also show people (actors on a TV, a video call), with People behind:
+    - #199: People 0.614 (fifth); lead 0.029.
+    - #205: People 0.617; lead 0.033.
+    - #217: People ("a couple together") 0.620; lead 0.023.
+    - #63: People 0.638; lead 0.043.
+  - Their leads overlap (0.020–0.058 for the ones to keep, 0.023–0.043 for the ones to trash), so no
+    minimum lead separates them. What differs: in the ones to keep, Children scores high or several
+    people counterweights (People, Children, Celebrations) cluster just behind; in the ones to trash,
+    People comes alone and lower (#184, a selfie at 0.614, is the exception).
+- Across categories so far:
+  - Narrow descriptions that fit this model give cleaner sets, even if smaller (Photos of screens and
+    Products against Signs, Things to fix or sell and Screenshots). Consider rewriting the noisy ones
+    narrower.
+  - Not every category has to be good: put the reliable ones first in Search and the looser ones
+    lower. Users learn which ones suit how they take photos.
+  - **People, children, friends and family must weigh much more as counterweights**, especially when
+    several of them cluster just behind the top clutter category. Seen in Products, Screenshots and
+    Photos of screens. A problem to tackle.
 
 ### Judge and tune (developer page)
 
@@ -178,7 +273,11 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
 - [ ] Save about 20 per account: a new store, so `DB_VERSION` up once and `test/app/db.test.ts`
       updated. Or, with no database change, work them out when Search opens if that's fast enough
 - [ ] Chips in Search: "Parking spots · 480"; a chip opens exactly those photos, best match first;
-      More / Less like these as usual
+      More / Less like these as usual. As imagined on 2026-11-13: "627 photos of products and shopping ·
+      about 127 MB · View now". Clicking it shows them in the Search tab itself. It runs the suggestion with
+      the same categories, minimum score, minimum lead and scoring, not a text search for the category's
+      name, so it shows exactly what "Open all in a new tab" shows on the developer page. The size needs
+      each photo's file size: check whether the scan stores it
 - [ ] Search marks where a suggestion's photos end (Search only ranks today; it has no cut-off)
 - [ ] Texts from the model (`search/searchModel.ts`); `test/app/screens.test.tsx` covers chips;
       manual checks in `docs/extension-manual-checks.md`

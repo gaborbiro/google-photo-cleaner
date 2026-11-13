@@ -4,8 +4,9 @@ Implemented in extension 0.4.49. Direct collection only: no relay. All developer
 silent unless explicitly built with `--usage`. Consent is still required in a configured build.
 The GA4 property was set up on 2026-10-30, with its measurement ID and API secret in the
 repository's Actions settings. Real collection was verified on 2026-10-30: events arrive, and
-Realtime, DebugView and the funnels work. Still to verify with a 0.4.73 or later build: events kept
-before the answer land at the times they happened.
+Realtime, DebugView and the funnels work. The privacy policy covering it is published. Still to
+do: verify that events kept before the answer land at the times they happened (any build from
+0.4.73 on), and update the store's data-use disclosure.
 
 ## Configure a test property first
 
@@ -15,8 +16,11 @@ before the answer land at the times they happened.
    `measurementId` (the `G-…` value), `apiSecret`, and optional `debug: true` for the test property.
    Do not paste the secret into chat or commit the file. It is git-ignored, but is extractable from
    any configured extension bundle. This is the agreed direct-collection tradeoff.
-3. Set event/user retention to two months, disable reset on new activity, Google signals and
-   advertising integrations. Verify these settings before publishing the updated privacy policy.
+3. Set event and user retention to two months (user data defaults to 14), disable reset on new
+   activity, Google signals, user-provided data collection, granular location and device data
+   collection, and ads personalisation in every region (it defaults to allowed). Verify these
+   settings before publishing the updated privacy policy. All checked on the live property
+   2026-11-13.
 4. Run `npm run build -- --usage` from `extension` after incrementing the manifest patch version
    for that rebuild. Reload the extension and your Photos tab. Ordinary `npm run build` or
    `npm run check` produces a silent build even when a config file is present.

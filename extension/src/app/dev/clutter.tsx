@@ -1,10 +1,11 @@
 // Developer tool: suggested searches for clutter, worked out from this library's fingerprints, to judge
 // whether they are right and useful before they become part of the product (search/clutter.ts).
-// Reads the same data as Search; nothing is saved and nothing is trashed from here.
+// Reads the same data as Search; nothing is trashed from here. Only its own settings (weights, pooling,
+// minimum leads, the priority order) are kept, in this browser, to carry on tuning another day.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CATEGORIES, categoryList, categorySamples, countCategories, countLine, countSections, descriptionNorms, descriptionScores, evenSample, kindTotals, matchCaption, matchPhoto, moveCaption, movesLine, photoBreakdown, photoCaption, scoreSpread, scoringMoves, STARTING_SETTINGS, weakestMatches, type Breakdown, type CaptionPart, type LeadOver, type CategoryCount, type CategoryPhoto, type ClutterSettings, type DescriptionNorms, type ScoredCategory, type Scoring } from '../search/clutter';
+import { CATEGORIES, categoryList, categorySamples, clearWeights, countCategories, typedNumber, withMargin, withWeight, countLine, countSections, descriptionNorms, descriptionScores, evenSample, kindTotals, matchCaption, matchPhoto, moveCaption, movePriority, movesLine, photoBreakdown, photoCaption, readTuning, saveTuning, scoreSpread, scoringMoves, tuningLine, weakestMatches, type Breakdown, type CaptionPart, type Category, type LeadOver, type CategoryCount, type CategoryPhoto, type ClutterSettings, type DescriptionNorms, type Priority, type SavedTuning, type ScoredCategory, type Scoring, type Weighting } from '../search/clutter';
 import type { LibraryPhoto } from '../search/searchModel';
 import { searchDeps } from '../search/session';
 import { accountLabel } from '../shared/jobView';
@@ -32,6 +33,23 @@ const THUMB_PX = 160;
 const ZOOM_PX = 1024;
 
 const LIST = categoryList(CATEGORIES);
+/** Where the page keeps its settings in this browser. */
+const SAVED_KEY = 'dev-clutter-tuning';
+
+/** The saved settings, or the starting ones when none are saved or this browser keeps nothing. */
+function loadTuning(): { tuning: SavedTuning; notes: string[] } {
+  let text: string | null;
+  try {
+    text = localStorage.getItem(SAVED_KEY);
+  } catch (error) {
+    return { tuning: readTuning(null, CATEGORIES).tuning, notes: [`This browser keeps no settings for the page (${String(error)}); they start afresh.`] };
+  }
+  try {
+    return readTuning(text, CATEGORIES);
+  } catch (error) {
+    return { tuning: readTuning(null, CATEGORIES).tuning, notes: [`The saved settings couldn't be read (${error instanceof Error ? error.message : String(error)}); they start afresh.`] };
+  }
+}
 
 interface Worked {
   photos: Map<string, LibraryPhoto>;
@@ -45,6 +63,7 @@ interface Worked {
 interface HoverScoring {
   title: string | null;
   norms: DescriptionNorms | null;
+  weighting: Weighting;
 }
 
 /** Everything a tab showing a list of photos needs, handed over by the clutter page that opened it. */
@@ -78,7 +97,7 @@ function BreakdownCard({ breakdowns, side }: { breakdowns: TitledBreakdown[]; si
               {breakdown.rows.map((r) => (
                 <tr key={r.label} className={r.kind}>
                   <td className="mono">{r.score}</td>
-                  <td>{r.label}<span className="muted"> · {r.description}</span></td>
+                  <td>{r.label}<span className="muted"> · {r.description}{r.weight && ` (weight ${r.weight})`}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -217,12 +236,12 @@ function Thumb({ number, photo, preview, breakdowns, onZoom }: { number: number;
   );
 }
 
-function CategoryCard({ count, worked, norms, over, preview, openAll }: { count: CategoryCount; worked: Worked; norms: DescriptionNorms | null; over: LeadOver; preview: Preview; openAll: () => void }) {
+function CategoryCard({ count, worked, norms, weighting, over, preview, openAll }: { count: CategoryCount; worked: Worked; norms: DescriptionNorms | null; weighting: Weighting; over: LeadOver; preview: Preview; openAll: () => void }) {
   const [open, setOpen] = useState(false);
   const samples = useMemo(() => (open ? categorySamples(count, SAMPLE) : null), [open, count]);
   const tile = (p: CategoryPhoto): Tile => {
     const { thumbUrl, row } = shown(worked, p.mediaKey);
-    return { mediaKey: p.mediaKey, thumbUrl, caption: plain(photoCaption(p)), breakdowns: () => [{ title: null, breakdown: photoBreakdown(row, worked.scored, norms, over, BREAKDOWN_ROWS) }] };
+    return { mediaKey: p.mediaKey, thumbUrl, caption: plain(photoCaption(p)), breakdowns: () => [{ title: null, breakdown: photoBreakdown(row, worked.scored, norms, weighting, over, BREAKDOWN_ROWS) }] };
   };
   const grid = (title: string, photos: CategoryPhoto[]) =>
     photos.length > 0 && (
@@ -236,10 +255,10 @@ function CategoryCard({ count, worked, norms, over, preview, openAll }: { count:
       <summary>{countLine(count)} <span className="muted small">{count.category.descriptions.join(' · ')}</span></summary>
       {samples && (
         <>
-          {grid('Strongest matches', samples.strongest)}
-          {grid('Weakest still counted (lowest scores)', samples.weakest)}
-          {grid('Just counted: the smallest leads that still made it', samples.justCounted)}
-          {grid('Just missed: close calls with the largest leads, not counted', samples.justMissed)}
+          {grid('Best: the highest scores (Search will show these first)', samples.best)}
+          {grid('Riskiest: the smallest leads that still made it (Search will show these last, below “Show all”)', samples.riskiest)}
+          {grid('Lowest scores still counted (developer page only, to compare with Riskiest)', samples.lowestScores)}
+          {grid('Just missed: close calls with the largest leads, not counted (developer page only)', samples.justMissed)}
           <p className="clutter-sample-title">All {count.trashable.length.toLocaleString()} counted</p>
           <div className="buttons clutter-show-all"><button onClick={openAll}>Open all in a new tab</button></div>
         </>
@@ -248,24 +267,83 @@ function CategoryCard({ count, worked, norms, over, preview, openAll }: { count:
   );
 }
 
-function CategoryList() {
+/**
+ * A number that may be left empty ([value] undefined): typed as text, so a minus sign or a lone "0." can
+ * be typed on the way to a number; only what reads as a number is passed on.
+ */
+function OptionalNumber({ value, label, placeholder, onChange }: { value: number | undefined; label: string; placeholder: string; onChange: (value: number | undefined) => void }) {
+  const [text, setText] = useState(value === undefined ? '' : String(value));
+  // Changed from outside (cleared, another scoring): show it, unless the text already says it ("0.010" stays as typed).
+  useEffect(() => {
+    setText((t) => (typedNumber(t) === value ? t : value === undefined ? '' : String(value)));
+  }, [value]);
+  return (
+    <input
+      className="clutter-weight mono"
+      type="text"
+      inputMode="decimal"
+      aria-label={label}
+      placeholder={placeholder}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        const typed = typedNumber(e.target.value);
+        if (typed !== null) onChange(typed);
+      }}
+    />
+  );
+}
+
+/**
+ * Every category and description with its weight for the current scoring, clutter in the priority order
+ * with its own minimum lead, then the counterweights.
+ */
+function TuningList({ settings, scoring, priority, onSettings, onPriority }: { settings: ClutterSettings; scoring: Scoring; priority: Priority; onSettings: (change: (s: ClutterSettings) => ClutterSettings) => void; onPriority: (p: Priority) => void }) {
+  const byId = new Map(CATEGORIES.map((c) => [c.id, c]));
+  const clutterInOrder = priority.map((id) => byId.get(id)!);
+  const counterweights = CATEGORIES.filter((c) => c.kind === 'counterweight');
+  const units = scoring === 'raw' ? 'e.g. 0.02' : 'e.g. 0.2';
+  const row = (c: Category, place: number | null) => (
+    <div key={c.id} className="clutter-tuning-category">
+      <div className="clutter-tuning-head">
+        {place !== null && (
+          <span className="clutter-tuning-order">
+            <span className="mono">{place + 1}.</span>
+            <button aria-label={`Move ${c.label} up`} disabled={place === 0} onClick={() => onPriority(movePriority(priority, c.id, -1))}>↑</button>
+            <button aria-label={`Move ${c.label} down`} disabled={place === priority.length - 1} onClick={() => onPriority(movePriority(priority, c.id, 1))}>↓</button>
+          </span>
+        )}
+        <strong className={`clutter-kind-${c.kind}`}>{c.label}</strong>
+        <label className="small">weight <OptionalNumber value={settings.categoryWeights[c.id]} label={`${c.label} weight`} placeholder="0" onChange={(w) => onSettings((s) => ({ ...s, categoryWeights: withWeight(s.categoryWeights, c.id, w) }))} /></label>
+        {c.kind === 'clutter' && (
+          <label className="small">minimum lead <OptionalNumber value={settings.margins[c.id]} label={`${c.label} minimum lead`} placeholder={String(settings.margin)} onChange={(m) => onSettings((s) => ({ ...s, margins: withMargin(s.margins, c.id, m) }))} /></label>
+        )}
+      </div>
+      <div className="clutter-tuning-descriptions">
+        {c.descriptions.map((d) => (
+          <label key={d} className="small">
+            <OptionalNumber value={settings.descriptionWeights[d]} label={`${d} weight`} placeholder="0" onChange={(w) => onSettings((s) => ({ ...s, descriptionWeights: withWeight(s.descriptionWeights, d, w) }))} /> {d}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
   return (
     <details className="clutter-categories">
-      <summary>Categories: {LIST.summary}</summary>
-      {LIST.groups.map((g) => (
-        <div key={g.kind}>
-          <h3>{g.title} · {g.count}</h3>
-          <p className="muted small">{g.note}</p>
-          <dl className="clutter-list">
-            {g.categories.map((c) => (
-              <div key={c.id}>
-                <dt>{c.label}</dt>
-                <dd>{c.descriptions.join(' · ')}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      ))}
+      <summary>Categories, weights and priority: {LIST.summary}</summary>
+      <p className="muted small">
+        A weight is added to a score before photos are compared ({units}, for {scoring === 'raw' ? 'raw scores' : 'evened-out scores'}; each scoring keeps its own). A
+        category&apos;s weight is added to all its descriptions. Strengthening a counterweight, or weakening a clutter description, takes photos away from clutter.
+        An empty minimum lead uses the shared one.
+      </p>
+      <div className="buttons">
+        <button onClick={() => onSettings(clearWeights)}>Clear weights and minimum leads ({scoring === 'raw' ? 'raw' : 'evened out'})</button>
+      </div>
+      <h3>Clutter, in the order suggestions are shown · {clutterInOrder.length}</h3>
+      {clutterInOrder.map((c, i) => row(c, i))}
+      <h3>Counterweights · {counterweights.length}</h3>
+      <p className="muted small">{LIST.groups.find((g) => g.kind === 'counterweight')!.note}</p>
+      {counterweights.map((c) => row(c, null))}
     </details>
   );
 }
@@ -278,10 +356,23 @@ function Clutter() {
   const [progress, setProgress] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [scoring, setScoring] = useState<Scoring>('raw');
-  const [over, setOver] = useState<LeadOver>('next');
-  const [settings, setSettings] = useState<Record<Scoring, ClutterSettings>>(STARTING_SETTINGS);
+  const [loaded] = useState(loadTuning);
+  const [over, setOver] = useState<LeadOver>(loaded.tuning.over);
+  const [settings, setSettings] = useState<Record<Scoring, ClutterSettings>>(loaded.tuning.settings);
+  const [priority, setPriority] = useState<Priority>(loaded.tuning.priority);
+  const [saveProblem, setSaveProblem] = useState<string | null>(null);
   const [minPhotos, setMinPhotos] = useState(20);
-  const setting = (key: keyof ClutterSettings) => (value: number) => setSettings((s) => ({ ...s, [scoring]: { ...s[scoring], [key]: value } }));
+  const setting = (key: 'minScore' | 'margin' | 'pooling') => (value: number) => setSettings((s) => ({ ...s, [scoring]: { ...s[scoring], [key]: value } }));
+  const changeSettings = (change: (s: ClutterSettings) => ClutterSettings) => setSettings((s) => ({ ...s, [scoring]: change(s[scoring]) }));
+  // Kept in this browser, so tuning can carry on another day.
+  useEffect(() => {
+    try {
+      localStorage.setItem(SAVED_KEY, saveTuning({ settings, over, priority }));
+      setSaveProblem(null);
+    } catch (error) {
+      setSaveProblem(`These settings couldn't be kept in this browser (${String(error)}); note them down before closing the page.`);
+    }
+  }, [settings, over, priority]);
 
   const workOut = async () => {
     setWorked(null);
@@ -319,8 +410,8 @@ function Clutter() {
 
   const norms = worked && scoring === 'evened' ? worked.norms : null;
   // Both scorings are matched, so what evening out moves can be compared; the page shows the chosen one.
-  const rawMatches = useMemo(() => (worked ? [...worked.rows].map(([key, row]) => matchPhoto(key, row, worked.scored, null)) : null), [worked]);
-  const evenedMatches = useMemo(() => (worked ? [...worked.rows].map(([key, row]) => matchPhoto(key, row, worked.scored, worked.norms)) : null), [worked]);
+  const rawMatches = useMemo(() => (worked ? [...worked.rows].map(([key, row]) => matchPhoto(key, row, worked.scored, null, settings.raw)) : null), [worked, settings.raw]);
+  const evenedMatches = useMemo(() => (worked ? [...worked.rows].map(([key, row]) => matchPhoto(key, row, worked.scored, worked.norms, settings.evened)) : null), [worked, settings.evened]);
   const matches = scoring === 'raw' ? rawMatches : evenedMatches;
   const moves = useMemo(
     () => (worked && rawMatches && evenedMatches ? scoringMoves(rawMatches, evenedMatches, [...CATEGORIES], worked.photos, settings, over) : null),
@@ -328,7 +419,7 @@ function Clutter() {
   );
   const counts = useMemo(() => (worked && matches ? countCategories(matches, [...CATEGORIES], worked.photos, settings[scoring], over) : null), [worked, matches, settings, scoring, over]);
   const spread = useMemo(() => (matches ? scoreSpread(matches, over) : []), [matches, over]);
-  const sections = counts ? countSections(counts, minPhotos) : null;
+  const sections = counts ? countSections(counts, minPhotos, priority) : null;
   const preview: Preview = useCallback((thumbUrl: string, sizePx: number) => deps!.preview(thumbUrl, sizePx), [deps]);
 
   // Tabs opened to show all of a category's finds ask this page for them, by the id in their address.
@@ -352,7 +443,7 @@ function Clutter() {
       settings: `${settingsText(scoring)}, lead over ${over === 'next' ? 'the next category' : 'the other kind'}`,
       photos,
       scored: worked.scored,
-      scorings: [{ title: null, norms }],
+      scorings: [{ title: null, norms, weighting: settings[scoring] }],
       over,
     });
   };
@@ -364,7 +455,7 @@ function Clutter() {
       settings: `Raw: ${settingsText('raw')}. Evened out: ${settingsText('evened')}. Lead over ${over === 'next' ? 'the next category' : 'the other kind'}. Spread evenly from the highest evened-out score to the lowest; each caption says where the photo went, raw → evened out, counterweights in green`,
       photos: sample.map((m) => ({ ...shown(worked, m.mediaKey), caption: moveCaption(m, [...CATEGORIES]) })),
       scored: worked.scored,
-      scorings: [{ title: 'Raw scores', norms: null }, { title: 'Evened out', norms: worked.norms }],
+      scorings: [{ title: 'Raw scores', norms: null, weighting: settings.raw }, { title: 'Evened out', norms: worked.norms, weighting: settings.evened }],
       over,
     });
   };
@@ -376,11 +467,11 @@ function Clutter() {
       settings: 'Raw scores, every analysed photo, protected ones too. Lowest best score first; each caption gives that score and the category and description it came from, counterweights in green. What these photos show is what the list of descriptions may be missing',
       photos: weakest.map((m) => ({ ...shown(worked, m.mediaKey), caption: matchCaption(m, [...CATEGORIES]) })),
       scored: worked.scored,
-      scorings: [{ title: null, norms: null }],
+      scorings: [{ title: null, norms: null, weighting: settings.raw }],
       over,
     });
   };
-  const settingsText = (s: Scoring) => `${s === 'raw' ? 'raw scores' : 'evened out'}, minimum score ${settings[s].minScore}, minimum lead ${settings[s].margin}`;
+  const settingsText = (s: Scoring) => tuningLine(s, settings[s]);
   const hand = (forAccount: string, finds: Omit<AllFinds, 'account'>) => {
     const id = crypto.randomUUID();
     handovers.current.set(id, { account: forAccount, ...finds });
@@ -388,7 +479,7 @@ function Clutter() {
   };
 
   const number = (value: number, set: (n: number) => void, step: number) => (
-    <input type="number" value={value} step={step} onChange={(e) => Number.isFinite(e.target.valueAsNumber) && set(e.target.valueAsNumber)} />
+    <input type="number" value={value} step={step} min={0} onChange={(e) => Number.isFinite(e.target.valueAsNumber) && e.target.valueAsNumber >= 0 && set(e.target.valueAsNumber)} />
   );
 
   return (
@@ -398,11 +489,13 @@ function Clutter() {
         <p className="account mono">{account ? accountLabel(account, answer?.account?.email ?? null) : 'No account yet'}</p>
         <p className="muted">
           Each analysed photo goes to the one category it looks most like, from {LIST.summary}, and counts only when that category is clearly
-          ahead (see Settings). Hover over a photo to see how it scored. Nothing is saved or trashed from here. Keep a Google Photos tab open for the previews.
+          ahead (see Settings). Hover over a photo to see how it scored. Nothing is trashed from here; the settings are kept in this browser. Keep a Google Photos tab open for the previews.
         </p>
       </header>
       <section className="card">
-        <CategoryList />
+        {loaded.notes.map((note) => <p key={note} className="warn small">{note}</p>)}
+        {saveProblem && <p className="warn small">{saveProblem}</p>}
+        <TuningList settings={settings[scoring]} scoring={scoring} priority={priority} onSettings={changeSettings} onPriority={setPriority} />
       </section>
       <section className="card">
         <div className="buttons"><button className="primary" disabled={progress !== null} onClick={() => void workOut()}>Work out suggestions</button></div>
@@ -428,7 +521,15 @@ function Clutter() {
           <p className="muted small">
             {over === 'next'
               ? 'The lead is measured against the next category of either kind, so a photo close between two kinds of clutter (a receipt or a document?) is a close call.'
-              : 'Clutter leads over the best counterweight, and a counterweight over the best clutter. Two kinds of clutter close together still count: the photo is clutter either way. With the same minimum lead this only adds photos.'}
+              : 'Clutter leads over the counterweights, and a counterweight over the clutter, each kind pooled. Two kinds of clutter close together still count: the photo is clutter either way. With the same minimum lead this only adds photos.'}
+          </p>
+          <div className="row">
+            <label>Pooling {number(settings[scoring].pooling, setting('pooling'), scoring === 'raw' ? 0.005 : 0.05)}</label>
+          </div>
+          <p className="muted small">
+            Several categories close together count for more than the best of them: each votes exp(−gap ÷ pooling), 1 when level with the best and near
+            nothing three times the pooling behind, and the pooled score is the best + pooling × ln(sum of votes). Two level add pooling × 0.69, three
+            pooling × 1.10. 0: only the best counts, as before.
           </p>
           <p className="mono">{counts.photos.toLocaleString()} photos matched</p>
           <p className="mono">{kindTotals(counts)}</p>
@@ -456,7 +557,7 @@ function Clutter() {
         <section className="card">
           <h2>Suggested searches</h2>
           {sections.suggested.length === 0 && <p className="muted">None with these settings.</p>}
-          {sections.suggested.map((c) => <CategoryCard key={c.category.id} count={c} worked={worked} norms={norms} over={over} preview={preview} openAll={() => openAll(c)} />)}
+          {sections.suggested.map((c) => <CategoryCard key={c.category.id} count={c} worked={worked} norms={norms} weighting={settings[scoring]} over={over} preview={preview} openAll={() => openAll(c)} />)}
           {sections.tooFew && <p className="muted small">{sections.tooFew}</p>}
         </section>
       )}
@@ -464,7 +565,7 @@ function Clutter() {
         <section className="card">
           <h2>Counterweights (never suggested)</h2>
           <p className="muted small">Where people, children, holidays and ordinary photos went. A clutter photo here is one the suggestions missed; check these hold the photos that should stay.</p>
-          {sections.counterweights.map((c) => <CategoryCard key={c.category.id} count={c} worked={worked} norms={norms} over={over} preview={preview} openAll={() => openAll(c)} />)}
+          {sections.counterweights.map((c) => <CategoryCard key={c.category.id} count={c} worked={worked} norms={norms} weighting={settings[scoring]} over={over} preview={preview} openAll={() => openAll(c)} />)}
         </section>
       )}
     </main>
@@ -515,7 +616,7 @@ function AllFindsPage({ id }: { id: string }) {
       finds
         ? finds.photos.map((p): Tile => ({
             ...p,
-            breakdowns: () => finds.scorings.map((s) => ({ title: s.title, breakdown: photoBreakdown(p.row, finds.scored, s.norms, finds.over, BREAKDOWN_ROWS) })),
+            breakdowns: () => finds.scorings.map((s) => ({ title: s.title, breakdown: photoBreakdown(p.row, finds.scored, s.norms, s.weighting, finds.over, BREAKDOWN_ROWS) })),
           }))
         : [],
     [finds],

@@ -236,6 +236,22 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
     minimum lead separates them. What differs: in the ones to keep, Children scores high or several
     people counterweights (People, Children, Celebrations) cluster just behind; in the ones to trash,
     People comes alone and lower (#184, a selfie at 0.614, is the exception).
+- **Accidental shots** (2026-11-18): the strongest are right, the weakest still counted are bad.
+  - Wrong, weakest still counted:
+    - A dear memory, a diver underwater, on "a finger covering the camera lens" (0.638). Nature
+      ("a lake") 0.610, People ("a selfie") 0.606 and Pets ("an animal in nature") 0.600 all close
+      behind.
+    - Two photos of an art exhibition on "a photo of the floor": 0.637 with Ordinary scenes, People and
+      Travel at 0.608–0.614; 0.642 with People 0.618 and Children 0.615.
+  - "Just counted" is mostly all right; two wrong:
+    - A church interior panorama, "a photo of the floor" 0.665: Travel ("a famous landmark") 0.645,
+      People and Ordinary scenes ("art in a museum") 0.636, Old photos 0.626.
+    - A palace's painted ceiling, "a photo of a ceiling" 0.688: Ordinary scenes ("art in a museum")
+      0.666, People 0.647, Travel 0.627, Old photos 0.622.
+  - Rightly left out ("just missed"): a slab on a wooden floor (0.710, Ordinary scenes 0.690); a hotel
+    lobby with people (0.664, People 0.645, Travel 0.640, Ordinary scenes 0.637); a cloister corridor
+    (0.665, Old photos 0.646, Travel 0.639, Ordinary scenes 0.638).
+  - "A photo of the floor" and "a photo of a ceiling" match architecture and interiors.
 - Across categories so far:
   - Narrow descriptions that fit this model give cleaner sets, even if smaller (Photos of screens and
     Products against Signs, Things to fix or sell and Screenshots). Consider rewriting the noisy ones
@@ -253,8 +269,35 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
 - [ ] Check "Counterweights": people and holiday photos there, not in clutter; note clutter found there
 - [ ] Compare the lead over the next category with the lead over the other kind: are the photos it
       adds real clutter? Keep the better one, and drop the switch
-- [ ] Several counterweights close behind one clutter category (People, Children and Celebrations all
-      just under Products): count how often it happens before deciding whether it needs a rule
+- [x] Several counterweights close behind one clutter category (People, Children and Celebrations all
+      just under Products): it happens in most wrong photos (Products, Screenshots, Photos of screens,
+      Accidental shots). Decided 2026-11-18: pool them, below
+- [x] **Pooling** (decided 2026-11-18; built in 0.5.21): the lead is pooled clutter minus pooled counterweights, each
+      kind pooled as `best + T × ln(Σ exp((score − best) / T))`. Each category's vote is
+      `exp(−gap/T)`: 1 when level with the best, 0.37 at T behind, near 0 at 3T behind. A lone category
+      adds nothing, 2 tied add T·ln 2, and 3 tied add T·ln 3. A slider for T, starting at 0.02. Worked
+      by hand from the hover cards at T = 0.02: all 5 wrong Accidental shots are left out, and 3 of the 7
+      wrong Photos of screens. 2 of 4 TV photos to trash are lost, the safe direction
+- [x] **Weights** (decided 2026-11-18; built in 0.5.21, kept in the browser): a weight per category and per description, about −0.05 to
+      +0.05, added to its scores before comparing (a category's weight to all its descriptions).
+      Strengthening a counterweight or weakening a clutter description takes photos away from clutter.
+      Set by hand on the developer page; later learned (milestone 6). The hover card shows each step:
+      score, weight, pooled score, lead. Example: "a child playing" at +0.03 leaves out #74 (a boy at a
+      computer), with lead 0.012 instead of 0.035
+- [x] **A minimum lead per category** (built in 0.5.21), defaulting to the shared one: Signs needs 0.03–0.04, Products is
+      fine at 0.01
+- [ ] **Keep the minimum score**, today 0 (off): it guards against photos nothing describes well, where
+      two poor matches can still be far apart. Choose it while tuning
+- [x] **A priority order of the clutter categories** (built in 0.5.21), re-orderable on the developer page: the order the
+      suggestions appear in Search. Museum pieces, churches and old machinery should rank lower, not be
+      hidden
+- [x] Accidental shots: remove "a photo of the floor" and "a photo of a ceiling" (they match
+      architecture and interiors; decided 2026-11-18). Milestone 2's quality numbers are the better
+      signal
+- [x] The developer page's samples closer to Search's (built in 0.5.21): **Best** (as Search shows it), **Riskiest**
+      (the smallest leads, not repeating Best; most wrong photos so far had small leads, and pooling
+      folds close counterweights into the lead), and, for the developer page only, **Lowest scores**
+      (to compare with Riskiest until lead alone proves enough) and **Just missed**
 - [ ] Compare raw and evened-out scores: does evening out move photos like the supermarket selfie to
       People without losing real clutter? Keep the better one, and drop the switch
 - [ ] Refine the list: reword or split noisy categories, drop useless ones (descriptions of places
@@ -279,6 +322,12 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
       name, so it shows exactly what "Open all in a new tab" shows on the developer page. The size needs
       each photo's file size: check whether the scan stores it
 - [ ] Search marks where a suggestion's photos end (Search only ranks today; it has no cut-off)
+- [ ] A suggestion's photos (decided 2026-11-18): all ticked for the trash; the user un-ticks what to
+      keep. The 10 best on top and the 10 riskiest at the bottom, with **Show all** between them, so the
+      riskiest are seen without leading with them. A sort menu (Best, Riskiest, Newest, Oldest…) that
+      remembers the last choice, Best by default. Every photo is still checked against the protection
+      rules before it's trashed, as Search's sweep does now
+- [ ] Suggestions in the priority order (developer page now, learned in milestone 6)
 - [ ] Texts from the model (`search/searchModel.ts`); `test/app/screens.test.tsx` covers chips;
       manual checks in `docs/extension-manual-checks.md`
 
@@ -349,7 +398,21 @@ The one that would feel like the app knows you, and the riskiest for memories.
   trash this".
 - Could feed on quick keep/trash swipes through a suggestion, getting better as you go.
 - Needs enough decisions first, so only after milestones 1–4 have real users.
-- Ranking for review only, never "select all".
+- Ranking for review only, never "select all". *(Replaced on 2026-11-18 for milestone 1's suggestions:
+  their photos come all ticked, with the riskiest shown; see milestone 1.)*
+- Decided 2026-11-18, for milestone 1's suggestions:
+  - It learns the weights and the priority order that the developer page sets by hand (milestone 1).
+  - Order: a suggestion the user trashes more from moves up (the share of shown photos trashed,
+    starting from the shipped order so one bad look doesn't bury a category).
+  - Weights: an un-ticked photo means "keep". Its clutter description weakens and the counterweights
+    behind it strengthen. A small model fitted to the decisions, not ad-hoc nudges.
+  - **Stricter only**, or loosening capped: it learns only from photos it showed, so it knows what to
+    leave out. Making suggestions looser (a clutter description stronger, a counterweight weaker)
+    would add photos nobody has judged.
+  - The learned weights are valuable: kept per Google account and **backed up to Chrome's synced
+    storage** (`chrome.storage.sync`; a few kilobytes of numbers, no new permission; it follows the
+    Chrome profile, not the Google account). "Erase Photo Cleaner's data" warns about weights not yet
+    backed up and offers to back them up first.
 
 ## Later, not planned
 

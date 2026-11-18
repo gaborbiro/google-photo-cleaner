@@ -190,7 +190,7 @@ describe('from a real-looking answer to the copied diagnostics', () => {
     });
 
     const job = endJob(reportProgress(startScanJob(FINGERPRINT, NOW), progress.at(-1)!, NOW), 'failed', INCOMPATIBLE_TEXT, NOW);
-    const text = diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: job, analysis: null, problems: [entry!], runs: [], report: await latestReport(inventory, FINGERPRINT, ALL_PROTECTED, NOW) });
+    const text = diagnosticsText({ version: '0.4.13', nowMs: NOW, scan: job, analysis: null, problems: [entry!], runs: [], report: await latestReport(inventory, FINGERPRINT, ALL_PROTECTED, NOW), usageAnswer: 'yes', usageConfigured: true });
     expect(text).toContain('scan: album list');
     expect(text).toContain('Request: listAlbumsPage (Z5xsfc) · sent with nothing');
     expect(text).toContain('Gave up at: [0][1]');

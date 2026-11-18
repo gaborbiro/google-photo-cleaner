@@ -1044,6 +1044,7 @@ describe('clicks and keys reach what they should', () => {
       expect(copied).toContain('1. ');
       expect(copied).toContain('scan: album list\n   PROTOCOL · Album has 10 fields, expected 9 or 12\n   Request: listAlbumsPage (Z5xsfc) · sent with nothing\n   Gave up at: [0][1]');
       expect(copied).not.toContain('someone@example.com');
+      expect(copied).toMatch(/\n\nUsage statistics: [^\n]+$/); // whether the problem shows up in usage statistics
 
       // What it copies can be looked at first.
       expect(library.querySelector('textarea')).toBeNull();

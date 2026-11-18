@@ -13,6 +13,9 @@ import { IndexedDbPreferences, type ProtectionChoices } from '../shared/preferen
 import { launchButton, surfaceView, type LaunchButton, type SurfaceView } from '../shared/jobView';
 import { IndexedDbReviewStore, type ReviewSummary } from '../duplicates/reviewStore';
 import { IndexedDbProblemLog, keepProblemsHere, type ProblemEntry, type RunEntry } from '../shared/problemLog';
+import { CHANGES_CHANNEL } from '../shared/constants';
+import type { UsageAnswer } from '../shared/usage';
+import { IndexedDbUsageStore } from '../shared/usageStore';
 
 export const store = new IndexedDbJobStore();
 const inventory = new IndexedDbInventoryStore();
@@ -32,6 +35,24 @@ export function useClock(everyMs: number): number {
     return () => clearInterval(timer);
   }, [everyMs]);
   return now;
+}
+
+/** The answer to the usage statistics question, kept up to date; undefined while loading, null if it can't be read. */
+export function useUsageAnswer(): UsageAnswer | null | undefined {
+  const [answer, setAnswer] = useState<UsageAnswer | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    const usage = new IndexedDbUsageStore();
+    const load = () => { void usage.get().then((state) => { if (alive) setAnswer(state.answer); }, () => { if (alive) setAnswer(null); }); };
+    load();
+    const channel = new BroadcastChannel(CHANGES_CHANNEL);
+    channel.onmessage = (event) => { if (event.data?.kind === 'usage-changed' || event.data?.kind === 'erased') load(); };
+    return () => {
+      alive = false;
+      channel.close();
+    };
+  }, []);
+  return answer;
 }
 
 /** The problem log's problems and run summaries, newest first, kept up to date; undefined while loading. */

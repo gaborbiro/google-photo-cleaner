@@ -1,13 +1,16 @@
 # Usage events and funnels
 
-Status: code implemented 2026-10-26 in 0.4.49; live GA configuration/report verification and policy/store
-publication remain. Ordinary builds send nothing. See [setup and release checks](usage-events-setup.md).
+Status: code implemented 2026-10-26 in 0.4.49; since 0.4.73 the question waits until the first
+scan has finished, and events are kept on the computer until the answer. Live collection verified
+and the privacy policy published (2026-10-30). Still to do: check that events kept before the
+answer land at their own times, and update the store's data-use disclosure. Ordinary builds send
+nothing. See [setup and release checks](usage-events-setup.md).
 This develops the 2026-10-24 draft. The design below records the proposed reporting contract; the
 exact implemented event names/fields are allowlisted in `extension/src/app/shared/usage.ts`.
 The decision to ask first and send nothing until agreement is retained. User decision: send
 directly to GA4 with no relay; accept the extractable submission secret and use reporting checks
 to investigate suspicious traffic, without claiming event authenticity. See
-[analytics-findings.md](analytics-findings.md) for verified external requirements and citations.
+[analytics-findings.md](archive/analytics-findings.md) for verified external requirements and citations.
 
 ## What we want to learn
 

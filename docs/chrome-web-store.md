@@ -186,16 +186,22 @@ fetch model files (CORS), so the extension needs no access to its sites.
 **Remote code:** No, I am not using remote code. (The AI runtime, ONNX Runtime Web, is packed into the
 extension under `ort/`; the model download is weights, which are data.)
 
-**Data usage**, what to tick: **Website content** (the photo list and previews read from
-photos.google.com). It is used only on the computer and never sent to us. Tick the three
-certifications (no selling or transferring data, no unrelated uses, no creditworthiness or lending).
+**Data usage**, what to tick:
+- **Website content** (the photo list and previews read from photos.google.com). It is used only on
+  the computer and never sent to us.
+- **User activity**: the optional usage statistics (which screens were opened, how scans and reviews
+  went, whether photos were approved for the trash), sent directly to Google Analytics only after
+  consent. No photo, account or search contents are sent.
 
-**Before the analytics release:** update the live listing and disclosures together with the privacy
-policy. Disclose optional **User activity** and the random installation identifier (check the current
-dashboard's identifier category), transferred directly to Google Analytics after consent. No photo,
-account or search contents are transferred. Verify event/user retention is two months with reset
-disabled and advertising features off. See [usage reporting setup](usage-events-setup.md). These
-repository notes do not change the live store answers or publish the policy.
+The random installation identifier has no category of its own in the dashboard (checked 2026-11-13):
+it only groups the User activity events, is not personal information, and is described in the
+privacy policy. Tick the three certifications (no selling or transferring data, no unrelated uses,
+no creditworthiness or lending).
+
+Updated in the live dashboard on 2026-11-13, with the 0.5.12 submission (listing and privacy policy
+already mention the optional usage statistics). Google Analytics must keep event/user retention at
+two months, reset on new activity off, and Google signals and advertising off, as the policy
+promises; see [usage reporting setup](usage-events-setup.md).
 
 **Privacy policy URL:** https://gaborbiro.github.io/google-photo-cleaner/privacy.html
 

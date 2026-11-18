@@ -60,12 +60,12 @@ describe("a diagnostic of Google's answer", () => {
   });
 
   it('a page that says it ended in a new way: the marker position', async () => {
-    const result = await runOp(env(() => envelope('Z5xsfc', [albums(2), null, 0])), 'listAlbumsPage', {});
+    const result = await runOp(env(() => envelope('Z5xsfc', [albums(2), 0, [1]])), 'listAlbumsPage', {});
     const d = diagnosticOf(result);
     expect(result).toMatchObject({ ok: false, error: { message: 'Albums page: unexpected next-page marker' } });
     expect(d.at).toEqual([1]);
-    expect(d.focus).toBeNull(); // null is the structure of null
-    expect(d.answer).toEqual([[expect.any(Array), expect.any(Array)], null, 0]);
+    expect(d.focus).toBe(0); // small numbers are kept as they are
+    expect(d.answer).toEqual([[expect.any(Array), expect.any(Array)], 0, [1]]);
     expectNoSecrets(result);
   });
 

@@ -122,9 +122,12 @@ const ALBUM_KEY = /^AF1Qip(?:[A-Za-z0-9_-]{38}|[A-Za-z0-9_-]{64})$/;
 /**
  * How a listing says it has no more pages, as seen in real answers: the album list, the library
  * and the trash leave the marker out (the answer simply ends before it), album contents and
- * favourites send an empty string.
+ * favourites send an empty string. The album list has also been seen sending null in the marker's
+ * place, followed by fields of its own ([albums, null, [1], [1]], November 2026): Google's answers
+ * drop empty fields only at the end, so an empty marker before other fields is written as null.
+ * 'absent-or-null' accepts both; it is used for the album list and the trash, the same request style.
  */
-type ListEnd = 'absent' | 'empty-string';
+type ListEnd = 'absent' | 'absent-or-null' | 'empty-string';
 
 /**
  * The marker at [index], or null when the listing has ended. Most pages without items can only be
@@ -139,7 +142,7 @@ function nextMarker(raw: unknown[], index: number, end: ListEnd, itemCount: numb
   }
   const ended = itemCount === 0
     ? value === undefined || value === null || value === ''
-    : end === 'absent' ? index >= raw.length : value === '';
+    : end === 'empty-string' ? value === '' : index >= raw.length || (end === 'absent-or-null' && value === null);
   if (ended) return null;
   throw protocol(`${what}: unexpected next-page marker`, [index]);
 }
@@ -331,8 +334,8 @@ export function normalizeAlbumsPage(payload: unknown): AlbumsPageDto {
         authKey: stringOrNull(meta[5]),
       };
     })),
-    // The last page is just [albums].
-    nextPageToken: nextMarker(raw, 1, 'absent', rawAlbums.length, 'Albums page', true),
+    // The last page is [albums], or [albums, null, …] when Google sends fields after the marker.
+    nextPageToken: nextMarker(raw, 1, 'absent-or-null', rawAlbums.length, 'Albums page', true),
   };
 }
 
@@ -379,7 +382,8 @@ export function normalizeTrashPage(payload: unknown): TrashPageDto {
   const items = rows(raw, 0, TRASH_ROW_LENGTHS, 'Trash item', false);
   return {
     dedupKeys: items.map((item, i) => within([0, i, 3], () => requireKey(item[3], DEDUP_KEY, 'dedupKey'))),
-    // The last page is just [items] (one real page seen, of a bin with a few photos).
-    nextPageToken: nextMarker(raw, 1, 'absent', items.length, 'Trash page'),
+    // The last page is just [items] (one real page seen, of a bin with a few photos). Null is read
+    // as the end too, as on the album list, in case the trash gains fields after the marker.
+    nextPageToken: nextMarker(raw, 1, 'absent-or-null', items.length, 'Trash page'),
   };
 }

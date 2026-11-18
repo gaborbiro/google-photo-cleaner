@@ -1,7 +1,7 @@
 # Extension analytics: findings
 
 Researched 2026-10-26 against primary sources. This is research, not an implementation or a legal
-determination. The proposed delivery plan is [usage-events.md](usage-events.md).
+determination. The proposed delivery plan is [usage-events.md](../usage-events.md).
 
 User decision after this research: no relay; use direct extension-to-GA collection and accept an
 extractable submission secret. The general credential guidance below remains a verified fact,

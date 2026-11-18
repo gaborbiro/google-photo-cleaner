@@ -79,7 +79,7 @@ the published release assets remain available until explicitly removed.
 
 ## Local verification
 
-`cd extension && npm run check` still checks the source without enabling Analytics, even if the local
+`cd extension && npm run full` still checks the source without enabling Analytics, even if the local
 test file exists. Automated tests exercise choosing the release version, PR/branch refusal, environment-only
 production configuration, draft upload/publish ordering, failed uploads and safe retries. They make no
 GitHub release requests. A real hosted Actions run remains the acceptance check for repository

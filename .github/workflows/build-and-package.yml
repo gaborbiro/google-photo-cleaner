@@ -52,9 +52,9 @@ jobs:
           node scripts/releaseVersion.mjs $tags
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Kotlin and extension checks (npm run check)
+      - name: Kotlin and extension checks (npm run full)
         working-directory: extension
-        run: npm run check
+        run: npm run full
 
       - name: Build release ZIP with production Analytics settings
         if: steps.version.outputs.version != ''

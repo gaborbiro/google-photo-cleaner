@@ -23,7 +23,7 @@ do: verify that events kept before the answer land at the times they happened (a
    2026-11-13.
 4. Run `npm run build -- --usage` from `extension` after incrementing the manifest patch version
    for that rebuild. Reload the extension and your Photos tab. Ordinary `npm run build` or
-   `npm run check` produces a silent build even when a config file is present.
+   `npm run full` produces a silent build even when a config file is present.
 5. Release ZIPs are built on GitHub after master pushes; see [automatic releases](github-releases.md).
    GitHub supplies `PHOTO_CLEANER_GA4_MEASUREMENT_ID` and `PHOTO_CLEANER_GA4_API_SECRET` from the
    repository variable/secret. To run `npm run package` locally, copy `local.properties.example` to

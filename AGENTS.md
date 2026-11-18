@@ -19,7 +19,7 @@ Run this before you call a change done. It must pass, and it is what CI runs (`.
 
 ```
 cd extension
-npm run check
+npm run full
 ```
 
 It runs, in order, stopping at the first failure:
@@ -32,10 +32,10 @@ One-time setup on a new machine (needs network):
 - `cd extension && npm ci`
 
 The extension's tests and build refuse to run against an old copy of the shared Kotlin rules. If they
-say so, run `npm run kotlin` (or `npm run check`, which does it).
+say so, run `npm run kotlin` (or `npm run full`, which does it).
 
 **Extension versions.** Whenever you change and rebuild the extension, increment the patch (third)
-component of its version before rebuilding, including `npm run check`, in its source manifest
+component of its version before rebuilding, including `npm run full`, in its source manifest
 (`extension/static-app/manifest.json`). Verify that the built manifest has the same new version and
 report that version to the user, so they can click Reload in Chrome's extensions
 page and confirm the new fixes or improvements are loaded.

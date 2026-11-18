@@ -51,10 +51,10 @@ Use **JDK 22** and **Node 24**. The [agent and contributor guide](AGENTS.md) cov
 ```sh
 cd extension
 npm ci
-npm run check
+npm run full
 ```
 
-`npm run check` builds the shared Kotlin rules, runs their tests, then runs the extension's typecheck, tests and build. It is also the command used in CI.
+`npm run full` builds the shared Kotlin rules, runs their tests, then runs the extension's typecheck, tests and build. It is also the command used in CI.
 
 Once the [one-time GitHub settings](docs/github-releases.md) are added, each successful master push
 automatically publishes a versioned extension ZIP in [GitHub Releases](https://github.com/gaborbiro/google-photo-cleaner/releases).

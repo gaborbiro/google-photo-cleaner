@@ -1,6 +1,6 @@
 # Browser extension: checks by hand
 
-`npm run check` tests the rules, the stores and that every page draws. These are the things only a
+`npm run full` tests the rules, the stores and that every page draws. These are the things only a
 real Chrome with a real Google Photos account can show. Go through the parts a change touches;
 go through all of it before a release.
 

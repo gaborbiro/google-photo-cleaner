@@ -30,7 +30,7 @@ score or a guarantee that every assertion or branch is effective.
 The starting suites contained 386 cases. The changes add 22 cases and strengthen
 existing fixtures and assertions. The replay manifest contains 158 selected
 faults that collectively demonstrate all 408 cases. The final verification is
-`npm run check`, a fresh JVM test run with caching of test execution disabled,
+`npm run full`, a fresh JVM test run with caching of test execution disabled,
 and the worker's `pytest` suite; all pass.
 
 ## Bugs fixed
@@ -91,7 +91,7 @@ python tools/test-audit/run.py --fault EXT-001
 The tool requires a passing baseline, refuses edits when the recorded source no
 longer matches, preserves a backup and logs in a temporary directory, restores
 the source, and checks the named test failures. A compiler or setup failure is
-not accepted as success. Re-run `cd extension; npm run check` afterwards to
+not accepted as success. Re-run `cd extension; npm run full` afterwards to
 verify the restored checkout and refresh compiled outputs. Replay IDs are
 listed in the ledger; choose any listed ID rather than assuming an ordering.
 

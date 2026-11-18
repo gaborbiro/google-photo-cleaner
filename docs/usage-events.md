@@ -277,7 +277,7 @@ has been changed during this exploration. Start with package 1, then the consent
   trash), 6 (erase), 7 (interruptions), 8 (Google changes), 9 (privacy), including opt-out network
   silence and real GA reporting. No production events during CI.
 - For implementation releases: increment the source manifest patch version before rebuilding;
-  run `cd extension && npm run check`, verify the built version matches and report the version.
+  run `cd extension && npm run full`, verify the built version matches and report the version.
 - Publish the revised privacy policy before analytics goes live. Update `site/privacy.html`, the
   live store listing/disclosures, `docs/chrome-web-store.md`, relevant README/roadmap privacy claims
   and the narrowly scoped privacy allowance in AGENTS.md. Replace the no-analytics promise; the

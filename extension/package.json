@@ -9,7 +9,7 @@
     "package": "node build.mjs --usage --release && node scripts/package.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "node scripts/check.mjs"
+    "full": "node scripts/full.mjs"
   },
   "devDependencies": {
     "@types/chrome": "0.3.5",

@@ -6,10 +6,11 @@ Release with `photo-cleaner-<version>.zip`. Merging a PR into master produces a 
 same path. A master push that doesn't raise the version (documentation, for example) is checked but
 releases nothing, with a "No release" warning on the run. Failed checks/builds/uploads do not publish a release.
 
-This is a GitHub Release, not an automatic Chrome Web Store submission. Download the ZIP from
-[Releases](https://github.com/gaborbiro/google-photo-cleaner/releases), perform the relevant Chrome
-checks, then submit it with the hand-started `Submit to Chrome Web Store` workflow (see
-[Submitting from GitHub](chrome-web-store.md#submitting-from-github)) or in the store dashboard.
+This is a GitHub Release, not an automatic Chrome Web Store submission. The ZIP in
+[Releases](https://github.com/gaborbiro/google-photo-cleaner/releases) is handy for giving someone a
+build. To send master to the store, start the `Submit to Chrome Web Store` workflow, which picks
+this release by master's version (see
+[Submitting from GitHub](chrome-web-store.md#submitting-from-github)), or upload the ZIP in the store dashboard.
 No laptop packaging is needed for this normal flow.
 
 ## One-time repository-owner setup

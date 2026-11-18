@@ -1,6 +1,7 @@
 # Automatic GitHub release ZIPs
 
-The `Build and Package` workflow checks every push and pull request. A successful push to **master**
+The `Build and Package` workflow checks pushes to master and every pull request (a push to another
+branch is checked only through its pull request). A successful push to **master**
 that raises the extension's version also builds the configured extension and publishes a GitHub
 Release with `photo-cleaner-<version>.zip`. Merging a PR into master produces a push and follows the
 same path. A master push that doesn't raise the version (documentation, for example) is checked but

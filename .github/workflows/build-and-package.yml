@@ -1,9 +1,11 @@
-# Every push is checked. Successful master pushes that raise the manifest version also publish the
-# configured extension ZIP.
+# Pushes to master and pull requests are checked; other branches are checked through their pull
+# request, so a push to one isn't checked twice. Successful master pushes that raise the manifest
+# version also publish the configured extension ZIP.
 name: Build and Package
 
 on:
   push:
+    branches: [master]
   pull_request:
   workflow_dispatch:
 

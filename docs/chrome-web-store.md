@@ -5,9 +5,10 @@ Dashboard: https://chrome.google.com/webstore/devconsole
 
 ## Each release
 
-1. Push or merge to master. After checks pass, GitHub assigns a version and publishes the packaged
-   ZIP in [Releases](https://github.com/gaborbiro/google-photo-cleaner/releases). One-time repository
-   configuration is in [automatic releases](github-releases.md).
+1. Push or merge to master with a raised version in `extension/static-app/manifest.json` (every
+   local rebuild raises it). After checks pass, GitHub publishes the packaged ZIP under that same
+   version, the one your local build showed, in [Releases](https://github.com/gaborbiro/google-photo-cleaner/releases).
+   One-time repository configuration is in [automatic releases](github-releases.md).
 2. Download `photo-cleaner-<version>.zip` and go through `docs/extension-manual-checks.md` in Chrome.
 3. The package excludes the manifest's `key` (the store assigns its own ID) and developer pages
    (`dev-*`). There is no normal laptop release-build step.

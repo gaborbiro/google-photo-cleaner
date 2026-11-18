@@ -1,9 +1,10 @@
 # Automatic GitHub release ZIPs
 
-The `Build and Package` workflow checks every push and pull request. Every successful push to **master** also
-builds the configured extension and publishes a GitHub Release with `photo-cleaner-<version>.zip`.
-Merging a PR into master produces a push and follows the same path. There is no path filter, so
-documentation-only pushes also get a release. Failed checks/builds/uploads do not publish a release.
+The `Build and Package` workflow checks every push and pull request. A successful push to **master**
+that raises the extension's version also builds the configured extension and publishes a GitHub
+Release with `photo-cleaner-<version>.zip`. Merging a PR into master produces a push and follows the
+same path. A master push that doesn't raise the version (documentation, for example) is checked but
+releases nothing, with a "No release" warning on the run. Failed checks/builds/uploads do not publish a release.
 
 This is a GitHub Release, not an automatic Chrome Web Store submission. Download the ZIP from
 [Releases](https://github.com/gaborbiro/google-photo-cleaner/releases), perform the relevant Chrome
@@ -48,18 +49,22 @@ the changes are pushed and the settings are supplied.
 
 ## Versioning and retries
 
-The source manifest version remains useful for local development. GitHub stamps a separate version
-into its own checkout **before checks and packaging**. The number is the fixed release epoch
-`0.5.0` plus `GITHUB_RUN_NUMBER`, carrying components at Chrome's limit of 65,535. For example,
-workflow run 20 produces `0.5.20`. (Until 2026-10-29 the workflow was `build-and-release.yml` with
-epoch `0.4.54`, releasing up to `v0.4.64`; renaming its file restarted the run counter, so the
-epoch was raised above every version used before.) Runs on other branches/PRs can create gaps in release numbers;
-that is intentional. Reverting the source manifest cannot cause a release version to go backwards.
+A release has exactly the version in `extension/static-app/manifest.json`, the same number a local
+build shows in the panel and Settings ("v0.5.18 · local build"). So the version you tested locally is
+the version you submit to the store. Every local rebuild raises the patch number (AGENTS.md), so a
+merge to master normally carries a new, higher version.
 
-Nothing commits back to master, so there is no release-commit loop. Keep this workflow's run counter
-and fixed epoch; do not reset or reduce them. Renaming or moving the workflow file makes GitHub start
-a new workflow with a new run counter: raise the epoch above every version used so far in the same
-change. Run-number retries use the same version and source commit.
+Before checks and packaging, the workflow lists the published (non-draft) releases. It releases only
+when the manifest version is higher than all of them, comparing numerically. Otherwise it warns and
+releases nothing: a published release is never replaced, and a revert can't make versions go backwards.
+Gaps between release numbers (the local rebuilds in between) are expected.
+
+Until 2026-11-18 CI ignored the manifest and released `0.5.0` plus the workflow's run number, so
+`v0.5.5`–`v0.5.12` don't match the local builds that showed the same numbers. Before 2026-10-29 the
+workflow was `build-and-release.yml`, releasing up to `v0.4.64`.
+
+Nothing commits back to master, so there is no release-commit loop. Re-running a run whose publish
+step failed resumes its unpublished draft (drafts don't count as published).
 
 The publisher pins the release to the checked commit, uploads the ZIP to an unpublished draft,
 verifies its size and hash when supplied by GitHub, then publishes it. Re-running can resume the
@@ -74,7 +79,7 @@ the published release assets remain available until explicitly removed.
 ## Local verification
 
 `cd extension && npm run check` still checks the source without enabling Analytics, even if the local
-test file exists. Automated tests exercise version carry/rollbacks, PR/branch refusal, environment-only
+test file exists. Automated tests exercise choosing the release version, PR/branch refusal, environment-only
 production configuration, draft upload/publish ordering, failed uploads and safe retries. They make no
 GitHub release requests. A real hosted Actions run remains the acceptance check for repository
 permissions, uploaded artifacts and the release download.

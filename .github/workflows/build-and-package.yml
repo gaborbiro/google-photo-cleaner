@@ -1,4 +1,5 @@
-# Every push is checked. Successful master pushes also publish the configured extension ZIP.
+# Every push is checked. Successful master pushes that raise the manifest version also publish the
+# configured extension ZIP.
 name: Build and Package
 
 on:
@@ -36,11 +37,20 @@ jobs:
         working-directory: extension
         run: npm ci
 
-      - name: Assign automatic release version
+      # Releases the source manifest's version when it is higher than every published release;
+      # otherwise warns and packages nothing (docs/github-releases.md).
+      - name: Choose release version
         id: version
         if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         working-directory: extension
-        run: node scripts/releaseVersion.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tags = Join-Path $env:RUNNER_TEMP 'published-release-tags.txt'
+          gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" --paginate --jq '.[] | select(.draft | not) | .tag_name' > $tags
+          if ($LASTEXITCODE -ne 0) { throw 'Could not list the published releases.' }
+          node scripts/releaseVersion.mjs $tags
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Kotlin and extension checks (npm run check)
         working-directory: extension

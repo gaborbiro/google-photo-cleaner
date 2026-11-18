@@ -8,7 +8,8 @@ import { diagnosticsText } from '../shared/diagnostics';
 import { copyReportText, offersDiagnostics, scanView, versionLine, type ScanAction, type ScanSurface } from '../shared/jobView';
 import type { ReportView } from '../scan/report';
 import type { ProtectionChoices } from '../shared/preferences';
-import { extensionVersion, logFailure, openPhotos, send, setProtectionChoices, store, useClock, useProblems, useStorageProblem } from './hooks';
+import { USAGE_CONFIG } from '../shared/usage';
+import { extensionVersion, logFailure, openPhotos, send, setProtectionChoices, store, useClock, useProblems, useStorageProblem, useUsageAnswer } from './hooks';
 
 /** One Scan in two stages: reading the photo list, then analysing the new photos. */
 export function ScanCard({ account, scan, analysis, report, surface }: { account: string; scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null | undefined; surface: ScanSurface }) {
@@ -109,9 +110,12 @@ function ProtectionDetails({ report, detailText, versionText, supportLines, copy
  */
 function Diagnostics({ scan, analysis, report }: { scan: ScanJob | null; analysis: AnalysisJob | null; report: ReportView | null }) {
   const log = useProblems();
+  const usageAnswer = useUsageAnswer();
   const [copied, setCopied] = useState(false);
   const [unfolded, setUnfolded] = useState(false);
-  const text = log === undefined ? null : diagnosticsText({ version: extensionVersion(), nowMs: Date.now(), scan, analysis, problems: log.problems, runs: log.runs, report });
+  const text = log === undefined || usageAnswer === undefined ? null : diagnosticsText({
+    version: extensionVersion(), nowMs: Date.now(), scan, analysis, problems: log.problems, runs: log.runs, report, usageAnswer, usageConfigured: USAGE_CONFIG !== null,
+  });
   const copy = () => {
     if (text !== null) void navigator.clipboard.writeText(text).then(() => setCopied(true), logFailure('copying the diagnostics'));
   };

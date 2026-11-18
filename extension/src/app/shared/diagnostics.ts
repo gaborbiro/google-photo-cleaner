@@ -7,6 +7,7 @@ import { n } from './format';
 import type { AnalysisJob, ScanJob } from './job';
 import { MAX_PROBLEMS, MAX_RUNS, PROBLEM_MAX_AGE_MS, type ProblemEntry, type RunEntry } from './problemLog';
 import type { AnalysisRunStats, ListingStats, ScanRunStats } from './runStats';
+import type { UsageAnswer } from './usage';
 
 export interface DiagnosticsInput {
   version: string;
@@ -20,6 +21,21 @@ export interface DiagnosticsInput {
   runs: RunEntry[];
   /** The protection report of the account's latest scan; null without one (or while it is worked out). */
   report: ReportView | null;
+  /** The answer to the usage statistics question; null when it could not be read. */
+  usageAnswer: UsageAnswer | null;
+  /** Whether this build can send usage statistics at all. */
+  usageConfigured: boolean;
+}
+
+/** Whether this installation sends usage statistics, so a report says whether its problem shows up in them. */
+export function usageLine(answer: UsageAnswer | null, configured: boolean): string {
+  if (!configured) return 'Usage statistics: not set up in this build, nothing is sent';
+  switch (answer) {
+    case 'yes': return 'Usage statistics: allowed';
+    case 'no': return 'Usage statistics: declined';
+    case 'unknown': return 'Usage statistics: not answered yet (asked once a scan has finished), nothing sent so far';
+    default: return 'Usage statistics: ? (the answer could not be read)';
+  }
 }
 
 const when = (ms: number) => new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -141,5 +157,7 @@ export function diagnosticsText(input: DiagnosticsInput): string {
       ? `Runs: none in the last ${days} days.`
       : `Recent runs, the latest first (${input.runs.length}; the last ${MAX_RUNS} of ${days} days are kept):`,
     ...input.runs.flatMap((run, i) => runLines(run, i + 1)),
+    '',
+    usageLine(input.usageAnswer, input.usageConfigured),
   ].join('\n');
 }

@@ -233,9 +233,20 @@ describe('the album list', () => {
     expect(page.nextPageToken).toBe(marker());
   });
 
-  it('the last page is just [albums]; anything else where the marker belongs is refused', () => {
+  it('the last page is [albums], or null where the marker belongs; anything else there is refused', () => {
     expect(normalizeAlbumsPage(albumsPayload([rawAlbum()], null)).nextPageToken).toBeNull();
-    for (const value of [...NOT_MARKERS, '']) protocolFailure(() => normalizeAlbumsPage([[rawAlbum()], value]));
+    for (const value of [...NOT_MARKERS.filter((v) => v !== null), '']) protocolFailure(() => normalizeAlbumsPage([[rawAlbum()], value]));
+  });
+
+  it('reads a last page with null for the marker and new fields after it (seen November 2026)', () => {
+    const page = normalizeAlbumsPage([[rawAlbum({ albumKey: albumKey('a') }), rawAlbum({ albumKey: albumKey('b') })], null, [1], [1]]);
+    expect(page.albums.map((a) => a.albumKey)).toEqual([albumKey('a'), albumKey('b')]);
+    expect(page.nextPageToken).toBeNull();
+    expect(normalizeAlbumsPage([[rawAlbum()], null]).nextPageToken).toBeNull();
+  });
+
+  it('still reads a real marker when new fields follow it', () => {
+    expect(normalizeAlbumsPage([[rawAlbum()], marker('p2'), [1], [1]]).nextPageToken).toBe(marker('p2'));
   });
 
   it('refuses an album without a count, or with one that is not a whole number', () => {
@@ -328,7 +339,8 @@ describe('the trash', () => {
   });
 
   it('refuses anything else where the marker belongs, keys of the wrong form, and rows of another length', () => {
-    for (const value of [...NOT_MARKERS, '']) protocolFailure(() => normalizeTrashPage([[rawTrashItem(dedupKey('a'))], value]));
+    for (const value of [...NOT_MARKERS.filter((v) => v !== null), '']) protocolFailure(() => normalizeTrashPage([[rawTrashItem(dedupKey('a'))], value]));
+    expect(normalizeTrashPage([[rawTrashItem(dedupKey('a'))], null, [1]])).toEqual({ dedupKeys: [dedupKey('a')], nextPageToken: null });
     protocolFailure(() => normalizeTrashPage([[rawTrashItem('dk 1')]]));
     expect(normalizeTrashPage([[rawTrashItem('abcdefgh:ijklmnopq')]]).dedupKeys).toEqual(['abcdefgh:ijklmnopq']);
     for (const length of [6, 9, 11, 14]) protocolFailure(() => normalizeTrashPage([[rawTrashItem(dedupKey('a')).slice(0, length)]]));

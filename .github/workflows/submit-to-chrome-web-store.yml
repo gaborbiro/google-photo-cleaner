@@ -1,14 +1,11 @@
-# Started by hand: sends an already published GitHub Release ZIP to the Chrome Web Store for review,
-# then tags its commit store-v<version>.
+# Started by hand: sends master to the Chrome Web Store for review, as the GitHub Release ZIP that
+# Build and Package published for master's manifest version, then tags its commit store-v<version>.
 # One-time setup: docs/chrome-web-store.md, "Submitting from GitHub".
 name: Submit to Chrome Web Store
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Release version you checked, e.g. 0.4.80'
-        required: true
       publish:
         description: 'After Google approves it'
         type: choice
@@ -43,16 +40,20 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Download the release ZIP
+      - name: Download master's release ZIP
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
-          REQUESTED: ${{ inputs.version }}
         run: |
-          REQUESTED="${REQUESTED#v}"
-          if ! [[ "$REQUESTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "Not a release version: $REQUESTED"; exit 1; fi
-          gh release download "v$REQUESTED" --repo "$GITHUB_REPOSITORY" --pattern "photo-cleaner-$REQUESTED.zip" --dir release
-          echo "version=$REQUESTED" >> "$GITHUB_OUTPUT"
+          VERSION="$(node -p "require('./extension/static-app/manifest.json').version")"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "::error::The manifest version is not a release version: $VERSION"; exit 1; fi
+          echo "Master's version: $VERSION"
+          if ! gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json isDraft --jq 'if .isDraft then error("draft") else "" end' > /dev/null 2>&1; then
+            echo "::error title=No release yet::Master is version $VERSION, which has no published GitHub Release. Wait for Build and Package to finish on master; if it warned 'No release', raise the version in extension/static-app/manifest.json and push."
+            exit 1
+          fi
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern "photo-cleaner-$VERSION.zip" --dir release
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Sign in to Google
         id: google

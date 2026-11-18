@@ -5,15 +5,17 @@ Dashboard: https://chrome.google.com/webstore/devconsole
 
 ## Each release
 
-1. Push or merge to master. After checks pass, GitHub assigns a version and publishes the packaged
-   ZIP in [Releases](https://github.com/gaborbiro/google-photo-cleaner/releases). One-time repository
-   configuration is in [automatic releases](github-releases.md).
-2. Download `photo-cleaner-<version>.zip` and go through `docs/extension-manual-checks.md` in Chrome.
+1. Push or merge to master with a raised version in `extension/static-app/manifest.json` (every
+   local rebuild raises it). After checks pass, GitHub publishes the packaged ZIP under that same
+   version, the one your local build showed, in [Releases](https://github.com/gaborbiro/google-photo-cleaner/releases).
+   One-time repository configuration is in [automatic releases](github-releases.md).
+2. Check it in Chrome (`docs/extension-manual-checks.md`): a local build of master is enough, since
+   it has the same code and version. The release ZIP is there too if someone else needs a build.
 3. The package excludes the manifest's `key` (the store assigns its own ID) and developer pages
    (`dev-*`). There is no normal laptop release-build step.
-4. Submit it: Actions → **Submit to Chrome Web Store** → Run workflow (on master), with the version
-   you checked (see [Submitting from GitHub](#submitting-from-github)). Or by hand: Dashboard → the
-   item → Package → Upload new package → Submit for review.
+4. Submit it: Actions → **Submit to Chrome Web Store** → Run workflow (on master). There's no
+   version to type: it sends master's version (see [Submitting from GitHub](#submitting-from-github)).
+   Or by hand: Dashboard → the item → Package → Upload new package → Submit for review.
 
 The store's extension ID differs from the unpacked one (pinned by `key`). If something ever needs
 the two to match, replace `key` with the public key from the dashboard (Package → View public key).
@@ -30,8 +32,10 @@ the two to match, replace `key` with the public key from the dashboard (Package 
 ## Submitting from GitHub
 
 The `Submit to Chrome Web Store` workflow (`.github/workflows/submit-to-chrome-web-store.yml`) only runs when
-started by hand. It downloads the GitHub Release ZIP of the version you give (the one you checked;
-wait until its Build and Package run has published it), uploads it with the
+started by hand. It reads the version in master's `extension/static-app/manifest.json` and downloads
+that version's GitHub Release ZIP, which Build and Package built and checked from master. If that
+release isn't published yet, it stops and says so: wait for Build and Package to finish, or raise the
+version if that run warned "No release". It uploads the ZIP with the
 [Chrome Web Store API](https://developer.chrome.com/docs/webstore/using-api) (V2) and submits it for
 review. It changes nothing else on the listing. It refuses, before
 uploading, while another version is still in review or approved but not yet published, and when
@@ -42,7 +46,7 @@ after approval until you press Publish.
 After a successful submission it tags the release's commit `store-v<version>`, next to the
 `v<version>` tag every build gets. The tag means "sent to the store": Google approves later, and a
 rejected version keeps its tag. If tagging fails after the submission went through, run the workflow
-again for the same version; it skips the submission and adds the tag.
+again (before raising master's version); it skips the submission and adds the tag.
 
 ```
 git tag -l 'store-*'                     # every version sent to the store

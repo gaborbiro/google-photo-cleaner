@@ -31,5 +31,8 @@ Thumbs.db
 *.onnx
 .env
 
+# The clutter developer page's lab folder (docs/clutter-lab.md): contact sheets and scores of the library's photos.
+/lab/
+
 # Calibration labels exported from the desktop app (extension/scripts/export-calibration-labels.py): they name photos of the library.
 labels.json

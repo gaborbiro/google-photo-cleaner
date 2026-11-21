@@ -1,68 +1,23 @@
-// Suggested searches for clutter (an experiment, shown only on the developer page dev-clutter.html).
-// A shipped list of kinds of clutter (receipts, screenshots, parking…) competes with counterweights:
-// photos people keep (people, children, pets, holidays) and ordinary ones (a street, a meal). Each photo goes
-// to the one kind it looks most like, and counts only when that kind is clearly ahead of the next.
-// So a family photo in a car park goes to "people", not "parking", and the counts never overlap.
-// Which photos may be counted at all comes from the shared protection rules (LibraryPhoto.eligible).
+// Suggested searches for clutter (an experiment, shown only on the developer page dev-clutter.html):
+// what the subject-and-setting matching (clutterAxes.ts) is built on. Categories described to the AI
+// model, every photo's score for every description, evening those scores out over the library, weights,
+// and the pieces the page shows a category's photos with. Which photos may be counted at all comes from
+// the shared protection rules (LibraryPhoto.eligible).
+// A single list, where every photo went to the one category it looked most like, came first; it was
+// removed on 2026-11-21 for subject and setting, which did better (see docs/cleanup-roadmap.md).
 
 import { dot } from '../ai/similar';
-import { n } from '../shared/format';
 
+/** clutter: may be suggested for the trash. counterweight: never suggested (keep, or neutral). */
 export type CategoryKind = 'clutter' | 'counterweight';
 
 export interface Category {
   id: string;
   label: string;
-  /** clutter: may be suggested for the trash. counterweight: never suggested; only takes photos away from clutter. */
   kind: CategoryKind;
   /** Ways of describing it to the AI model; the category scores as its best-matching description. */
   descriptions: string[];
 }
-
-const clutter = (id: string, label: string, descriptions: string[]): Category => ({ id, label, kind: 'clutter', descriptions });
-const counterweight = (id: string, label: string, descriptions: string[]): Category => ({ id, label, kind: 'counterweight', descriptions });
-
-export const CATEGORIES: readonly Category[] = [
-  clutter('screenshots', 'Screenshots', ['a screenshot of a phone screen', 'a screenshot of a chat conversation', 'a screenshot of a web page', 'a screenshot of an app', 'a screenshot of a map']),
-  clutter('screens', 'Photos of screens', ['a photo of a computer screen', 'a photo of a TV screen', 'a photo of a laptop showing an error message']),
-  // No incidental words ("on a table", "held in a hand"): they match every photo with a table or a hand in it.
-  clutter('receipts', 'Receipts and invoices', ['a receipt', 'a long till receipt', 'an invoice', 'a bill']),
-  clutter('documents', 'Documents and forms', ['a photo of a document', 'a printed letter', 'a form', 'a contract', 'a page of printed text']),
-  clutter('whiteboards', 'Whiteboards and slides', ['a whiteboard with writing', 'a presentation slide on a projector screen', 'a flip chart']),
-  clutter('notes', 'Notes', ['handwritten notes', 'a sticky note', 'a to-do list']),
-  clutter('parking', 'Parking spots', ['a parked car in a car park', 'a car park level sign', 'a parking space number', 'a parking ticket machine']),
-  clutter('signs', 'Signs and timetables', ['an information sign', 'a bus timetable', 'opening hours on a door', 'a map on a board', 'a notice on a wall']),
-  clutter('menus', 'Menus', ['a restaurant menu', 'a menu board in a cafe']),
-  // The ticket itself, not travelling: "a boarding pass" alone stood in for anything on a plane or train.
-  clutter('tickets', 'Tickets and passes', ['a paper ticket', 'a printed boarding pass', 'a boarding pass on a phone screen', 'a paper train ticket', 'an event ticket']),
-  clutter('products', 'Products and shopping', ['a product on a shop shelf', 'a price tag', 'a product label', 'product packaging', 'a supermarket aisle']),
-  clutter('codes', 'Labels, barcodes and QR codes', ['a barcode', 'a QR code', 'a serial number sticker', 'an appliance model plate']),
-  clutter('readings', 'Meters and warning lights', ['a meter reading', 'a car dashboard warning light', 'a thermostat display']),
-  clutter('repairs', 'Things to fix or sell', ['a broken item', 'a damaged wall', 'a leaking pipe', 'an item photographed to sell online', 'furniture for sale']),
-  // What memes look like as well as what they are: a fingerprint is mostly what a picture shows, so a
-  // meme of a couple otherwise goes to People.
-  clutter('memes', 'Memes and forwarded images', [
-    'a meme with text', 'a cartoon', 'a motivational quote image', 'a greeting image with text', 'a funny picture from the internet',
-    'a cartoon image with a caption', 'a screenshot of a social media post', 'text written over a picture', 'a greeting card image with flowers and text',
-    'a joke picture with a punchline',
-  ]),
-  // No "a photo of the floor" or "of a ceiling": they matched church interiors, painted ceilings and exhibitions.
-  clutter('accidental', 'Accidental shots', ['a blurry photo taken by accident', 'a dark photo with nothing visible', 'the inside of a pocket', 'a finger covering the camera lens']),
-
-  counterweight('people', 'People', ['a portrait of a person', 'a group of people smiling', 'a selfie', 'people at a party', 'a couple together', 'a family photo', 'friends together']),
-  counterweight('children', 'Children', ['a baby', 'a child playing', 'a toddler', 'children at a birthday party', "a child's drawing"]),
-  counterweight('celebrations', 'Celebrations', ['a birthday cake with candles', 'a wedding', 'a Christmas celebration', 'a family dinner', 'a graduation']),
-  counterweight('animals', 'Pets and animals', ['a dog', 'a cat', 'a pet', 'an animal in nature', 'a bird']),
-  counterweight('nature', 'Nature', ['a landscape', 'a beach', 'mountains', 'a sunset', 'a forest', 'a lake']),
-  // Being on the move: without it, photos taken on trains and planes went to tickets.
-  counterweight('travel', 'Travel', [
-    'a famous landmark', 'a view from a train window', 'a view from an airplane window', 'inside a train', 'inside an airplane cabin', 'an airport terminal',
-    'a meal on a tray table on a plane or train', 'a hotel room',
-  ]),
-  // A city view is ordinary: a window onto the city doesn't make a room a travel photo.
-  counterweight('ordinary', 'Ordinary scenes', ['a street', 'a building', 'a city view', 'a meal on a plate', 'a drink', 'an ice cream cone', 'a dessert', 'street food', 'a snack', 'flowers', 'a garden', 'a room in a house', 'a car on the road', 'a sports game', 'a concert', 'art in a museum']),
-  counterweight('memories', 'Old photos and keepsakes', ['a scanned old photograph', 'an old printed photo', 'a handwritten letter from family', 'a certificate']),
-];
 
 /** A category with its descriptions' fingerprints (one per description, in the same order). */
 export interface ScoredCategory {
@@ -70,81 +25,29 @@ export interface ScoredCategory {
   vectors: Float32Array[];
 }
 
-/** Where one photo went: its best category, and the scores its lead is measured against. */
-export interface PhotoMatch {
-  mediaKey: string;
-  /** Index into the categories matched against. */
-  best: number;
-  /** Index into [best]'s descriptions: the one the photo scored as. */
-  description: number;
-  bestScore: number;
-  /** The other categories' score, of either kind, pooled ([pooledScore]): with no pooling, the next category's. */
-  secondScore: number;
-  /** [best]'s kind's score, [best] included, pooled: with no pooling, [bestScore]. */
-  ownKindScore: number;
-  /** The other kind's score, pooled: counterweights for clutter, and the other way round. With no pooling, its best category's. */
-  otherKindScore: number;
-}
-
-/**
- * What a photo's lead is measured against. next: the next category, of either kind. otherKind: the best
- * category of the other kind, so two kinds of clutter close together (a receipt or a document?) don't
- * stop a photo counting, as it is clutter either way; only how close a counterweight comes matters.
- * The other kind never scores above the next category, so with the same minimum lead, otherKind only
- * adds photos.
- */
-export type LeadOver = 'next' | 'otherKind';
-
-export function leadOf(match: PhotoMatch, over: LeadOver): number {
-  return over === 'next' ? match.bestScore - match.secondScore : match.ownKindScore - match.otherKindScore;
-}
-
-/**
- * How a photo's scores are adjusted before they are compared, set by hand on the developer page (and
- * later learned from the user's decisions). In score units, so raw and evened-out scores each keep
- * their own.
- */
-export interface Weighting {
-  /** How much several categories close together count for more than the best of them ([pooledScore]); 0: only the best counts. */
-  pooling: number;
-  /** Added to every description of a category, by the category's id. */
+/** Weights added to scores before photos are compared: a category's to all its descriptions, a description's to it alone. */
+export interface Weights {
   categoryWeights: Record<string, number>;
-  /** Added to one description, by its words (descriptions are unique across categories). */
   descriptionWeights: Record<string, number>;
 }
 
-export const NO_WEIGHTING: Weighting = { pooling: 0, categoryWeights: {}, descriptionWeights: {} };
-
-/**
- * Several scores as one: the best, plus `pooling × ln(Σ exp((score − best) / pooling))`. Each score
- * votes `exp(−gap / pooling)`: 1 when level with the best, 0.37 one [pooling] behind, next to nothing
- * three behind. So a lone score stays as it is, two level add `pooling × ln 2`, three `pooling × ln 3`.
- * With [pooling] 0, the best alone. Never below the best, and never lower for an extra score.
- */
-export function pooledScore(scores: number[], pooling: number): number {
-  if (!(pooling >= 0)) throw new Error(`Pooling must be 0 or more (${pooling})`);
-  const best = Math.max(...scores);
-  if (pooling === 0 || best === -Infinity) return best;
-  return best + pooling * Math.log(scores.reduce((sum, s) => sum + Math.exp((s - best) / pooling), 0));
-}
-
 /** The weight added to [description] of [category]: its category's and its own. */
-function weightOf(weighting: Weighting, category: Category, description: string): number {
-  return (weighting.categoryWeights[category.id] ?? 0) + (weighting.descriptionWeights[description] ?? 0);
+function weightOf(weights: Weights, category: Category, description: string): number {
+  return (weights.categoryWeights[category.id] ?? 0) + (weights.descriptionWeights[description] ?? 0);
 }
 
-/** The weights in [weighting] that name no category or description in [categories], e.g. saved before a description was taken out. */
-export function unknownWeights(weighting: Weighting, categories: readonly Category[]): string[] {
+/** The weights in [weights] that name no category or description in [categories], e.g. saved before a description was taken out. */
+export function unknownWeights(weights: Weights, categories: readonly Category[]): string[] {
   const ids = new Set(categories.map((c) => c.id));
   const descriptions = new Set(categories.flatMap((c) => c.descriptions));
-  return [...Object.keys(weighting.categoryWeights).filter((id) => !ids.has(id)), ...Object.keys(weighting.descriptionWeights).filter((d) => !descriptions.has(d))];
+  return [...Object.keys(weights.categoryWeights).filter((id) => !ids.has(id)), ...Object.keys(weights.descriptionWeights).filter((d) => !descriptions.has(d))];
 }
 
 /** Refuses weights for what isn't in [categories], and weights that aren't numbers. */
-function checkWeighting(weighting: Weighting, categories: readonly Category[]): void {
-  const unknown = unknownWeights(weighting, categories);
+function checkWeights(weights: Weights, categories: readonly Category[]): void {
+  const unknown = unknownWeights(weights, categories);
   if (unknown.length > 0) throw new Error(`Weights for what isn't in the list: ${unknown.join(', ')}`);
-  for (const w of [...Object.values(weighting.categoryWeights), ...Object.values(weighting.descriptionWeights)]) {
+  for (const w of [...Object.values(weights.categoryWeights), ...Object.values(weights.descriptionWeights)]) {
     if (!Number.isFinite(w)) throw new Error(`A weight isn't a number (${w})`);
   }
 }
@@ -156,8 +59,9 @@ export function descriptionScores(vector: Float32Array, categories: ScoredCatego
 
 /**
  * Each description's usual score over the whole library. Some descriptions score higher than others on
- * every photo, so raw scores favour them; evened out, a photo scores as how far above a description's
- * average it is, counted in that description's spread (standard deviation).
+ * every photo (a short, vague one like "tools" is close to everything), so raw scores favour them;
+ * evened out, a photo scores as how far above a description's average it is, counted in that
+ * description's spread (standard deviation).
  */
 export interface DescriptionNorms {
   /** Per description, in the order of [descriptionScores]. */
@@ -186,17 +90,54 @@ export function descriptionNorms(rows: Float32Array[]): DescriptionNorms {
   return { mean, spread };
 }
 
-/** Each category's score for a photo: its best description's, raw or evened out with [norms], each with its weight added. */
-function categoryScores(row: Float32Array, categories: ScoredCategory[], norms: DescriptionNorms | null, weighting: Weighting): { score: number; description: number }[] {
+/** [row] evened out with [norms]: each score as spreads above its description's average. */
+export function evenedRow(row: Float32Array, norms: DescriptionNorms): Float32Array {
+  if (row.length !== norms.mean.length) throw new Error(`A photo's scores (${row.length}) don't fit the evened-out averages (${norms.mean.length})`);
+  return Float32Array.from(row, (s, i) => (s - norms.mean[i]!) / norms.spread[i]!);
+}
+
+/** Every photo's scores evened out over all of them ([descriptionNorms]), by the same keys. */
+export function evenedRows(rows: Map<string, Float32Array>): Map<string, Float32Array> {
+  const norms = descriptionNorms([...rows.values()]);
+  return new Map([...rows].map(([key, row]) => [key, evenedRow(row, norms)]));
+}
+
+/** Every description's score for a photo, in the order of [descriptionScores], with its weight added. */
+export function weightedDescriptionScores(row: Float32Array, categories: ScoredCategory[], weights: Weights): Float64Array {
+  checkWeights(weights, categories.map((c) => c.category));
   const width = categories.reduce((n, c) => n + c.vectors.length, 0);
   if (row.length !== width) throw new Error(`A photo's scores (${row.length}) don't fit the categories' descriptions (${width})`);
-  if (norms && norms.mean.length !== width) throw new Error(`The evened-out averages (${norms.mean.length}) don't fit the categories' descriptions (${width})`);
+  const out = new Float64Array(width);
   let at = 0;
-  return categories.map((c) => {
+  for (const c of categories) {
+    for (let i = 0; i < c.vectors.length; i++, at++) out[at] = row[at]! + weightOf(weights, c.category, c.category.descriptions[i]!);
+  }
+  return out;
+}
+
+/** Where each category's descriptions start in a row of [descriptionScores]. */
+export function descriptionStarts(categories: ScoredCategory[]): number[] {
+  const starts: number[] = [];
+  let at = 0;
+  for (const c of categories) {
+    starts.push(at);
+    at += c.vectors.length;
+  }
+  return starts;
+}
+
+/**
+ * Each category's score for a photo, with the weights added, and the description it scores as (its
+ * best): what the subject-and-setting matching ([matchAxes] in clutterAxes.ts) compares.
+ */
+export function weightedScores(row: Float32Array, categories: ScoredCategory[], weights: Weights): { score: number; description: number }[] {
+  const all = weightedDescriptionScores(row, categories, weights);
+  const starts = descriptionStarts(categories);
+  return categories.map((c, k) => {
     let score = -Infinity;
     let description = -1;
-    for (let i = 0; i < c.vectors.length; i++, at++) {
-      const s = (norms ? (row[at]! - norms.mean[at]!) / norms.spread[at]! : row[at]!) + weightOf(weighting, c.category, c.category.descriptions[i]!);
+    for (let i = 0; i < c.vectors.length; i++) {
+      const s = all[starts[k]! + i]!;
       if (s > score) {
         score = s;
         description = i;
@@ -206,175 +147,33 @@ function categoryScores(row: Float32Array, categories: ScoredCategory[], norms: 
   });
 }
 
-const otherKind = (kind: CategoryKind): CategoryKind => (kind === 'clutter' ? 'counterweight' : 'clutter');
-
-/**
- * The photo's best category, and the scores its lead is measured against, from its [descriptionScores],
- * raw or evened out with [norms], weighted and pooled with [weighting].
- */
-export function matchPhoto(mediaKey: string, row: Float32Array, categories: ScoredCategory[], norms: DescriptionNorms | null, weighting: Weighting): PhotoMatch {
-  if (categories.length < 2) throw new Error('Matching needs at least two categories to compare');
-  checkWeighting(weighting, categories.map((c) => c.category));
-  const scores = categoryScores(row, categories, norms, weighting);
-  let best = 0;
-  // Strictly higher: on a tie the earlier category wins, as in [photoBreakdown].
-  scores.forEach(({ score }, i) => {
-    if (score > scores[best]!.score) best = i;
-  });
-  const kind = categories[best]!.category.kind;
-  const ofKind = (k: CategoryKind) => scores.filter((_, i) => categories[i]!.category.kind === k).map((s) => s.score);
-  const otherKindScore = pooledScore(ofKind(otherKind(kind)), weighting.pooling);
-  if (otherKindScore === -Infinity) throw new Error('Matching needs both clutter categories and counterweights');
-  return {
-    mediaKey,
-    best,
-    description: scores[best]!.description,
-    bestScore: scores[best]!.score,
-    secondScore: pooledScore(scores.filter((_, i) => i !== best).map((s) => s.score), weighting.pooling),
-    ownKindScore: pooledScore(ofKind(kind), weighting.pooling),
-    otherKindScore,
-  };
-}
-
 /** One category's line in a photo's breakdown. */
 export interface BreakdownRow {
   label: string;
-  kind: CategoryKind;
+  /** neutral: a subject or setting with no verdict (clutterAxes.ts). */
+  kind: CategoryKind | 'neutral';
   /** With its weight added. */
   score: string;
   /** The description that scored best for this photo, which the category scores as. */
   description: string;
   /** The weight added to [score] ("+0.030"), or null when none. */
   weight: string | null;
+  /** Its description's vote in its pool ("0.37", after what it shares with those above), or null when not pooled. */
+  vote: string | null;
 }
 
 /** How one photo scored, for the developer page's hover card. */
 export interface Breakdown {
-  /** Where the photo went, and how far ahead of the runner-up. */
   heading: string;
-  /** The best-scoring categories, best first. */
   rows: BreakdownRow[];
   /** How many categories scored lower than those shown, or null when all are shown. */
   more: string | null;
-}
-
-/** A weight as the hover card shows it, or null when there is none. */
-const weightText = (w: number): string | null => (w === 0 ? null : `${w > 0 ? '+' : '−'}${Math.abs(w).toFixed(3)}`);
-
-/** How a photo scored in each category, best first, showing the [shown] best; agrees with [matchPhoto] and [leadOf]. */
-export function photoBreakdown(row: Float32Array, categories: ScoredCategory[], norms: DescriptionNorms | null, weighting: Weighting, over: LeadOver, shown: number): Breakdown {
-  if (categories.length < 2) throw new Error('A breakdown needs at least two categories to compare');
-  const match = matchPhoto('', row, categories, norms, weighting);
-  // A stable sort keeps the earlier category first on a tie, as matchPhoto does.
-  const ranked = categoryScores(row, categories, norms, weighting)
-    .map((s, i) => ({ scored: categories[i]!, ...s }))
-    .sort((a, b) => b.score - a.score);
-  const first = ranked[0]!;
-  const label = first.scored.category.label;
-  const lead = leadOf(match, over).toFixed(3);
-  let heading: string;
-  if (weighting.pooling === 0) {
-    const rival = over === 'next' ? ranked[1]! : ranked.find((r) => r.scored.category.kind === otherKind(first.scored.category.kind))!;
-    heading = `${label}, ${lead} ahead of ${rival.scored.category.label}`;
-  } else if (over === 'next') {
-    heading = `${label}, ${lead} ahead of the other categories pooled (${match.secondScore.toFixed(3)})`;
-  } else {
-    const [own, other] = first.scored.category.kind === 'clutter' ? ['clutter', 'counterweights'] : ['counterweights', 'clutter'];
-    heading = `${label}, ${lead} ahead: ${own} pooled ${match.ownKindScore.toFixed(3)}, ${other} pooled ${match.otherKindScore.toFixed(3)}`;
-  }
-  return {
-    heading,
-    rows: ranked.slice(0, shown).map((r) => {
-      const description = r.scored.category.descriptions[r.description]!;
-      return {
-        label: r.scored.category.label,
-        kind: r.scored.category.kind,
-        score: r.score.toFixed(3),
-        description,
-        weight: weightText(weightOf(weighting, r.scored.category, description)),
-      };
-    }),
-    more: ranked.length > shown ? `${ranked.length - shown} more ${ranked.length - shown === 1 ? 'category' : 'categories'} scored lower` : null,
-  };
-}
-
-/** The categories of one kind, for the page's list of every category. */
-export interface CategoryGroup {
-  kind: CategoryKind;
-  title: string;
-  /** What the kind does to a photo that goes to it. */
-  note: string;
-  count: number;
-  categories: Category[];
-}
-
-export interface CategoryList {
-  /** "16 clutter categories and 7 counterweights". */
-  summary: string;
-  /** Clutter first, then counterweights, each in the order listed. */
-  groups: CategoryGroup[];
-}
-
-export function categoryList(categories: readonly Category[]): CategoryList {
-  const group = (kind: CategoryKind, title: string, note: string): CategoryGroup => {
-    const ofKind = categories.filter((c) => c.kind === kind);
-    return { kind, title, note, count: ofKind.length, categories: ofKind };
-  };
-  const groups = [
-    group('clutter', 'Clutter', 'May be suggested for the trash.'),
-    group('counterweight', 'Counterweights', 'Never suggested: they only take photos away from clutter, so a family photo in a car park goes to People, not Parking.'),
-  ];
-  const [clutterCount, counterweightCount] = [groups[0]!.count, groups[1]!.count];
-  return {
-    summary: `${clutterCount} clutter ${clutterCount === 1 ? 'category' : 'categories'} and ${counterweightCount} ${counterweightCount === 1 ? 'counterweight' : 'counterweights'}`,
-    groups,
-  };
-}
-
-/** How photos are matched ([Weighting]) and when one counts for its best category. */
-export interface ClutterSettings extends Weighting {
-  /** The best category's score must be at least this. */
-  minScore: number;
-  /** ... and its lead at least this ([leadOf]), unless its category has its own in [margins]. */
-  margin: number;
-  /** A category's own minimum lead, by its id, in place of [margin]. */
-  margins: Record<string, number>;
-}
-
-/** The minimum lead for a photo whose best category is [category]. */
-export function marginFor(settings: ClutterSettings, category: Category): number {
-  return settings.margins[category.id] ?? settings.margin;
 }
 
 /** [weights] with [key]'s weight set to [weight], or left out when it is undefined or 0 (no weight). */
 export function withWeight(weights: Record<string, number>, key: string, weight: number | undefined): Record<string, number> {
   const rest = Object.fromEntries(Object.entries(weights).filter(([k]) => k !== key));
   return weight === undefined || weight === 0 ? rest : { ...rest, [key]: weight };
-}
-
-/** [margins] with [id]'s own minimum lead set to [margin], or left out (the shared one) when undefined. A minimum lead of 0 is kept. */
-export function withMargin(margins: Record<string, number>, id: string, margin: number | undefined): Record<string, number> {
-  const rest = Object.fromEntries(Object.entries(margins).filter(([k]) => k !== id));
-  return margin === undefined ? rest : { ...rest, [id]: margin };
-}
-
-/** [settings] without weights or categories' own minimum leads; the rest as it was. */
-export function clearWeights(settings: ClutterSettings): ClutterSettings {
-  return { ...settings, categoryWeights: {}, descriptionWeights: {}, margins: {} };
-}
-
-/** "raw scores, minimum score 0, minimum lead 0.02, pooling 0.02, 3 weights, 1 category's own minimum lead". */
-export function tuningLine(scoring: Scoring, settings: ClutterSettings): string {
-  const weights = Object.keys(settings.categoryWeights).length + Object.keys(settings.descriptionWeights).length;
-  const margins = Object.keys(settings.margins).length;
-  return [
-    scoring === 'raw' ? 'raw scores' : 'evened out',
-    `minimum score ${settings.minScore}`,
-    `minimum lead ${settings.margin}`,
-    settings.pooling === 0 ? 'no pooling' : `pooling ${settings.pooling}`,
-    `${weights} ${weights === 1 ? 'weight' : 'weights'}`,
-    ...(margins > 0 ? [`${margins} ${margins === 1 ? "category's" : "categories'"} own minimum lead`] : []),
-  ].join(', ');
 }
 
 /** A number typed into a field: undefined when it is empty, null while it isn't a number yet ("-", "0.0x"). */
@@ -387,16 +186,6 @@ export function typedNumber(text: string): number | undefined | null {
 /** raw: a description's score as the AI model gives it. evened: evened out with [DescriptionNorms]. */
 export type Scoring = 'raw' | 'evened';
 
-/**
- * Where the developer page's settings start for each scoring; evened scores count in spreads, so they
- * run larger. Pooling starts on (decided 2026-11-18): by hand, 0.02 left out wrong Accidental shots and
- * Photos of screens with several counterweights close behind.
- */
-export const STARTING_SETTINGS: Record<Scoring, ClutterSettings> = {
-  raw: { minScore: 0, margin: 0.02, margins: {}, pooling: 0.02, categoryWeights: {}, descriptionWeights: {} },
-  evened: { minScore: 0, margin: 0.2, margins: {}, pooling: 0.2, categoryWeights: {}, descriptionWeights: {} },
-};
-
 /** What is known about a photo besides its match: the same as Search uses. */
 export interface ClutterPhoto {
   eligible: boolean;
@@ -408,7 +197,7 @@ export interface CategoryPhoto {
   /** The category's description the photo scored as. */
   description: string;
   score: number;
-  /** How far ahead of the runner-up category. */
+  /** How far ahead of what it is measured against. */
   lead: number;
 }
 
@@ -420,170 +209,17 @@ export interface CategoryCount {
   protectedOrUnknown: number;
   /** Counted, but already in the trash queue. */
   approved: number;
-  /** Best match here, but not clearly enough (below the minimum or the margin): not counted. */
+  /** Best match here, but not clearly enough: not counted. */
   closeCalls: number;
-  /**
-   * The close calls that cleared the minimum score but led by less than the minimum lead, and would
-   * be trashable if counted, largest lead first: the photos a smaller minimum lead would add first.
-   */
+  /** The close calls that would be trashable if counted, largest lead first: what a smaller minimum lead would add first. */
   justMissed: CategoryPhoto[];
 }
 
-export interface ClutterCounts {
-  /** Every category, clutter and counterweights, largest trashable count first. */
-  categories: CategoryCount[];
-  /** Photos matched in all. */
-  photos: number;
-}
-
 /** Description [index] of [category]: the phrase a match scored as, which must be one of its descriptions. */
-function phrase(category: Category | undefined, index: number): string {
+export function phrase(category: Category | undefined, index: number): string {
   const text = category?.descriptions[index];
   if (text === undefined) throw new Error(`A match names a description that isn't in its category (${category?.id ?? 'no category'}, ${index})`);
   return text;
-}
-
-/** Each photo counted for at most one category: its best, when that one is clearly ahead ([leadOf] [over]). */
-export function countCategories(matches: PhotoMatch[], categories: Category[], photos: Map<string, ClutterPhoto>, settings: ClutterSettings, over: LeadOver): ClutterCounts {
-  const counts = categories.map((category): CategoryCount => ({ category, trashable: [], protectedOrUnknown: 0, approved: 0, closeCalls: 0, justMissed: [] }));
-  for (const m of matches) {
-    const count = counts[m.best]!;
-    const photo = photos.get(m.mediaKey);
-    const trashable = photo !== undefined && photo.eligible && !photo.approved;
-    const entry = { mediaKey: m.mediaKey, description: phrase(categories[m.best], m.description), score: m.bestScore, lead: leadOf(m, over) };
-    if (m.bestScore < settings.minScore) {
-      count.closeCalls++;
-    } else if (entry.lead < marginFor(settings, count.category)) {
-      count.closeCalls++;
-      if (trashable) count.justMissed.push(entry);
-    } else if (!photo || !photo.eligible) {
-      count.protectedOrUnknown++;
-    } else if (photo.approved) {
-      count.approved++;
-    } else {
-      count.trashable.push(entry);
-    }
-  }
-  for (const c of counts) {
-    c.trashable.sort((a, b) => b.score - a.score);
-    c.justMissed.sort((a, b) => b.lead - a.lead);
-  }
-  counts.sort((a, b) => b.trashable.length - a.trashable.length);
-  return { categories: counts, photos: matches.length };
-}
-
-/**
- * The order suggestions are shown in: every clutter category's id once, first shown first. Set by hand
- * on the developer page for now; later learned from what the user trashes (milestone 6).
- */
-export type Priority = readonly string[];
-
-/** Every clutter category of [categories], in the order listed. */
-export function shippedPriority(categories: readonly Category[]): Priority {
-  return categories.filter((c) => c.kind === 'clutter').map((c) => c.id);
-}
-
-/**
- * A saved [priority] fitted to [categories]: categories no longer listed are dropped (and named), new
- * ones go at the end in the order listed.
- */
-export function fitPriority(saved: readonly string[], categories: readonly Category[]): { priority: Priority; dropped: string[] } {
-  const shipped = shippedPriority(categories);
-  const known = new Set(shipped);
-  const kept = [...new Set(saved)].filter((id) => known.has(id));
-  return { priority: [...kept, ...shipped.filter((id) => !kept.includes(id))], dropped: saved.filter((id) => !known.has(id)) };
-}
-
-/** [priority] with [id] moved [by] places (−1: one up, sooner), staying within the list. */
-export function movePriority(priority: Priority, id: string, by: number): Priority {
-  const from = priority.indexOf(id);
-  if (from < 0) throw new Error(`${id} isn't in the priority order`);
-  const to = Math.max(0, Math.min(priority.length - 1, from + by));
-  const moved = priority.filter((x) => x !== id);
-  moved.splice(to, 0, id);
-  return moved;
-}
-
-/** What the developer page remembers between visits: its settings for each scoring, the lead it measures, and the priority order. */
-export interface SavedTuning {
-  settings: Record<Scoring, ClutterSettings>;
-  over: LeadOver;
-  priority: Priority;
-}
-
-/**
- * Saved tuning ([text], as [saveTuning] wrote it) fitted to [categories]. Weights, minimum leads and
- * places in the order for categories or descriptions no longer listed are dropped, and [notes] says
- * which, so a change to the list never fails the page or loses its settings silently. Nothing saved
- * (null): the starting settings.
- */
-export function readTuning(text: string | null, categories: readonly Category[]): { tuning: SavedTuning; notes: string[] } {
-  const starting: SavedTuning = { settings: STARTING_SETTINGS, over: 'next', priority: shippedPriority(categories) };
-  if (text === null) return { tuning: starting, notes: [] };
-  const saved = JSON.parse(text) as Partial<SavedTuning>;
-  const notes: string[] = [];
-  const ids = new Set(categories.map((c) => c.id));
-  const descriptions = new Set(categories.flatMap((c) => c.descriptions));
-  const number = (x: unknown, what: string): number => {
-    if (typeof x !== 'number' || !Number.isFinite(x)) throw new Error(`The saved settings have no number for ${what}`);
-    return x;
-  };
-  const known = (record: unknown, keep: Set<string>, what: string, scoring: Scoring): Record<string, number> => {
-    const out: Record<string, number> = {};
-    for (const [key, value] of Object.entries((record ?? {}) as Record<string, unknown>)) {
-      if (keep.has(key)) out[key] = number(value, `${what} ${key}`);
-      else notes.push(`Dropped the ${scoring} ${what} for “${key}”, no longer in the list.`);
-    }
-    return out;
-  };
-  const fit = (scoring: Scoring): ClutterSettings => {
-    const s = saved.settings?.[scoring];
-    if (!s) return STARTING_SETTINGS[scoring];
-    return {
-      minScore: number(s.minScore, 'the minimum score'),
-      margin: number(s.margin, 'the minimum lead'),
-      pooling: number(s.pooling, 'pooling'),
-      margins: known(s.margins, ids, 'minimum lead', scoring),
-      categoryWeights: known(s.categoryWeights, ids, 'weight', scoring),
-      descriptionWeights: known(s.descriptionWeights, descriptions, 'weight', scoring),
-    };
-  };
-  const settings = { raw: fit('raw'), evened: fit('evened') };
-  const { priority, dropped } = fitPriority(saved.priority ?? [], categories);
-  for (const id of dropped) notes.push(`Dropped “${id}” from the priority order, no longer in the list.`);
-  return { tuning: { settings, over: saved.over === 'otherKind' ? 'otherKind' : 'next', priority }, notes };
-}
-
-export function saveTuning(tuning: SavedTuning): string {
-  return JSON.stringify(tuning);
-}
-
-/** The suggestions to show: clutter categories with at least [minPhotos] trashable photos, in [priority] order. */
-export function suggestions(counts: ClutterCounts, minPhotos: number, priority: Priority): CategoryCount[] {
-  const place = (c: CategoryCount) => {
-    const at = priority.indexOf(c.category.id);
-    if (at < 0) throw new Error(`${c.category.id} has no place in the priority order`);
-    return at;
-  };
-  return counts.categories.filter((c) => c.category.kind === 'clutter' && c.trashable.length >= minPhotos).sort((a, b) => place(a) - place(b));
-}
-
-/** The page's lists: the suggestions, clutter with too few photos to suggest, and the counterweights. */
-export interface CountSections {
-  suggested: CategoryCount[];
-  /** "Too few to suggest: …", or null when every clutter category is suggested. */
-  tooFew: string | null;
-  counterweights: CategoryCount[];
-}
-
-export function countSections(counts: ClutterCounts, minPhotos: number, priority: Priority): CountSections {
-  const suggested = suggestions(counts, minPhotos, priority);
-  const tooFew = counts.categories.filter((c) => c.category.kind === 'clutter' && !suggested.includes(c));
-  return {
-    suggested,
-    tooFew: tooFew.length > 0 ? `Too few to suggest: ${tooFew.map(countLine).join(' · ')}` : null,
-    counterweights: counts.categories.filter((c) => c.category.kind === 'counterweight'),
-  };
 }
 
 /**
@@ -614,142 +250,105 @@ export function categorySamples(count: CategoryCount, size: number): CategorySam
 }
 
 /**
- * Under a photo: its score and its lead over the runner-up. The lead is rounded down, so a lead just
- * under the minimum lead never shows as the minimum (0.01996 is "0.0199", not "0.0200"); the tiny
- * allowance keeps 0.0123 from showing as 0.0122 when multiplying lands a hair below.
+ * A lead to four places, rounded down, so a lead just under the minimum lead never shows as the
+ * minimum (0.01996 is "0.0199", not "0.0200"). The allowance of 0.0000001 keeps 0.0123 from showing as
+ * 0.0122 when a score's float32 rounding lands a hair below (0.9 − 0.2 is 0.69999999 in float32).
  */
+export function leadText(lead: number): string {
+  return (Math.floor(lead * 10_000 + 1e-3) / 10_000).toFixed(4);
+}
+
+/** Under a photo: its score and its lead ([leadText]). */
 export function photoCaption(photo: CategoryPhoto): string {
-  const lead = Math.floor(photo.lead * 10_000 + 1e-9) / 10_000;
-  return `${photo.score.toFixed(3)} · lead ${lead.toFixed(4)} · “${photo.description}”`;
+  return `${photo.score.toFixed(3)} · lead ${leadText(photo.lead)} · “${photo.description}”`;
 }
 
 /**
- * Where every photo went, by kind: counted as clutter, counted as a counterweight, or a close call
- * (counted nowhere). Comparing it between scorings shows whether photos move from counterweights into
- * clutter, or only between counterweights. Counted includes protected, unknown and queued photos.
+ * The largest buff offered, per scoring: a keeper that needs more is too far behind to be the reason.
+ * Evened-out scores count in spreads, where a lead of 0.7 is ordinary, so their largest is far larger.
  */
-export function kindTotals(counts: ClutterCounts): string {
-  const counted = (kind: CategoryKind) =>
-    counts.categories.filter((c) => c.category.kind === kind).reduce((sum, c) => sum + c.trashable.length + c.protectedOrUnknown + c.approved, 0);
-  const closeCalls = counts.categories.reduce((sum, c) => sum + c.closeCalls, 0);
-  const [clutter, counterweights] = [counted('clutter'), counted('counterweight')];
-  if (clutter + counterweights + closeCalls !== counts.photos) throw new Error(`Counted photos (${clutter + counterweights + closeCalls}) don't add up to the photos matched (${counts.photos})`);
-  const share = (x: number) => (counts.photos === 0 ? '' : ` (${Math.round((x / counts.photos) * 100)}%)`);
-  return `Clutter ${n(clutter)}${share(clutter)} · counterweights ${n(counterweights)}${share(counterweights)} · close calls ${n(closeCalls)}${share(closeCalls)}`;
-}
+export const MAX_BUFFS: Record<Scoring, number> = { raw: 0.2, evened: 3 };
 
-/** Whether a photo counts for its best category with these settings, as [countCategories] decides it. */
-export function isCounted(match: PhotoMatch, categories: Category[], settings: ClutterSettings, over: LeadOver): boolean {
-  const category = categories[match.best];
-  if (!category) throw new Error(`A match names a category that wasn't matched against (${match.best})`);
-  return match.bestScore >= settings.minScore && leadOf(match, over) >= marginFor(settings, category);
-}
-
-/** A photo counted for a category of one kind with raw scores and of the other kind evened out. */
-export interface MovedPhoto {
-  mediaKey: string;
-  /** Indexes into the categories: where it was counted with raw scores, and evened out. */
-  raw: number;
-  evened: number;
-  /** The description it scored as in each. */
-  rawDescription: string;
-  evenedDescription: string;
-  /** Its evened-out score, which the list is ordered by. */
-  evenedScore: number;
-}
-
-export interface ScoringMoves {
-  /** Counterweights with raw scores, clutter evened out: what evening out would add to the suggestions. Highest evened-out score first. */
-  toClutter: MovedPhoto[];
-  /** Clutter with raw scores, counterweights evened out. Highest evened-out score first. */
-  toCounterweights: MovedPhoto[];
+/** [weights] with [by] added to [description]'s weight. */
+export function nudged(weights: Record<string, number>, description: string, by: number): Record<string, number> {
+  // Rounded to a millionth, so the weight reads as typed ("0.0063", not "0.006300000000000001").
+  return withWeight(weights, description, Math.round(((weights[description] ?? 0) + by) * 1e6) / 1e6);
 }
 
 /**
- * The photos that change kind between raw and evened-out scores, each scoring with its own settings.
- * Only photos that may be trashed and aren't queued: the ones a suggestion would offer. [raw] and
- * [evened] are the same photos in the same order, matched once each way.
+ * The smallest amount (rounded up to 0.0001, at most [max]) for which [reached] holds, when more only
+ * ever brings it closer; null when [max] isn't enough. Found by halving.
  */
-export function scoringMoves(raw: PhotoMatch[], evened: PhotoMatch[], categories: Category[], photos: Map<string, ClutterPhoto>, settings: Record<Scoring, ClutterSettings>, over: LeadOver): ScoringMoves {
-  if (raw.length !== evened.length) throw new Error(`Both scorings must match the same photos (${raw.length} and ${evened.length})`);
-  const moves: ScoringMoves = { toClutter: [], toCounterweights: [] };
-  raw.forEach((r, i) => {
-    const e = evened[i]!;
-    if (r.mediaKey !== e.mediaKey) throw new Error('Both scorings must match the same photos in the same order');
-    if (!isCounted(r, categories, settings.raw, over) || !isCounted(e, categories, settings.evened, over)) return;
-    const [from, to] = [categories[r.best]!.kind, categories[e.best]!.kind];
-    if (from === to) return;
-    const photo = photos.get(r.mediaKey);
-    if (!photo || !photo.eligible || photo.approved) return;
-    (to === 'clutter' ? moves.toClutter : moves.toCounterweights).push({
-      mediaKey: r.mediaKey,
-      raw: r.best,
-      evened: e.best,
-      rawDescription: phrase(categories[r.best], r.description),
-      evenedDescription: phrase(categories[e.best], e.description),
-      evenedScore: e.bestScore,
-    });
+export function smallestStep(reached: (by: number) => boolean, max: number): number | null {
+  if (!reached(max)) return null;
+  // Not reached at [low], reached at [high].
+  let [low, high] = [0, max];
+  for (let step = 0; step < 40; step++) {
+    const middle = (low + high) / 2;
+    if (reached(middle)) high = middle;
+    else low = middle;
+  }
+  let by = Math.ceil(high * 10_000) / 10_000;
+  while (!reached(by)) by += 0.0001;
+  return Math.round(by * 10_000) / 10_000;
+}
+
+/**
+ * Where a photo's hover card starts, from the photo's top (px): level with the photo when it fits below,
+ * else lifted just enough to end [margin] above the window's bottom, but never above the window's top.
+ */
+export function hoverCardTop(photoTop: number, cardHeight: number, windowHeight: number, margin: number): number {
+  const overflow = photoTop + cardHeight + margin - windowHeight;
+  const lift = Math.min(overflow, photoTop - margin);
+  return lift > 0 ? -lift : 0;
+}
+
+/** The button under a leaving photo, short: "Stay +0.0123", or "Can’t stay" ([stayTitle] says more). */
+export function stayButton(by: number | null): string {
+  return by === null ? 'Can’t stay' : `Stay +${by.toFixed(4)}`;
+}
+
+/** The Stay button's tooltip: what it raises, and where the photo stays, or why it can't (more than [max] needed). */
+export function stayTitle(by: number | null, description: string, category: string, max: number): string {
+  return by === null
+    ? `“${description}” would need more than +${max} for this photo to stay in ${category}`
+    : `+${by.toFixed(4)} to “${description}”: just enough for this photo to stay in ${category}; it applies to every photo`;
+}
+
+/** One description's weight changed, by how much. */
+export interface WeightChange {
+  description: string;
+  by: number;
+}
+
+/** The description weights that differ between [before] and [after], by how much (to a millionth), in the order of [categories]. */
+export function weightChanges(before: Pick<Weights, 'descriptionWeights'>, after: Pick<Weights, 'descriptionWeights'>, categories: readonly Category[]): WeightChange[] {
+  return categories.flatMap((c) => c.descriptions).flatMap((description) => {
+    const by = Math.round(((after.descriptionWeights[description] ?? 0) - (before.descriptionWeights[description] ?? 0)) * 1e6) / 1e6;
+    return by === 0 ? [] : [{ description, by }];
   });
-  moves.toClutter.sort((a, b) => b.evenedScore - a.evenedScore);
-  moves.toCounterweights.sort((a, b) => b.evenedScore - a.evenedScore);
-  return moves;
 }
 
-/** "Evening out moves 1,336 photos from counterweights to clutter, and 15 the other way." */
-export function movesLine(moves: ScoringMoves): string {
-  return `Evening out moves ${n(moves.toClutter.length)} ${moves.toClutter.length === 1 ? 'photo' : 'photos'} from counterweights to clutter, and ${n(moves.toCounterweights.length)} the other way (only photos that may be trashed).`;
+/** What a change does, in parts the popup shows on lines of their own. */
+export interface ChangeSummary {
+  /** The change: '+0.0071 to “a selfie” (People)', or the edits to the list. */
+  what: string;
+  /** '491 photos leave the suggestions'. */
+  leave: string;
+  /** Where they leave from: 'Screen photos 65 · Products 161', or null when none leave. */
+  leaveFrom: string | null;
+  /** '20 join (Screen photos 18 · Memes and forwarded images 2)', or null when none join. */
+  join: string | null;
+  /** '24 move between them', or null when none move. */
+  move: string | null;
 }
 
-/** A piece of a caption, with the kind of category it names (null when it names none), so the page can colour counterweights. */
+/** A piece of a caption, with the kind of category it names (null when it names none), so the page can colour keepers. */
 export interface CaptionPart {
   text: string;
   kind: CategoryKind | null;
-}
-
-/** Where a moved photo was counted in each scoring, and as which description: 'People “a selfie” → Products and shopping “a supermarket aisle”'. */
-export function moveCaption(move: MovedPhoto, categories: Category[]): CaptionPart[] {
-  const [raw, evened] = [categories[move.raw]!, categories[move.evened]!];
-  return [
-    { text: raw.label, kind: raw.kind },
-    { text: ` “${move.rawDescription}” → `, kind: null },
-    { text: evened.label, kind: evened.kind },
-    { text: ` “${move.evenedDescription}”`, kind: null },
-  ];
-}
-
-/**
- * The [count] photos whose best category scores lowest, lowest first: nothing in the list describes
- * them well, so they show what it may be missing (an ice cream matched "a city view" best, at 0.651).
- * Meant for raw scores; evened out, a low score means unremarkable, not undescribed.
- */
-export function weakestMatches(matches: PhotoMatch[], count: number): PhotoMatch[] {
-  return [...matches].sort((a, b) => a.bestScore - b.bestScore).slice(0, count);
-}
-
-/** A photo's best score and where it went: '0.590 · Ordinary scenes “a drink”'. */
-export function matchCaption(match: PhotoMatch, categories: Category[]): CaptionPart[] {
-  const category = categories[match.best];
-  if (!category) throw new Error(`A match names a category that wasn't matched against (${match.best})`);
-  return [
-    { text: `${match.bestScore.toFixed(3)} · `, kind: null },
-    { text: category.label, kind: category.kind },
-    { text: ` “${phrase(category, match.description)}”`, kind: null },
-  ];
-}
-
-/** [size] items spread evenly from the first to the last, so a sample covers the whole list, the same each time. */
-export function evenSample<T>(items: T[], size: number): T[] {
-  if (items.length <= size) return [...items];
-  return Array.from({ length: size }, (_, i) => items[Math.floor((i * items.length) / size)]!);
-}
-
-/** The best-match scores' and leads' spread, to choose the settings: at 10%, 50% and 90% of photos. */
-export function scoreSpread(matches: PhotoMatch[], over: LeadOver): { fraction: number; bestScore: number; lead: number }[] {
-  if (matches.length === 0) return [];
-  const best = matches.map((m) => m.bestScore).sort((a, b) => a - b);
-  const lead = matches.map((m) => leadOf(m, over)).sort((a, b) => a - b);
-  const at = (sorted: number[], f: number) => sorted[Math.min(sorted.length - 1, Math.floor(f * sorted.length))]!;
-  return [0.1, 0.5, 0.9].map((fraction) => ({ fraction, bestScore: at(best, fraction), lead: at(lead, fraction) }));
+  /** Shown bold: where a photo goes ("Products → kept (People)"). */
+  strong?: boolean;
 }
 
 /** One line per category for the page. */

@@ -396,38 +396,108 @@ button.settings-tab-button { margin-left: auto; display: inline-flex; align-item
 .search-tile figcaption a:hover { color: var(--pc-text); text-decoration: underline; }
 /* Developer page dev-clutter.html: the list of categories, and how a photo scored, beside it on hover. */
 .clutter-categories > summary { font-size: 18px; line-height: 26px; font-weight: 650; cursor: pointer; user-select: none; }
+/* Room between the heading, its note, the Edit button and what follows. */
+.clutter-categories[open] > summary { margin-bottom: var(--space-3); }
+.clutter-categories > p { margin: 0 0 var(--space-3); }
+.clutter-categories > .buttons { margin-bottom: var(--space-5); }
 .clutter-categories h3 { margin: var(--space-4) 0 var(--space-1); }
+/* Subjects, Settings, Form…: easy to find in a long list, with clear room above. */
+h3.clutter-axis-heading { font-size: 24px; line-height: 32px; font-weight: 700; margin: var(--space-8) 0 var(--space-2); padding-bottom: var(--space-2); border-bottom: 2px solid var(--pc-accent); }
 .clutter-list { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-1) var(--space-4); margin: var(--space-2) 0 0; }
 .clutter-list > div { display: contents; }
 .clutter-list dd { margin: 0; color: var(--pc-muted); }
-/* Weights, minimum leads and the priority order, per category. */
+/* Weights and minimum leads, per category. */
 .clutter-tuning-category { padding: var(--space-2) 0; border-top: 1px solid var(--pc-border); }
 .clutter-tuning-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
-.clutter-tuning-order { display: inline-flex; align-items: center; gap: var(--space-1); }
-.clutter-tuning-order button { min-height: 28px; height: 28px; padding: 0 8px; }
 .clutter-tuning-descriptions { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin-top: var(--space-1); }
 .clutter-weight { width: 72px; min-height: 28px; height: 28px; padding: 0 6px; }
+/* Editing the list of categories, and how it differs from the shipped one. */
+.clutter-list-changes { margin: var(--space-3) 0; padding: var(--space-3); border: 1px solid var(--pc-border); border-radius: var(--radius-control); }
+.clutter-list-changes ul { margin: var(--space-1) 0 var(--space-2); padding-left: var(--space-5); }
+.clutter-editor h2 { margin-top: 0; }
+.clutter-edit-category > summary { font-weight: 650; cursor: pointer; user-select: none; }
+.clutter-edit-category[open] > summary { margin-bottom: var(--space-2); }
+.clutter-edit-label { font-weight: 650; min-width: 220px; }
+.clutter-edit-descriptions { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2); }
+.clutter-edit-description, .clutter-add { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.clutter-edit-description input[type="text"], .clutter-add input[type="text"] { flex: 1 1 260px; min-width: 0; }
+/* Buffs: under a photo opened large, and what one changes, in a popup that scrolls. */
+.clutter-buffs { align-items: center; }
+.clutter-popup { position: fixed; inset: 0; z-index: 110; background: #00000099; display: flex; align-items: center; justify-content: center; padding: var(--space-6); }
+.clutter-popup-box { width: min(1200px, 100%); max-height: 100%; overflow-y: auto; margin: 0; }
+.clutter-popup-photos { margin-top: var(--space-4); }
+.clutter-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.clutter-popup-count { margin: var(--space-2) 0 0; font-size: 18px; }
+.clutter-popup-details { margin-bottom: var(--space-3); }
+.clutter-popup-details p { margin: 2px 0; }
+/* The photo a buff was chosen for, at the top of the popup. */
+.clutter-chosen { display: flex; gap: var(--space-4); align-items: center; margin: var(--space-3) 0; }
+.clutter-chosen .search-grid { flex: 0 0 200px; }
+/* Under a photo leaving a suggestion: its clutter description's weight, and Keep to raise it just enough. */
+.clutter-nudge { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 4px; }
+.clutter-nudge button { min-height: 28px; height: 28px; padding: 0 8px; }
+.clutter-popup-group { font-weight: 650; cursor: pointer; user-select: none; margin-bottom: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--pc-border); }
+/* A photo opened large from the popup goes above it. */
+.clutter-popup .viewer { z-index: 120; }
 .clutter-sample-title { margin: var(--space-8) 0 var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--pc-border); font-weight: 650; }
 .clutter-sample-title:first-of-type { margin-top: var(--space-3); padding-top: 0; border-top: none; }
-.clutter-show-all { margin-top: var(--space-4); }
+.clutter-show-all { margin-top: var(--space-3); align-items: center; }
 details[open]:has(> .clutter-sample-title) { padding-bottom: var(--space-6); }
 .clutter-tile { position: relative; }
+/* A tab of finds: room below the last row, so a photo's hover card there can be scrolled into view. */
+.clutter-finds { padding-bottom: 80vh; }
 .clutter-kind-counterweight { color: var(--pc-keep); }
+.clutter-kind-neutral { color: var(--pc-muted); }
+/* Pairs of subject and setting, with what each comes to. */
+.clutter-pairs td { padding: 4px 10px 4px 0; }
+.clutter-pair-clutter { color: var(--pc-trash); }
+.clutter-pair-keep { color: var(--pc-keep); }
+.clutter-pair-none { color: var(--pc-muted); }
+.clutter-pair-group { padding: var(--space-1) 0; border-top: 1px solid var(--pc-border); }
+.clutter-pair-group > summary { cursor: pointer; user-select: none; font-weight: 650; }
+.clutter-pair-group > table { margin: var(--space-2) 0 var(--space-2) var(--space-4); }
 .clutter-number { font-family: var(--font-data); font-weight: 650; color: var(--pc-text); }
 .clutter-card {
   position: absolute; top: 0; z-index: 20; width: 380px; padding: 10px 12px; pointer-events: none;
   border: 1px solid var(--pc-border); border-radius: var(--radius-control); background: var(--pc-surface);
   box-shadow: 0 8px 24px #00000033; font-size: 13px; line-height: 18px;
 }
+/* A photo opened large on the developer page: every description's score beside it, scrolling on its own. */
+.clutter-viewer-body { flex: 1; min-height: 0; display: flex; gap: var(--space-4); }
+.clutter-viewer-body > .viewer-photo { flex: 1 1 auto; min-width: 0; }
+.clutter-viewer-scores { flex: 0 0 min(460px, 45%); overflow-y: auto; padding-right: var(--space-2); }
+.clutter-viewer-scores p { margin: 0; }
+.clutter-viewer-scores table { border-collapse: collapse; margin-bottom: 6px; }
+.clutter-viewer-scores td { padding: 1px 8px 1px 0; border-bottom: none; }
+.clutter-viewer-scores tr.counterweight td { color: var(--pc-keep); }
+.clutter-viewer-scores tr.neutral td { color: var(--pc-muted); }
+.clutter-viewer-scores p.clutter-card-heading { font-weight: 650; margin-bottom: 6px; }
+.clutter-viewer-scores p.clutter-card-title { font-weight: 650; color: var(--pc-text); margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--pc-border); }
+.clutter-viewer-scores .clutter-card-scoring + .clutter-card-scoring { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--pc-border); }
+@media (max-width: 760px) { .clutter-viewer-body { flex-direction: column; } .clutter-viewer-scores { flex: 0 0 40%; } }
+/* The labelling screen: the photo, and the kinds of clutter to pick from beside it. */
+/* Touch as well as keys: large targets, no double-tap zoom. */
+.clutter-labeller { touch-action: manipulation; }
+.clutter-kinds { flex: 0 0 min(440px, 45%); overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; align-content: start; }
+.clutter-kinds button { min-height: 56px; text-align: left; font-size: 16px; }
+.clutter-kinds button.selected { background: var(--pc-accent); border-color: var(--pc-accent); color: var(--pc-on-accent); }
+.clutter-label-buttons button { min-height: 64px; min-width: 120px; font-size: 18px; padding: 0 20px; }
+.clutter-label-buttons button.keep { border-color: var(--pc-keep); }
+.clutter-label-buttons button.clutter { border-color: var(--pc-trash); }
+.clutter-kinds kbd, .clutter-labeller kbd { font-family: var(--font-mono, monospace); font-weight: 700; margin-right: 6px; opacity: 0.7; }
+@media (max-width: 760px) { .clutter-kinds { flex: 0 0 45%; } }
 .clutter-card.right { left: calc(100% + 8px); }
 .clutter-card.left { right: calc(100% + 8px); }
 .clutter-card p { margin: 0; }
 .clutter-card p.clutter-card-heading { font-weight: 650; margin-bottom: 6px; }
+/* A side's title ("Setting: Streets and buildings, … · counts"), set apart from the rows under it, which can be grey too. */
+.clutter-card p.clutter-card-title { font-weight: 650; color: var(--pc-text); margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--pc-border); }
 .clutter-card-scoring + .clutter-card-scoring { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--pc-border); }
 .clutter-card table { border-collapse: collapse; margin-bottom: 6px; }
 .clutter-card td { padding: 1px 8px 1px 0; border-bottom: none; }
 .clutter-card .mono { font-size: 13px; }
 .clutter-card tr.counterweight td { color: var(--pc-keep); }
+.clutter-card tr.neutral td { color: var(--pc-muted); }
 .show-more { display: flex; justify-content: center; padding: var(--space-2) 0 var(--space-6); }
 
 /* --- The viewer: one photo large, dark in both themes, framed in what will happen to it --- */

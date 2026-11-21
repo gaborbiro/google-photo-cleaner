@@ -69,10 +69,10 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
 
 - `extension/src/app/search/clutter.ts`: the categories and the counting; tests in
   `extension/test/app/clutter.test.ts`.
-- 16 **clutter** categories (screenshots, photos of screens, receipts, documents, whiteboards, notes,
+- 15 **clutter** categories (screen photos: screenshots and photos of screens as one since 2026-11-18; receipts, documents, whiteboards, notes,
   parking, signs, menus, tickets, products, barcodes and QR codes, meter readings, things to fix or
   sell, memes, accidental shots), each described in several ways.
-- 8 **counterweights** (people, children, celebrations, pets, nature, travel, ordinary scenes,
+- 9 **counterweights** (people, children, celebrations, pets, nature, travel, adventures and sights (since 2026-11-18: outdoor, water and sky adventures, landmarks, ruins), ordinary scenes,
   old photos and keepsakes): never shown, they only compete, taking photos away from clutter.
 - Each photo goes to its **one best category** (a category scores as its best description) and counts
   only when that score is at least the **minimum score** and at least the **minimum lead** above the
@@ -278,6 +278,38 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
       adds nothing, 2 tied add T·ln 2, and 3 tied add T·ln 3. A slider for T, starting at 0.02. Worked
       by hand from the hover cards at T = 0.02: all 5 wrong Accidental shots are left out, and 3 of the 7
       wrong Photos of screens. 2 of 4 TV photos to trash are lost, the safe direction
+- [x] **Counterweights only** (decided 2026-11-18; built in 0.5.22): with clutter pooled too, Screenshots
+      at default settings (319 photos) let in six selfies and people with phones at the bottom (#310–#318,
+      leads 0.020–0.028). Each matched four or five kinds of clutter around 0.60–0.61, which pooled
+      lifted clutter by up to 0.03; against its best clutter alone, every one led by 0.004 or less, or
+      trailed. A photo vaguely like many kinds of clutter is one nothing describes well, not sure clutter.
+      Now the lead is the best clutter minus the counterweights pooled (and, over the next category, the
+      higher of the best other clutter and the other counterweights pooled)
+- [x] **Pool the best 3 of each kind** (decided 2026-11-18, built in 0.5.25): clutter is pooled again,
+      like counterweights, its best 3 only. Several kinds of clutter close together (a receipt, a
+      document, a form) count as evidence of clutter, as several counterweights do of a keeper. Cost,
+      worked out from the hover cards: of the six selfies and people with phones counted as Screenshots
+      at 0.5.21 (#310–#318), about four come back at minimum lead 0.02 (#311 lead ≈ 0.025, #314 ≈ 0.034,
+      #317 ≈ 0.026, #318 0.021); #310 (≈ 0.018) and #316 (≈ 0.019) stay out. Estimates: the cards showed
+      only the top counterweights. Those four are for buffs or Screenshots' own minimum lead to handle
+- [x] Pool only the best 3 counterweights (decided 2026-11-18, built in 0.5.24): at most pooling × ln 3
+      (0.022 at 0.02) above the best. Before, pooling counted every counterweight, so a photo nothing describes well still got a pool: eight
+      counterweights all near 0.61 add up to 0.02 × ln 8 ≈ 0.04. A desk with a model spaceship and a
+      monitor (Photos of screens 0.655, five kinds of clutter next, every counterweight below 0.611)
+      was left out on counterweights pooled to 0.635 (2026-11-18). Since 0.5.23 the hover card lists
+      every counterweight in the pool with its vote. Alternatives considered: pool only those close to
+      the clutter score, or leave it (leaving out is the safe direction)
+- [x] **Buff a counterweight from a photo** (built in 0.5.22; in 0.5.23 moved to the tab "Open all in
+      a new tab" opens, for a clutter category, where the whole category is judged; applied buffs go
+      back to the clutter page's weights): under a counted clutter photo opened large, one button per
+      counterweight: the smallest weight on its closest description that leaves
+      this photo out of its category (up to +0.2). A buff applies to every photo, so it isn't made
+      casually: the button opens a popup listing every trashable photo it would take out of the
+      suggestions, where each goes (another category, or not counted with its lead before and after),
+      with the hover card now and with the buff. Apply or cancel (Esc). Since 0.5.31 the popup can balance the buff with clutter weights, shown live (0.5.34: under each photo leaving a suggestion, the clutter description it scored as there, with its weight; 0.5.36: a Keep button raising it by the smallest amount that keeps the photo; earlier, a panel of whole categories): the photos that leave and the photos that join, by suggestion, and whether the photo itself is still out; Apply sends every change. Prefer counterweights to weakening
+      clutter, which would reach everywhere. In the product, the same could come from asking why a
+      photo was un-ticked ("Which fits this photo better?", top counterweights and "None of these",
+      which points to a missing counterweight), weighed against every photo kept ticked (milestone 6)
 - [x] **Weights** (decided 2026-11-18; built in 0.5.21, kept in the browser): a weight per category and per description, about −0.05 to
       +0.05, added to its scores before comparing (a category's weight to all its descriptions).
       Strengthening a counterweight or weakening a clutter description takes photos away from clutter.
@@ -286,11 +318,63 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
       computer), with lead 0.012 instead of 0.035
 - [x] **A minimum lead per category** (built in 0.5.21), defaulting to the shared one: Signs needs 0.03–0.04, Products is
       fine at 0.01
+- [x] **Edit the categories on the developer page** (decided 2026-11-20, built in 0.5.44): Edit in "Categories and
+      weights" opens an editor (rename, add or remove categories, switch clutter and counterweight; add, reword,
+      move or remove descriptions). Save describes what is new to the AI model, scores every photo again and
+      shows what the edits do (photos that leave, join or move between suggestions), to apply or go back to.
+      The edited list is kept in this browser (`clutterEdits.ts`); the panel lists the changes from the shipped
+      list, with Copy changes (to make them permanent in `clutter.ts`) and Reset to the shipped list. A reworded
+      description keeps its weight
+- [~] **Subject and setting** (decided 2026-11-20, built in 0.5.54; `clutterAxes.ts`, page mode "Subject and
+      setting", next to "One list" until 0.5.63): one fingerprint mixes what a photo is of with where it is (a selfie in a
+      supermarket matches People and Products). Each category is a subject or a setting, with a verdict
+      (clutter, keep or neutral); each photo gets its best subject and best setting, each against its own
+      axis only, and counts only when clearly ahead (a minimum score and lead per axis, and per category).
+      The pair decides: an exception for the exact pair (both count) first, then keep wins, then clutter
+      (subject first). Since 0.5.58 it takes strong evidence to call a photo clutter and any credible sign
+      of a keeper stops it: a keep category is heard when within the minimum lead of its side's best, and
+      clutter counts only when first and clearly ahead of everything that isn't clutter (a party photo had
+      gone to clutter on Food 0.686 just ahead of People 0.684). "Clear/unclear" is "counts/too close".
+      Since 0.5.61 a third side, **form**: Screenshots against Not a screenshot ("a person holding a
+      phone"…), decided on its own by the AI alone (a desktop screenshot can be any shape, so no size
+      test). It doesn't touch keep or clutter, keepers don't stop it, and a clutter form is a suggestion of
+      its own: a screenshot of a receipt is in Screenshots and in Receipts. ("A phone screenshot" as a
+      setting had made a friend holding a phone at a bar clutter.) Photos of screens stay a subject. Each mode keeps its own list and settings.
+      The page has the same editor (with axis, verdict and exceptions), Save popup, Open all with buffs (a
+      keep subject or setting strengthened just enough to leave a photo out) and Stay (renamed from Keep:
+      raise the description a leaving photo matched, just enough to stay in its category), and a
+      subject × setting table of every pair with its count and outcome, each openable. Starting list: the
+      single list split, mixed categories divided (Shops, Car parks, Museums and historic places, Home,
+      Streets and buildings as settings). To judge on my library: selfies in shops, children at computers,
+      museum pieces, ruins
+- [x] **Subject and setting only** (decided 2026-11-21, 0.5.63): it did better than the single list, which is
+      removed (in the git history before 0.5.63), with its page mode. What subject and setting lacked from it
+      came over, each scoring with its own settings:
+      - **Raw or evened-out scores**, switchable. Evened out was turned down for the single list in
+        2026-10 (it moved keepers into clutter); with a keeper heard near the top it is worth another look:
+        a short, vague description like "tools" scored about 0.64 on every photo and won wherever nothing
+        fitted (London skylines as Things to fix or sell).
+      - **Pooling where overlapping descriptions share a vote**: on each side, the descriptions of one
+        verdict close behind its best add to it, each vote shrunk by how much the description rises and
+        falls with one above it across the library (the correlation of evened-out scores, each photo's own
+        average taken off). "A city view", "a landscape" and "a sky adventure" count about once, "a famous
+        landmark" on its own. Only the best three votes count, and the lead is measured between pools. Off
+        by default.
+      - **A floor**: clutter counts only when it scores at least so far above a baseline description, "a
+        photo", which is close to every photo. Off by default.
+- [x] **The list reviewed for coverage** (2026-11-21, 0.5.64; `AXIS_LIST` in `clutterAxes.ts`): 32 subjects, 14
+      settings, a baseline. Clutter is specific objects photographed for a practical reason; keep is what must
+      never be suggested; neutral is everything else common (vehicles, plants, clothes, health, everyday
+      objects…), so clutter never wins only because nothing else fits (London skylines went to Things to fix
+      on "tools"). Keep wins, so places where clutter is usually photographed (airports, cafés, cars, offices)
+      are neutral settings. Wording that worked was kept; Signs and Things to fix were narrowed; new clutter:
+      Cards and IDs, Parcels and deliveries, care labels. Screenshots became a setting, with no form side
 - [ ] **Keep the minimum score**, today 0 (off): it guards against photos nothing describes well, where
       two poor matches can still be far apart. Choose it while tuning
-- [x] **A priority order of the clutter categories** (built in 0.5.21), re-orderable on the developer page: the order the
-      suggestions appear in Search. Museum pieces, churches and old machinery should rank lower, not be
-      hidden
+- [x] ~~A priority order of the clutter categories, re-orderable on the developer page~~ (built in 0.5.21,
+      removed in 0.5.30): the order was meant for users, learned from what they trash (milestone 6),
+      not set by hand. The developer page lists suggestions by size, largest first. Museum pieces,
+      churches and old machinery should still rank lower, not be hidden: by what users keep
 - [x] Accidental shots: remove "a photo of the floor" and "a photo of a ceiling" (they match
       architecture and interiors; decided 2026-11-18). Milestone 2's quality numbers are the better
       signal
@@ -327,7 +411,7 @@ A shipped list of kinds of clutter, counted in the user's library, offered as su
       riskiest are seen without leading with them. A sort menu (Best, Riskiest, Newest, Oldest…) that
       remembers the last choice, Best by default. Every photo is still checked against the protection
       rules before it's trashed, as Search's sweep does now
-- [ ] Suggestions in the priority order (developer page now, learned in milestone 6)
+- [ ] Suggestions largest first for now; ordered by what the user trashes later (milestone 6)
 - [ ] Texts from the model (`search/searchModel.ts`); `test/app/screens.test.tsx` covers chips;
       manual checks in `docs/extension-manual-checks.md`
 
@@ -401,7 +485,7 @@ The one that would feel like the app knows you, and the riskiest for memories.
 - Ranking for review only, never "select all". *(Replaced on 2026-11-18 for milestone 1's suggestions:
   their photos come all ticked, with the riskiest shown; see milestone 1.)*
 - Decided 2026-11-18, for milestone 1's suggestions:
-  - It learns the weights and the priority order that the developer page sets by hand (milestone 1).
+  - It learns the weights that the developer page sets by hand (milestone 1), and the order of the suggestions.
   - Order: a suggestion the user trashes more from moves up (the share of shown photos trashed,
     starting from the shipped order so one bad look doesn't bury a category).
   - Weights: an un-ticked photo means "keep". Its clutter description weakens and the counterweights

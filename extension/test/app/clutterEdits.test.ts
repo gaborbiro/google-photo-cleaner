@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kindOf, type AxisCategory, type Axis, type Verdict } from '../../src/app/search/clutterAxes';
+import { apart, axisBreakdown, kindOf, STARTING_AXIS_SETTINGS, STARTING_AXIS_TUNING, type AxisCategory, type Axis, type ScoredAxis, type Verdict } from '../../src/app/search/clutterAxes';
 import {
   addAxisCategory,
   addDescription,
@@ -10,6 +10,7 @@ import {
   floorHint,
   isShipped,
   withBaseline,
+  withCardSettings,
   listChanges,
   listOf,
   moveDescription,
@@ -19,6 +20,7 @@ import {
   rewordDescription,
   setVerdict,
   settingsForList,
+  tuningEdits,
   weightEdits,
   weightLabel,
   weightReworded,
@@ -167,5 +169,42 @@ describe('editing the list of subjects and settings', () => {
       '“a meme with text” +0.0100 (was 0)',
     ]);
     expect(weightEdits(before, before, list, axisLead)).toEqual([]);
+  });
+});
+
+describe('a verdict changed in the editor, as Save shows it', () => {
+  it('scores the photo against the new verdict under "With the edits"', () => {
+    // Food made clutter: the scores Save shows hover over a photo come from the saved list, so Food reads as clutter there.
+    const food = cat('food', 'Food and drink', 'subject', 'neutral', ['a meal on a plate']);
+    const people = cat('people', 'People', 'subject', 'keep', ['a selfie']);
+    const home = cat('home', 'Home', 'setting', 'neutral', ['a kitchen']);
+    const { list } = listOf(setVerdict(draftOf([food, people, home]), 'food', 'clutter'));
+    const scored: ScoredAxis[] = list.map((category) => ({ category, vectors: [Float32Array.from([1])] }));
+    const rows = axisBreakdown(Float32Array.from([0.8, 0.5, 0.7]), scored, apart(3), STARTING_AXIS_SETTINGS.raw, [], 3).sides[0]!.rows;
+    expect(rows.map((r) => [r.label, r.kind])).toEqual([['Food and drink', 'clutter'], ['People', 'counterweight']]);
+  });
+});
+
+describe('the Settings card, saved before it counts', () => {
+  const raw = STARTING_AXIS_SETTINGS.raw;
+  const tuning = (scoring: 'raw' | 'evened', rawSettings = raw) => ({ scoring, settings: { ...STARTING_AXIS_TUNING.settings, raw: rawSettings } });
+
+  it('says what the card changes, one line each, and nothing when it is as applied', () => {
+    expect(tuningEdits(STARTING_AXIS_TUNING, STARTING_AXIS_TUNING)).toEqual([]);
+    const after = tuning('evened', { ...raw, subject: { ...raw.subject, margin: raw.subject.margin + 0.01 }, pooling: 0, baseline: 0.03 });
+    expect(tuningEdits(tuning('raw'), after)).toEqual([
+      'Scoring: evened out (was raw scores)',
+      `Raw scores: subject minimum lead ${raw.subject.margin + 0.01} (was ${raw.subject.margin})`,
+      ...(raw.pooling === 0 ? [] : [`Raw scores: pooling off (was ${raw.pooling})`]),
+      `Raw scores: floor 0.03 (was ${raw.baseline ?? 'off'})`,
+    ]);
+  });
+
+  it('applies only the card, keeping weights a buff or the lab applied meanwhile', () => {
+    const draft = tuning('raw', { ...raw, pooling: 0.05, margins: {}, descriptionWeights: {} });
+    const meanwhile = tuning('raw', { ...raw, margins: { products: 0.005 }, descriptionWeights: { 'a price tag': 0.01 } });
+    const applied = withCardSettings(meanwhile, draft);
+    expect(applied.settings.raw).toEqual({ ...raw, pooling: 0.05, margins: { products: 0.005 }, descriptionWeights: { 'a price tag': 0.01 } });
+    expect(tuningEdits(meanwhile, applied)).toEqual([`Raw scores: pooling 0.05 (was ${raw.pooling === 0 ? 'off' : raw.pooling})`]);
   });
 });

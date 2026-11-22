@@ -215,7 +215,7 @@ describe('clutter by subject and setting', () => {
       { category: shops, vectors: [v(0, 0, 0, 0, 1)] },
     ];
     const row = v(0.5, 0.6, 0.4, 0.3, 0.2);
-    expect(axisBreakdown(row, s5, apart(5), settings, [], 'every').sides[0]!.rows.map((r) => [r.label, r.description, r.score])).toEqual([
+    expect(axisBreakdown(row, s5, apart(5), settings, [], 'large').sides[0]!.rows.map((r) => [r.label, r.description, r.score])).toEqual([
       ['Products', 'a price tag', '0.600'],
       ['Products', 'a product on a shelf', '0.500'],
       ['People', 'a selfie', '0.400'],
@@ -223,6 +223,16 @@ describe('clutter by subject and setting', () => {
     ]);
     // Per category, as in a hover card: each as its best description.
     expect(axisBreakdown(row, s5, apart(5), settings, [], 7).sides[0]!.rows.map((r) => r.description)).toEqual(['a price tag', 'a selfie']);
+  });
+
+  it('keeps a photo opened large to the best tenth of each side, at least 10, and says how many more', () => {
+    // 150 subject descriptions: the best 15 (a tenth), 135 more; a side of 4 lists all 4.
+    const many = { ...products, descriptions: Array.from({ length: 150 }, (_, i) => `thing ${i}`) };
+    const scoredMany: ScoredAxis[] = [{ category: many, vectors: many.descriptions.map(() => v(1, 0)) }, { category: shops, vectors: [v(0, 1)] }];
+    const scores = v(...many.descriptions.map((_, i) => 0.9 - i * 0.001), 0.5);
+    const side = axisBreakdown(scores, scoredMany, apart(151), settings, [], 'large').sides[0]!;
+    expect([side.rows.length, side.rows[0]!.description, side.rows.at(-1)!.description, side.more]).toEqual([15, 'thing 0', 'thing 14', 135]);
+    expect(axisBreakdown(scores, scoredMany, apart(151), settings, [], 'large').sides[1]!.more).toBe(0);
   });
 
   it('works out the smallest raise that makes a photo clutter in its category again (Stay)', () => {
@@ -271,8 +281,8 @@ describe('clutter by subject and setting', () => {
     const descriptions = AXIS_LIST.categories.flatMap((c) => c.descriptions);
     expect(new Set(descriptions).size).toBe(descriptions.length);
     expect(AXIS_LIST.categories.every((c) => c.kind === kindOf(c.verdict))).toBe(true);
-    expect(axisListSummary(AXIS_LIST)).toBe('33 subjects, 13 settings, 2 forms and 1 baseline');
-    expect(axisSections(AXIS_LIST.categories).map((s) => [s.axis, s.categories.length])).toEqual([['subject', 33], ['setting', 13], ['form', 2], ['baseline', 1]]);
+    expect(axisListSummary(AXIS_LIST)).toBe('36 subjects, 13 settings, 2 forms and 1 baseline');
+    expect(axisSections(AXIS_LIST.categories).map((s) => [s.axis, s.categories.length])).toEqual([['subject', 36], ['setting', 13], ['form', 2], ['baseline', 1]]);
     const named = (id: string) => AXIS_LIST.categories.find((c) => c.id === id)!;
     // Screenshots are a form, against Not a screenshot: as a setting they won wherever no place fitted.
     // Photos of screens stay a subject.

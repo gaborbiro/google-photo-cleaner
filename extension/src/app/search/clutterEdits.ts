@@ -3,8 +3,8 @@
 // the settings carried over to it. The edited list is kept in this browser only; "Copy changes" gives
 // the edits as text, to make them permanent in clutterAxes.ts.
 
-import { withWeight } from './clutter';
-import { kindOf, type Axis, type AxisCategory, type AxisList, type PairException, type Verdict } from './clutterAxes';
+import { withWeight, type Scoring } from './clutter';
+import { kindOf, type Axis, type AxisCategory, type AxisList, type AxisSettings, type AxisTuning, type PairException, type Verdict } from './clutterAxes';
 
 /** A description being edited: its words, and what they were in the list the draft started from (null when added here). */
 export interface DraftDescription {
@@ -299,6 +299,41 @@ export function weightEdits(before: DraftWeights, after: DraftWeights, list: rea
     if ((was ?? 0) !== (now ?? 0)) lines.push(`“${d}” ${signed(now)} (was ${signed(was)})`);
   }
   return lines;
+}
+
+/**
+ * How the Settings card's fields differ between [before] and [after], one line each, as Save shows them:
+ * "Scoring: evened out (was raw scores)", "Raw scores: subject minimum lead 0.03 (was 0.02)", "Raw
+ * scores: pooling off (was 0.02)". Weights and categories' own minimum leads are edited elsewhere
+ * ([weightEdits]) and left out. None: nothing to save.
+ */
+export function tuningEdits(before: AxisTuning, after: AxisTuning): string[] {
+  const name = (s: Scoring) => (s === 'raw' ? 'raw scores' : 'evened out');
+  const lines: string[] = [];
+  if (before.scoring !== after.scoring) lines.push(`Scoring: ${name(after.scoring)} (was ${name(before.scoring)})`);
+  for (const scoring of ['raw', 'evened'] as const) {
+    const [was, now] = [before.settings[scoring], after.settings[scoring]];
+    const line = (what: string, a: number | null, b: number | null, off: string) => {
+      if (a !== b) lines.push(`${name(scoring)[0]!.toUpperCase()}${name(scoring).slice(1)}: ${what} ${b ?? off} (was ${a ?? off})`);
+    };
+    for (const axis of ['subject', 'setting', 'form'] as const) {
+      line(`${axis} minimum score`, was[axis].minScore, now[axis].minScore, '');
+      line(`${axis} minimum lead`, was[axis].margin, now[axis].margin, '');
+    }
+    line('pooling', was.pooling === 0 ? null : was.pooling, now.pooling === 0 ? null : now.pooling, 'off');
+    line('floor', was.baseline, now.baseline, 'off');
+  }
+  return lines;
+}
+
+/**
+ * [current] with the Settings card's fields of [draft]: its scoring, and per scoring the axes' minimum
+ * scores and leads, pooling and the floor. Weights and categories' own minimum leads stay as [current]
+ * has them, so a buff or the lab applied while the card was being edited is kept.
+ */
+export function withCardSettings(current: AxisTuning, draft: AxisTuning): AxisTuning {
+  const card = (now: AxisSettings, from: AxisSettings): AxisSettings => ({ ...now, subject: from.subject, setting: from.setting, form: from.form, pooling: from.pooling, baseline: from.baseline });
+  return { scoring: draft.scoring, settings: { raw: card(current.settings.raw, draft.settings.raw), evened: card(current.settings.evened, draft.settings.evened) } };
 }
 
 /** How a list's exceptions differ from [from]'s, one line each, named as in [list]. */

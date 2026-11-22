@@ -446,6 +446,8 @@ details[open]:has(> .clutter-sample-title) { padding-bottom: var(--space-6); }
 .clutter-tile { position: relative; }
 /* A tab of finds: room below the last row, so a photo's hover card there can be scrolled into view. */
 .clutter-finds { padding-bottom: 80vh; }
+/* A closed category in the editor: its descriptions after its name, small and quiet. */
+.clutter-closed-note { margin-left: var(--space-3); font-size: 12px; font-weight: 400; color: var(--pc-muted); }
 .clutter-kind-counterweight { color: var(--pc-keep); }
 .clutter-kind-neutral { color: var(--pc-muted); }
 /* Pairs of subject and setting, with what each comes to. */
@@ -469,33 +471,45 @@ details[open]:has(> .clutter-sample-title) { padding-bottom: var(--space-6); }
 .clutter-viewer-scores p { margin: 0; }
 .clutter-viewer-scores table { border-collapse: collapse; margin-bottom: 6px; }
 .clutter-viewer-scores td { padding: 1px 8px 1px 0; border-bottom: none; }
+.clutter-viewer-scores tr.clutter td { color: var(--pc-trash); }
 .clutter-viewer-scores tr.counterweight td { color: var(--pc-keep); }
 .clutter-viewer-scores tr.neutral td { color: var(--pc-muted); }
 .clutter-viewer-scores p.clutter-card-heading { font-weight: 650; margin-bottom: 6px; }
-.clutter-viewer-scores p.clutter-card-title { font-weight: 650; color: var(--pc-text); margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--pc-border); }
+.clutter-viewer-scores p.clutter-card-title.clutter-card-side { font-weight: 400; font-size: inherit; border-bottom: none; padding-bottom: 0; margin-bottom: 6px; }
+.clutter-viewer-scores p.clutter-card-title { font-size: 15px; font-weight: 650; color: var(--pc-text); margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--pc-border); }
 .clutter-viewer-scores .clutter-card-scoring + .clutter-card-scoring { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--pc-border); }
 @media (max-width: 760px) { .clutter-viewer-body { flex-direction: column; } .clutter-viewer-scores { flex: 0 0 40%; } }
 /* The labelling screen: the photo, and the kinds of clutter to pick from beside it. */
 /* Touch as well as keys: large targets, no double-tap zoom. */
 .clutter-labeller { touch-action: manipulation; }
-.clutter-kinds { flex: 0 0 min(440px, 45%); overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; align-content: start; }
+/* The column beside the photo: the verdict, or the kinds, and Back and Close at its foot. */
+.clutter-label-side { flex: 0 0 min(440px, 42%); display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.clutter-label-buttons { display: flex; flex-direction: column; gap: 10px; }
+.clutter-label-nav { display: flex; gap: 10px; margin-top: auto; }
+.clutter-label-nav button { flex: 1; min-height: 56px; font-size: 16px; }
+.clutter-kinds { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; align-content: start; }
 .clutter-kinds button { min-height: 56px; text-align: left; font-size: 16px; }
+.clutter-kinds-note { grid-column: 1 / -1; margin: 4px 0 0; }
 .clutter-kinds button.selected { background: var(--pc-accent); border-color: var(--pc-accent); color: var(--pc-on-accent); }
-.clutter-label-buttons button { min-height: 64px; min-width: 120px; font-size: 18px; padding: 0 20px; }
+.clutter-label-buttons button { min-height: 64px; font-size: 18px; padding: 0 20px; text-align: left; }
 .clutter-label-buttons button.keep { border-color: var(--pc-keep); }
 .clutter-label-buttons button.clutter { border-color: var(--pc-trash); }
 .clutter-kinds kbd, .clutter-labeller kbd { font-family: var(--font-mono, monospace); font-weight: 700; margin-right: 6px; opacity: 0.7; }
-@media (max-width: 760px) { .clutter-kinds { flex: 0 0 45%; } }
+@media (max-width: 760px) { .clutter-label-side { flex: 0 0 45%; } }
 .clutter-card.right { left: calc(100% + 8px); }
 .clutter-card.left { right: calc(100% + 8px); }
 .clutter-card p { margin: 0; }
 .clutter-card p.clutter-card-heading { font-weight: 650; margin-bottom: 6px; }
-/* A side's title ("Setting: Streets and buildings, … · counts"), set apart from the rows under it, which can be grey too. */
-.clutter-card p.clutter-card-title { font-weight: 650; color: var(--pc-text); margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--pc-border); }
+/* A title, set apart from the rows under it, which can be grey too: bold for a part ("Now", "With the buff"); plain
+   for a side ("Setting: Streets and buildings, … · counts"), in the text colour no row has. */
+.clutter-card p.clutter-card-title.clutter-card-side { font-weight: 400; font-size: inherit; border-bottom: none; padding-bottom: 0; margin-bottom: 6px; }
+.clutter-card p.clutter-card-title { font-size: 15px; font-weight: 650; color: var(--pc-text); margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--pc-border); }
 .clutter-card-scoring + .clutter-card-scoring { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--pc-border); }
 .clutter-card table { border-collapse: collapse; margin-bottom: 6px; }
 .clutter-card td { padding: 1px 8px 1px 0; border-bottom: none; }
 .clutter-card .mono { font-size: 13px; }
+/* Each row in its verdict's colour, clutter too, so a verdict changed in the editor shows under "With the edits". */
+.clutter-card tr.clutter td { color: var(--pc-trash); }
 .clutter-card tr.counterweight td { color: var(--pc-keep); }
 .clutter-card tr.neutral td { color: var(--pc-muted); }
 .show-more { display: flex; justify-content: center; padding: var(--space-2) 0 var(--space-6); }

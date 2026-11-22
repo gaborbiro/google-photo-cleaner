@@ -19,7 +19,6 @@ import {
   axisListSummary,
   axisOutcome,
   formOutcome,
-  axisSections,
   axisStayRaise,
   axisSummary,
   changesLine,
@@ -72,14 +71,15 @@ import {
   setAxis,
   setVerdict,
   settingsForList,
+  tuningEdits,
   weightEdits,
-  weightLabel,
   weightReworded,
   withBaseline,
+  withCardSettings,
   type Draft,
   type DraftWeights,
 } from '../search/clutterEdits';
-import { kindGuesses, labelSample, OTHER_KIND, readLabels, SAMPLE_SIZES, saveLabels, scoreLabels, type Labels, type PhotoLabel } from '../search/clutterLabels';
+import { kindGuesses, labelExamples, labelSample, OTHER_KIND, readLabels, SAMPLE_SIZES, saveLabels, scoreLabels, type Labels, type PhotoLabel } from '../search/clutterLabels';
 import { LAB_SHEET_MAX, labCategoryLines, labRefusal, labReviewIds, labTarget, readLabRequest, type LabMoveGroup, type LabRequest, type LabResult } from '../search/clutterLab';
 import type { LibraryPhoto } from '../search/searchModel';
 import { searchDeps } from '../search/session';
@@ -154,9 +154,10 @@ async function work(photos: Map<string, LibraryPhoto>, order: LibraryPhoto[], sc
 }
 
 /** A photo's hover card: its outcome, then its best subjects and best settings, under [title] when there are two. */
-function axisCards(row: Float32Array, scored: ScoredAxis[], overlap: Overlap, settings: AxisSettings, exceptions: readonly PairException[], title: string | null, shown: number | 'every' = SIDE_ROWS): TitledBreakdown[] {
+function axisCards(row: Float32Array, scored: ScoredAxis[], overlap: Overlap, settings: AxisSettings, exceptions: readonly PairException[], title: string | null, shown: number | 'large' = SIDE_ROWS): TitledBreakdown[] {
   const b = axisBreakdown(row, scored, overlap, settings, exceptions, shown);
-  return [{ title, breakdown: { heading: b.outcome, rows: [], more: null } }, ...b.sides.map((s) => ({ title: s.title, breakdown: { heading: '', rows: s.rows, more: null } }))];
+  // A part's name and its outcome on one line ("Now · Clutter: Products is clutter"); without a name, the outcome alone.
+  return [{ title: title === null ? null : `${title} · ${b.outcome}`, breakdown: { heading: title === null ? b.outcome : '', rows: [], more: null } },...b.sides.map((s) => ({ title: s.title, side: true, breakdown: { heading: '', rows: s.rows, more: s.more > 0 ? `and ${s.more.toLocaleString()} more, lower` : null } }))];
 }
 
 /** What a tab of finds needs: the photos to show, and for a clutter category's, what a buff needs to weigh its effect. */
@@ -307,7 +308,7 @@ function AxisCategoryCard({ count, worked, rows, settings, exceptions, preview, 
   const tile = (p: CategoryPhoto): Tile => {
     const row = rows.get(p.mediaKey);
     if (!row) throw new Error('A counted photo is missing from the scores');
-    return { mediaKey: p.mediaKey, thumbUrl: worked.photos.get(p.mediaKey)?.thumbUrl ?? null, caption: plain(photoCaption(p)), breakdowns: () => axisCards(row, worked.scored, worked.overlap, settings, exceptions, null), everything: () => axisCards(row, worked.scored, worked.overlap, settings, exceptions, null, 'every') };
+    return { mediaKey: p.mediaKey, thumbUrl: worked.photos.get(p.mediaKey)?.thumbUrl ?? null, caption: plain(photoCaption(p)), breakdowns: () => axisCards(row, worked.scored, worked.overlap, settings, exceptions, null), everything: () => axisCards(row, worked.scored, worked.overlap, settings, exceptions, null, 'large') };
   };
   const grid = (title: string, photos: CategoryPhoto[]) =>
     photos.length > 0 && (
@@ -399,7 +400,9 @@ function LabelScreen({ queue, labels, kinds, guesses, thumbUrl, preview, onLabel
     } else if (step === 'verdict') {
       if (k === 'k') give({ verdict: 'keep', kind: null });
       else if (k === 'u') give({ verdict: 'unsure', kind: null });
-      else if (k === 'c') setStep('kind');
+      else if (k === 'n') give({ verdict: 'clutter', kind: null });
+      else if (e.key === 'Enter' && shown[0]) give({ verdict: 'clutter', kind: shown[0].id });
+      else if (k === 'c' || e.key === ' ') setStep('kind');
     } else {
       if (e.key === 'Enter') give({ verdict: 'clutter', kind: shown[selected]?.id ?? null });
       else if (e.key === 'ArrowDown') setSelected((s) => Math.min(shown.length - 1, s + 1));
@@ -421,33 +424,35 @@ function LabelScreen({ queue, labels, kinds, guesses, thumbUrl, preview, onLabel
       </div>
       <div className="clutter-viewer-body">
         <div className="viewer-photo">{key ? (url ? <img src={url} alt="" /> : <span className="muted">Loading…</span>) : <span className="muted">Nothing left to label in this sample. Esc closes.</span>}</div>
-        {step === 'kind' && (
-          // Large buttons, so a touch screen works as well as the keys.
-          <div className="clutter-kinds" role="group" aria-label="Which kind of clutter">
-            {shown.map((k, i) => (
-              <button key={k.id} className={i === selected ? 'selected' : ''} onClick={() => give({ verdict: 'clutter', kind: k.id })}><kbd>{KIND_KEYS[i]}</kbd> {k.label}</button>
-            ))}
-            <button onClick={() => give({ verdict: 'clutter', kind: OTHER_KIND })}><kbd>o</kbd> Other clutter: none of these fits</button>
-            <button onClick={() => give({ verdict: 'clutter', kind: null })}><kbd>0</kbd> Clutter, kind not given</button>
+        {/* Beside the photo, so the eyes don't leave it; large, so a touch screen works as well as the keys. */}
+        <div className="clutter-label-side">
+          {step === 'verdict' ? (
+            <div className="clutter-label-buttons" role="group" aria-label="Your verdict">
+              <button className="keep" disabled={!key} onClick={() => give({ verdict: 'keep', kind: null })}><kbd>K</kbd> Keep: wrong to offer</button>
+              {shown[0] && <button className="clutter" disabled={!key} onClick={() => give({ verdict: 'clutter', kind: shown[0]!.id })}><kbd>Enter</kbd> Clutter: {shown[0].label}</button>}
+              <button className="clutter" disabled={!key} onClick={() => setStep('kind')}><kbd>Space</kbd> Clutter: another kind…</button>
+              <button className="clutter" disabled={!key} onClick={() => give({ verdict: 'clutter', kind: null })}><kbd>N</kbd> Clutter, kind not given</button>
+              <button disabled={!key} onClick={() => give({ verdict: 'unsure', kind: null })}><kbd>U</kbd> Unsure</button>
+              <p className="muted small">Only clutter gets a kind. A photo you'd keep (people, travel, a landmark, a pet…) is simply Keep.</p>
+            </div>
+          ) : (
+            <div className="clutter-kinds" role="group" aria-label="Which kind of clutter">
+              {shown.map((k, i) => (
+                <button key={k.id} className={i === selected ? 'selected' : ''} onClick={() => give({ verdict: 'clutter', kind: k.id })}><kbd>{KIND_KEYS[i]}</kbd> {k.label}</button>
+              ))}
+              <button onClick={() => give({ verdict: 'clutter', kind: OTHER_KIND })}><kbd>o</kbd> Other clutter: none of these fits</button>
+              <button onClick={() => give({ verdict: 'clutter', kind: null })}><kbd>0</kbd> Clutter, kind not given</button>
+              <p className="muted small clutter-kinds-note">
+                Tap a kind, or <kbd>Enter</kbd> for the highlighted one (↑ ↓ to move), or its key. Other: you know its kind and none is listed. Kind not given: clutter, without saying which (never wrong).
+              </p>
+              <button onClick={() => setStep('verdict')}><kbd>Esc</kbd> Not clutter after all</button>
+            </div>
+          )}
+          <div className="clutter-label-nav">
+            <button onClick={() => onUndo()}><kbd>←</kbd> Back</button>
+            <button onClick={onClose}>Close</button>
           </div>
-        )}
-      </div>
-      <div className="viewer-buttons clutter-label-buttons">
-        {step === 'verdict' ? (
-          <>
-            <button className="keep" disabled={!key} onClick={() => give({ verdict: 'keep', kind: null })}><kbd>K</kbd> Keep: wrong to offer</button>
-            <button className="clutter" disabled={!key} onClick={() => setStep('kind')}><kbd>C</kbd> Clutter: fine to offer…</button>
-            {shown[0] && <button className="clutter" disabled={!key} onClick={() => give({ verdict: 'clutter', kind: shown[0]!.id })}>Clutter: {shown[0].label}</button>}
-            <button disabled={!key} onClick={() => give({ verdict: 'unsure', kind: null })}><kbd>U</kbd> Unsure</button>
-          </>
-        ) : (
-          <>
-            <span className="muted small">Which kind? Tap it, or <kbd>Enter</kbd> for the highlighted one (↑ ↓ to move), or its key.</span>
-            <button onClick={() => setStep('verdict')}><kbd>Esc</kbd> Not clutter after all</button>
-          </>
-        )}
-        <button onClick={() => onUndo()}><kbd>←</kbd> Back</button>
-        <button onClick={onClose}>Close</button>
+        </div>
       </div>
     </div>
   );
@@ -467,8 +472,10 @@ const AXIS_HEADINGS: Record<Axis, string> = {
   baseline: 'Baseline: what any photo scores (for the floor; decides nothing on its own)',
 };
 
-function AxisEditor({ editing, onChange, settings, scoring, problems, working, canSave, onSave, onCancel }: {
+function AxisEditor({ editing, edited, onChange, settings, scoring, problems, working, canSave, onSave, onDiscard }: {
   editing: AxisEditing;
+  /** Whether there are edits not yet applied, to save or discard. */
+  edited: boolean;
   onChange: (e: AxisEditing) => void;
   settings: AxisSettings;
   scoring: Scoring;
@@ -476,7 +483,7 @@ function AxisEditor({ editing, onChange, settings, scoring, problems, working, c
   working: string | null;
   canSave: boolean;
   onSave: () => void;
-  onCancel: () => void;
+  onDiscard: () => void;
 }) {
   const { draft, weights, exceptions } = editing;
   const [newAxis, setNewAxis] = useState<Axis>('subject');
@@ -503,12 +510,11 @@ function AxisEditor({ editing, onChange, settings, scoring, problems, working, c
   const ofAxis = (axis: Axis) => draft.filter((c) => c.axis === axis);
   return (
     <div className="clutter-editor">
-      <h2>Edit the subjects, settings and weights</h2>
       <p className="muted small">
         A subject is what a photo is of, a setting where it is; each photo gets its best of each. A verdict says what a subject or setting means when it counts: clutter,
         keep or neutral. Keep wins over clutter; an exception decides one exact pair. Weights are added to scores before photos are compared (these are the weights for{' '}
-        {scoringName(scoring)}; each scoring keeps its own); an empty minimum lead uses its axis&apos;s. Nothing changes until you save: Save shows what the edits do,
-        to apply or go back to.
+        {scoringName(scoring)}; each scoring keeps its own); an empty minimum lead uses its axis&apos;s. Edits count only once saved and applied (the lab measures against what is applied): Save shows what they do,
+        to apply or go back to; Discard drops them.
       </p>
       <div className="buttons">
         <button onClick={() => weighted({ categoryWeights: {}, descriptionWeights: {}, margins: {} })}>Clear weights and minimum leads</button>
@@ -518,7 +524,7 @@ function AxisEditor({ editing, onChange, settings, scoring, problems, working, c
           <h3 className="clutter-axis-heading">{AXIS_HEADINGS[axis]}</h3>
           {ofAxis(axis).length === 0 && <p className="muted small">None yet: add one with Add at the bottom, choosing “{axis}”.</p>}
           {ofAxis(axis).map((c) => (
-            <Collapsible key={c.id} heading={draftHeading(c)} kind={c.verdict === 'clutter' ? 'clutter' : c.verdict === 'keep' ? 'counterweight' : 'neutral'} startOpen={c.descriptions.length === 0}>
+            <Collapsible key={c.id} heading={draftHeading(c)} kind={c.verdict === 'clutter' ? 'clutter' : c.verdict === 'keep' ? 'counterweight' : 'neutral'} startOpen={c.descriptions.length === 0} closedNote={c.descriptions.map((d) => d.text).join(' · ')}>
               <div className="clutter-tuning-head">
                 <input type="text" className="clutter-edit-label" aria-label="Category name" value={c.label} onChange={(e) => list(renameCategory(draft, c.id, e.target.value))} />
                 {axisSelect(c.axis, `${c.label} is a`, (a) => list(setAxis(draft, c.id, a)))}
@@ -585,8 +591,9 @@ function AxisEditor({ editing, onChange, settings, scoring, problems, working, c
       {!canSave && <p className="muted small">Save works once suggestions are worked out: new words need the AI model.</p>}
       {working && <p className="working" role="status"><span className="spinner-inline" />{working}</p>}
       <div className="buttons">
-        <button className="primary" disabled={!canSave || working !== null} onClick={onSave}>Save…</button>
-        <button disabled={working !== null} onClick={onCancel}>Cancel</button>
+        <button className="primary" disabled={!edited || !canSave || working !== null} onClick={onSave}>Save…</button>
+        <button disabled={!edited || working !== null} onClick={onDiscard}>Discard</button>
+        <span className="muted small">{edited ? 'Edits not applied yet.' : 'No edits: change anything above, then Save.'}</span>
       </div>
     </div>
   );
@@ -604,29 +611,22 @@ function withLead(record: Record<string, number>, key: string, value: number | u
   return value === undefined ? rest : { ...rest, [key]: value };
 }
 
-/** The list, weights and leads, to read; they are changed in the editor. */
-function AxisListView({ list, settings, scoring, changes, copied, open, onToggle, onEdit, onCopy, canReset, onReset }: {
+/** The list, weights and leads, always open to editing ([children]: the editor), and how it differs from the shipped list. */
+function AxisListView({ list, changes, copied, open, onToggle, onCopy, canReset, onReset, children }: {
   list: { categories: AxisCategory[]; exceptions: PairException[] };
-  /** Whether the list is open: kept by the page, so it stays open after the editor closes. */
+  /** Whether the list is open: kept by the page. */
   open: boolean;
   onToggle: (open: boolean) => void;
-  settings: AxisSettings;
-  scoring: Scoring;
   changes: string[];
   copied: string | null;
-  onEdit: () => void;
   onCopy: () => void;
   canReset: boolean;
   onReset: () => void;
+  children: React.ReactNode;
 }) {
-  const label = (id: string) => list.categories.find((c) => c.id === id)?.label ?? id;
   return (
     <details className="clutter-categories" open={open} onToggle={(e) => onToggle(e.currentTarget.open)}>
       <summary>Subjects, settings and weights: {axisListSummary(list)}{changes.length > 0 && ' (edited)'}</summary>
-      <p className="muted small">Weights and minimum leads shown are for {scoringName(scoring)}. Change them, the verdicts and the exceptions with Edit.</p>
-      <div className="buttons">
-        <button className="primary" onClick={onEdit}>Edit the subjects, settings and weights</button>
-      </div>
       {changes.length > 0 && (
         <div className="clutter-list-changes">
           <p className="small"><strong>Changed from the shipped list</strong> <span className="muted">(kept in this browser only)</span></p>
@@ -638,33 +638,7 @@ function AxisListView({ list, settings, scoring, changes, copied, open, onToggle
           </div>
         </div>
       )}
-      {axisSections(list.categories).filter((s) => s.categories.length > 0).map((section) => (
-        <div key={section.axis}>
-          <h3 className="clutter-axis-heading">{section.title} · {section.categories.length}</h3>
-          {section.categories.map((c) => {
-            const weight = weightLabel(settings.categoryWeights[c.id]);
-            const lead = settings.margins[c.id];
-            return (
-              <div key={c.id} className="clutter-tuning-category">
-                <div className="clutter-tuning-head">
-                  <strong className={`clutter-kind-${c.verdict === 'clutter' ? 'clutter' : c.verdict === 'keep' ? 'counterweight' : 'neutral'}`}>{c.label}</strong>
-                  <span className="small">{c.verdict}</span>
-                  {weight && <span className="small mono">weight {weight}</span>}
-                  {lead !== undefined && <span className="small mono">minimum lead {lead}</span>}
-                </div>
-                <div className="clutter-tuning-descriptions">
-                  {c.descriptions.map((d) => {
-                    const w = weightLabel(settings.descriptionWeights[d]);
-                    return <span key={d} className="small">{d}{w && <span className="mono"> ({w})</span>}</span>;
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ))}
-      <h3 className="clutter-axis-heading">Exceptions · {list.exceptions.length}</h3>
-      {list.exceptions.map((e) => <p key={`${e.subject} ${e.setting}`} className="small">{label(e.subject)} in {label(e.setting)} → {e.verdict}</p>)}
+      {children}
     </details>
   );
 }
@@ -708,7 +682,17 @@ export function AxesPage() {
   const [tuning, setTuning] = useState<AxisTuning>(loaded.tuning);
   const { scoring } = tuning;
   const settings = tuning.settings[scoring];
-  const setSettings = (change: (s: AxisSettings) => AxisSettings) => setTuning((t) => ({ ...t, settings: { ...t.settings, [t.scoring]: change(t.settings[t.scoring]) } }));
+  // The Settings card edits a draft: nothing counts (and the lab measures against what is applied) until
+  // Save shows what it changes and Apply puts it in place.
+  const [cardDraft, setCardDraft] = useState<AxisTuning | null>(null);
+  const [cardSaving, setCardSaving] = useState(false);
+  // Kept from one redraw to the next, so what Save shows isn't worked out again (and its photos redrawn) each time.
+  const card = useMemo(() => (cardDraft ? withCardSettings(tuning, cardDraft) : tuning), [tuning, cardDraft]);
+  const cardScoring = card.scoring;
+  const cardSettings = card.settings[cardScoring];
+  const cardEdits = useMemo(() => (cardDraft ? tuningEdits(tuning, withCardSettings(tuning, cardDraft)) : []), [tuning, cardDraft]);
+  const setCard = (change: (t: AxisTuning) => AxisTuning) => setCardDraft((d) => change(d ? withCardSettings(tuning, d) : tuning));
+  const setSettings = (change: (s: AxisSettings) => AxisSettings) => setCard((t) => ({ ...t, settings: { ...t.settings, [t.scoring]: change(t.settings[t.scoring]) } }));
   const [worked, setWorked] = useState<AxisWorked | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -821,10 +805,8 @@ export function AxesPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [pendingEdit, setPendingEdit] = useState<{ categories: AxisCategory[]; exceptions: PairException[]; edits: string[]; worked: AxisWorked; settings: Record<Scoring, AxisSettings>; balance: Record<string, number> } | null>(null);
   const changesFromShipped = useMemo(() => [...listChanges(AXIS_LIST.categories, list.categories), ...exceptionChanges(AXIS_LIST.exceptions, list.exceptions, list.categories)], [list]);
-  const startEditing = (from: { categories: readonly AxisCategory[]; exceptions: PairException[] }) => {
-    setEditProblems([]);
-    setEditing({ draft: draftOf(from.categories), weights: draftWeights(settings), exceptions: from.exceptions });
-  };
+  // The editor shows what is applied until something is changed; the edits ([editing]) count once saved and applied.
+  const applied = useMemo<AxisEditing>(() => ({ draft: draftOf(inUse), weights: draftWeights(settings), exceptions: list.exceptions }), [inUse, settings, list.exceptions]);
   const axisLead = (s: AxisSettings) => (c: AxisCategory) => (c.axis === 'baseline' ? 0 : s[c.axis].margin);
   const saveEdits = async (edits = editing) => {
     if (!edits) throw new Error('No edits to save');
@@ -921,19 +903,44 @@ export function AxesPage() {
     return changeGrids(editWeighed.effects, lists, tile);
   }, [worked, pendingEdit, editWeighed, settings, list.exceptions, scoring]);
 
+  // Save on the Settings card: what the card's edits do to the suggestions, before Apply.
+  const cardWeighed = useMemo(() => {
+    if (!cardSaving || !matches || !worked || cardEdits.length === 0) return null;
+    const afterMatches = [...worked.rows[cardScoring]].map(([key, row]) => matchAxes(key, row, worked.scored, worked.overlap, cardSettings));
+    const lists: AxisLists = { before: inUse, after: inUse, exceptions: { before: list.exceptions, after: list.exceptions } };
+    const effects = axisEffects(matches, afterMatches, lists, new Map([...worked.photos].map(([k, p]) => [k, p as ClutterPhoto])));
+    const tile = (c: AxisChange): Tile => {
+      const [before, after] = [worked.rows[scoring].get(c.mediaKey), worked.rows[cardScoring].get(c.mediaKey)];
+      if (!before || !after) throw new Error('A photo the settings change is missing from the scores');
+      return {
+        mediaKey: c.mediaKey,
+        thumbUrl: worked.photos.get(c.mediaKey)?.thumbUrl ?? null,
+        caption: axisCaption(c, lists),
+        breakdowns: () => [...axisCards(before, worked.scored, worked.overlap, settings, list.exceptions, 'Now'), ...axisCards(after, worked.scored, worked.overlap, cardSettings, list.exceptions, 'With the settings')],
+      };
+    };
+    return { summary: axisSummary(cardEdits.join(' · '), effects, lists), grids: changeGrids(effects, lists, tile) };
+  }, [cardSaving, matches, worked, cardEdits, cardScoring, cardSettings, inUse, list.exceptions, scoring, settings]);
+  const applyCard = () => {
+    if (!cardDraft) throw new Error('No settings to apply');
+    setTuning((t) => withCardSettings(t, cardDraft));
+    setCardDraft(null);
+    setCardSaving(false);
+  };
+
   const number = (value: number, set: (n: number) => void, step: number, label: string) => (
     <input type="number" aria-label={label} value={value} step={step} min={0} onChange={(e) => Number.isFinite(e.target.valueAsNumber) && e.target.valueAsNumber >= 0 && set(e.target.valueAsNumber)} />
   );
   const leadField = (axis: SideAxis, key: 'minScore' | 'margin', label: string) => (
     <label>
-      {label} {number(settings[axis][key], (x) => setSettings((s) => ({ ...s, [axis]: { ...s[axis], [key]: x } })), scoring === 'raw' ? (key === 'margin' ? 0.002 : 0.005) : 0.05, `${axis} ${label}`)}
+      {label} {number(cardSettings[axis][key], (x) => setSettings((s) => ({ ...s, [axis]: { ...s[axis], [key]: x } })), cardScoring === 'raw' ? (key === 'margin' ? 0.002 : 0.005) : 0.05, `${axis} ${label}`)}
     </label>
   );
   // A setting that can be off (null or 0): turned off, it is remembered to bring back.
   const toggle = (key: 'pooling' | 'baseline', on: boolean) => {
-    const now = settings[key];
-    if (!on && now !== null && now > 0) setLastOn((l) => ({ ...l, [`${scoring} ${key}`]: now }));
-    const back = lastOn[`${scoring} ${key}`] ?? (key === 'pooling' ? STARTING_POOLING : STARTING_FLOOR)[scoring];
+    const now = cardSettings[key];
+    if (!on && now !== null && now > 0) setLastOn((l) => ({ ...l, [`${cardScoring} ${key}`]: now }));
+    const back = lastOn[`${cardScoring} ${key}`] ?? (key === 'pooling' ? STARTING_POOLING : STARTING_FLOOR)[cardScoring];
     setSettings((s) => ({ ...s, [key]: on ? back : key === 'pooling' ? 0 : null }));
   };
   // Save all for review: one folder picked, then every clutter category's files written into it.
@@ -1042,6 +1049,31 @@ export function AxesPage() {
       moves.push({ key: g.key, title: g.title, sheet: name, photos: moved.filter((p) => numbers.has(p.number)).map((p) => ({ number: p.number, caption: p.caption })), total: g.changes.length });
     }
     if (moved.length > 0) await writeFile(out, 'moves.txt', reviewText(`What ${request.id} moves`, afterLine, moved));
+    // The labelled photos behind the scores, with the change: offered though kept, and clutter missed, by kind (most first).
+    const labelGroups: LabMoveGroup[] = [];
+    if (request.labelSheets && Object.keys(labels).length > 0) {
+      const examples = labelExamples(afterMatches, target.list.categories, target.list.exceptions, photos, labels);
+      const kindName = (kind: string) => target.list.categories.find((c) => c.id === kind)?.label ?? (kind === OTHER_KIND ? 'other clutter' : 'kind not given');
+      const sheets = [
+        { key: 'label-wrong', title: 'Offered, labelled keep', keys: examples.wrong },
+        ...Object.entries(examples.missed).sort((a, b) => b[1].length - a[1].length).map(([kind, keys]) => ({ key: `label-missed-${kind}`, title: `Missed: ${kindName(kind)}`, keys })),
+      ].filter((s) => s.keys.length > 0);
+      let n = 0;
+      const looked: ReviewPhoto[] = [];
+      for (const s of sheets) {
+        setLab((l) => ({ ...l, message: `${request.id}: drawing ${s.title}…` }));
+        const shown = s.keys.slice(0, LAB_SHEET_MAX).map((k) => ({ key: k, number: ++n }));
+        const sheet = [];
+        for (const { key: k, number: num } of shown) {
+          const thumbUrl = worked.photos.get(k)?.thumbUrl ?? null;
+          sheet.push({ number: num, url: thumbUrl ? await preview(thumbUrl, SHEET_CELL) : null });
+          looked.push({ number: num, sample: s.title, caption: '', breakdown: axisBreakdown(afterRows.get(k)!, afterWorked.scored, afterWorked.overlap, afterSettings, target.list.exceptions, SIDE_ROWS) });
+        }
+        await writeFile(out, `${s.key}.png`, await contactSheet(sheet));
+        labelGroups.push({ key: s.key, title: s.title, sheet: `${s.key}.png`, photos: shown.map((x) => ({ number: x.number, caption: '' })), total: s.keys.length });
+      }
+      if (looked.length > 0) await writeFile(out, 'labels.txt', reviewText(`Labelled photos ${request.id} gets wrong or misses`, afterLine, looked));
+    }
     // Review files of the categories asked for, with the change.
     let reviews: string[] = [];
     try {
@@ -1066,6 +1098,7 @@ export function AxesPage() {
       moves,
       reviews,
       labels: Object.keys(labels).length === 0 ? null : { before: scoreLabels(matches, inUse, list.exceptions, photos, labels), after: scoreLabels(afterMatches, target.list.categories, target.list.exceptions, photos, labels) },
+      labelGroups,
     };
     await writeFile(out, 'result.json', JSON.stringify(result, null, 2));
     if (request.apply) {
@@ -1078,10 +1111,10 @@ export function AxesPage() {
   // Looks for a new request every few seconds; one whose folder already has a result is done.
   const runLabNow = useRef(runLab);
   runLabNow.current = runLab;
-  // Whether the page can take a request now: suggestions worked out, nothing being worked out, no editor
-  // or popup open. Until then a request waits, and runs once it is.
+  // Whether the page can take a request now: suggestions worked out, nothing being worked out, no popup of
+  // what a change does open. Edits not yet applied don't stop it: it measures against what is applied.
   const labReady = useRef(false);
-  labReady.current = worked !== null && matches !== null && counts !== null && progress === null && editing === null && pendingEdit === null;
+  labReady.current = worked !== null && matches !== null && counts !== null && progress === null && pendingEdit === null && !cardSaving;
   const labBusy = useRef(false);
   useEffect(() => {
     const folder = lab.folder;
@@ -1112,7 +1145,9 @@ export function AxesPage() {
           if (!notFound(error)) throw error;
         }
         if (!labReady.current) {
-          setLab((l) => ({ ...l, message: `${read.request.id}: waiting until the page is ready (suggestions worked out, editor closed).` }));
+          // The same message each time it looks: kept as it is, so the page isn't redrawn every few seconds.
+          const waiting = `${read.request.id}: waiting until the page is ready (suggestions worked out, no Save popup open).`;
+          setLab((l) => (l.message === waiting ? l : { ...l, message: waiting }));
           return;
         }
         setLab((l) => ({ ...l, message: `${read.request.id}: working…` }));
@@ -1184,11 +1219,9 @@ export function AxesPage() {
       <section className="card">
         {loaded.notes.map((note) => <p key={note} className="warn small">{note}</p>)}
         {saveProblem && <p className="warn small">{saveProblem}</p>}
-        {editing ? (
-          <AxisEditor editing={editing} onChange={setEditing} settings={settings} scoring={scoring} problems={editProblems} working={editWorking} canSave={worked !== null && progress === null} onSave={() => void saveEdits()} onCancel={() => setEditing(null)} />
-        ) : (
-          <AxisListView list={{ categories: [...inUse], exceptions: list.exceptions }} settings={settings} scoring={scoring} changes={changesFromShipped} copied={copied} open={listOpen} onToggle={setListOpen} onEdit={() => startEditing({ categories: inUse, exceptions: list.exceptions })} onCopy={copyChanges} canReset={worked !== null && progress === null} onReset={resetToShipped} />
-        )}
+        <AxisListView list={{ categories: [...inUse], exceptions: list.exceptions }} changes={changesFromShipped} copied={copied} open={listOpen} onToggle={setListOpen} onCopy={copyChanges} canReset={worked !== null && progress === null && editing === null} onReset={resetToShipped}>
+          <AxisEditor editing={editing ?? applied} edited={editing !== null} onChange={setEditing} settings={settings} scoring={scoring} problems={editProblems} working={editWorking} canSave={worked !== null && progress === null} onSave={() => void saveEdits()} onDiscard={() => { setEditing(null); setEditProblems([]); }} />
+        </AxisListView>
       </section>
       <section className="card">
         <div className="buttons"><button className="primary" disabled={progress !== null} onClick={() => void workOut()}>Work out suggestions</button></div>
@@ -1203,11 +1236,11 @@ export function AxesPage() {
         <section className="card">
           <h2>Settings</h2>
           <div className="segmented" role="group" aria-label="Scoring">
-            <button className={scoring === 'raw' ? 'selected' : ''} aria-pressed={scoring === 'raw'} onClick={() => setTuning((t) => ({ ...t, scoring: 'raw' }))}>Raw scores</button>
-            <button className={scoring === 'evened' ? 'selected' : ''} aria-pressed={scoring === 'evened'} onClick={() => setTuning((t) => ({ ...t, scoring: 'evened' }))}>Evened out</button>
+            <button className={cardScoring === 'raw' ? 'selected' : ''} aria-pressed={cardScoring === 'raw'} onClick={() => setCard((t) => ({ ...t, scoring: 'raw' }))}>Raw scores</button>
+            <button className={cardScoring === 'evened' ? 'selected' : ''} aria-pressed={cardScoring === 'evened'} onClick={() => setCard((t) => ({ ...t, scoring: 'evened' }))}>Evened out</button>
           </div>
           <p className="muted small">
-            {scoring === 'raw'
+            {cardScoring === 'raw'
               ? 'Scores as the AI model gives them. Some descriptions (short, vague ones most) score high on every photo, so they win more often.'
               : 'Each score is how far above that description\'s average over the whole library the photo is, counted in its usual spread: 0 is average, 2 is far above it. A description that is high on every photo no longer wins by default.'}{' '}
             Each scoring keeps its own settings and weights.
@@ -1228,9 +1261,9 @@ export function AxesPage() {
           )}
           <div className="row">
             <label className="clutter-toggle">
-              <input type="checkbox" checked={settings.pooling > 0} onChange={(e) => toggle('pooling', e.target.checked)} /> Pooling
+              <input type="checkbox" checked={cardSettings.pooling > 0} onChange={(e) => toggle('pooling', e.target.checked)} /> Pooling
             </label>
-            {settings.pooling > 0 && number(settings.pooling, (x) => setSettings((s) => ({ ...s, pooling: x })), scoring === 'raw' ? 0.005 : 0.05, 'Pooling')}
+            {cardSettings.pooling > 0 && number(cardSettings.pooling, (x) => setSettings((s) => ({ ...s, pooling: x })), cardScoring === 'raw' ? 0.005 : 0.05, 'Pooling')}
           </div>
           <p className="muted small">
             On each side, the descriptions of one verdict (clutter, keep, or neither) close behind the best add to it, and the lead is measured between those pools.
@@ -1240,9 +1273,9 @@ export function AxesPage() {
           </p>
           <div className="row">
             <label className="clutter-toggle">
-              <input type="checkbox" disabled={!hasBaseline && settings.baseline === null} checked={settings.baseline !== null} onChange={(e) => toggle('baseline', e.target.checked)} /> Floor
+              <input type="checkbox" disabled={!hasBaseline && cardSettings.baseline === null} checked={cardSettings.baseline !== null} onChange={(e) => toggle('baseline', e.target.checked)} /> Floor
             </label>
-            {settings.baseline !== null && number(settings.baseline, (x) => setSettings((s) => ({ ...s, baseline: x })), scoring === 'raw' ? 0.002 : 0.05, 'Floor')}
+            {cardSettings.baseline !== null && number(cardSettings.baseline, (x) => setSettings((s) => ({ ...s, baseline: x })), cardScoring === 'raw' ? 0.002 : 0.05, 'Floor')}
           </div>
           {floorHintText === null ? (
             <p className="muted small">Clutter counts only when it scores at least this far above the best of {floorWords}, which is close to every photo: a photo nothing in the list fits well stays out.</p>
@@ -1252,6 +1285,11 @@ export function AxesPage() {
               <button disabled={worked === null || progress !== null || editing !== null} onClick={addBaseline}>Add the baseline…</button>
             </div>
           )}
+          <div className="buttons clutter-show-all">
+            <button className="primary" disabled={cardEdits.length === 0 || worked === null || progress !== null} onClick={() => setCardSaving(true)}>Save settings…</button>
+            <button disabled={cardDraft === null} onClick={() => setCardDraft(null)}>Discard</button>
+            <span className="muted small">{cardEdits.length === 0 ? 'Changes here count only once saved and applied; the lab measures against what is applied.' : `Not applied yet: ${cardEdits.join(' · ')}`}</span>
+          </div>
           <div className="row">
             <label>Photos for a suggestion <input type="number" value={minPhotos} step={5} min={0} onChange={(e) => Number.isFinite(e.target.valueAsNumber) && setMinPhotos(e.target.valueAsNumber)} /></label>
           </div>
@@ -1351,6 +1389,20 @@ export function AxesPage() {
           problem={null}
           onApply={applyEdits}
           onCancel={() => setPendingEdit(null)}
+        />
+      )}
+      {cardWeighed && (
+        <ChangePopup
+          title="What the settings change"
+          summary={cardWeighed.summary}
+          note="Each caption says what the photo was and what it becomes; hover over one to see how it scores now and with the settings. Nothing changes until you apply them; Back to the settings keeps your changes."
+          applyLabel="Apply the settings"
+          cancelLabel="Back to the settings"
+          grids={cardWeighed.grids}
+          preview={preview}
+          problem={null}
+          onApply={applyCard}
+          onCancel={() => setCardSaving(false)}
         />
       )}
     </main>
@@ -1456,7 +1508,7 @@ export function AxesFindsPage({ id }: { id: string }) {
         ? finds.photos.map((p): Tile => ({
             ...p,
             breakdowns: () => axisCards(p.row, finds.scored, finds.overlap, tuned ?? finds.settings, finds.exceptions, null),
-            everything: () => axisCards(p.row, finds.scored, finds.overlap, tuned ?? finds.settings, finds.exceptions, null, 'every'),
+            everything: () => axisCards(p.row, finds.scored, finds.overlap, tuned ?? finds.settings, finds.exceptions, null, 'large'),
             buff:
               buffing && tuned
                 ? {

@@ -7,8 +7,8 @@ const cat = (id: string, axis: 'subject' | 'setting', verdict: 'clutter' | 'keep
 
 describe('the lab folder: requests an agent writes for the developer page', () => {
   it('reads a request, with what it leaves out kept as it is', () => {
-    expect(readLabRequest('{"id":"r1"}')).toEqual({ request: { id: 'r1', list: null, scoring: null, settings: null, apply: false, review: [] } });
-    const full = { id: 'r2', scoring: 'raw', settings: { margins: { screenshots: 0.03 } }, apply: true, review: 'all', list: AXIS_LIST };
+    expect(readLabRequest('{"id":"r1"}')).toEqual({ request: { id: 'r1', list: null, scoring: null, settings: null, apply: false, review: [], labelSheets: false } });
+    const full = { id: 'r2', scoring: 'raw', settings: { margins: { screenshots: 0.03 } }, apply: true, review: 'all', labelSheets: true, list: AXIS_LIST };
     expect(readLabRequest(JSON.stringify(full))).toEqual({ request: full });
   });
 
@@ -20,6 +20,7 @@ describe('the lab folder: requests an agent writes for the developer page', () =
     expect(problem('{"id":"r","scoring":"cooked"}')).toBe('"scoring" must be "raw" or "evened"');
     expect(problem('{"id":"r","settings":[1]}')).toBe('"settings" must be an object of settings fields');
     expect(problem('{"id":"r","apply":"yes"}')).toBe('"apply" must be true or false');
+    expect(problem('{"id":"r","labelSheets":1}')).toBe('"labelSheets" must be true or false');
     expect(problem('{"id":"r","review":"some"}')).toBe('"review" must be "all" or a list of category ids');
     expect(problem('{"id":"r","list":[]}')).toBe('"list" must be a list like AXIS_LIST: { categories, exceptions }');
   });

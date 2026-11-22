@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { apart, countAxes, kindOf, matchAxes, STARTING_AXIS_SETTINGS, type AxisCategory, type ScoredAxis } from '../../src/app/search/clutterAxes';
-import { kindGuesses, labelSample, OTHER_KIND, offeredIn, readLabels, saveLabels, scoreLabels, type Labels } from '../../src/app/search/clutterLabels';
+import { kindGuesses, labelExamples, labelSample, OTHER_KIND, offeredIn, readLabels, saveLabels, scoreLabels, type Labels } from '../../src/app/search/clutterLabels';
 
 const v = (...xs: number[]) => Float32Array.from(xs);
 const cat = (id: string, axis: 'subject' | 'setting' | 'form', verdict: 'clutter' | 'keep' | 'neutral', descriptions: string[]): AxisCategory => ({ id, label: id[0]!.toUpperCase() + id.slice(1), kind: kindOf(verdict), axis, verdict, descriptions });
@@ -70,5 +70,8 @@ describe('labels: the user’s verdict on photos, to score the suggestions again
       { id: 'screenshots', label: 'Screenshots', right: 0, harmless: 0, wrong: 1, missed: 0 },
     ]);
     expect(s).toMatchObject({ judged: 5, offered: 3, wrong: 1, clutter: 4, found: 2, otherKind: 1 });
+    // The photos behind those numbers, to look at: offered though kept, and clutter missed, by its kind.
+    expect(labelExamples(matches, list, [], photos, { ...labels, till: { verdict: 'clutter', kind: null } })).toEqual({ wrong: ['shot'], missed: { receipts: ['selfie'], other: ['blur'] } });
+    expect(labelExamples(matches, list, [], photos, { vague: { verdict: 'clutter', kind: null }, blur: { verdict: 'clutter', kind: null } }).missed).toEqual({ unspecified: ['blur'] });
   });
 });

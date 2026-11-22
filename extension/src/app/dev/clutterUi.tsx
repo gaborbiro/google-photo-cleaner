@@ -30,6 +30,8 @@ export const ZOOM_PX = 1024;
 
 export interface TitledBreakdown {
   title: string | null;
+  /** A subject's, setting's or form's title, shown plain under a part's bold one ("Now", "With the buff"). */
+  side?: boolean;
   breakdown: Breakdown;
 }
 
@@ -56,9 +58,9 @@ export function BreakdownCard({ breakdowns, side }: { breakdowns: TitledBreakdow
 function Breakdowns({ breakdowns }: { breakdowns: TitledBreakdown[] }) {
   return (
     <>
-      {breakdowns.map(({ title, breakdown }, i) => (
+      {breakdowns.map(({ title, side, breakdown }, i) => (
         <div key={`${i} ${title ?? ''}`} className="clutter-card-scoring">
-          {title && <p className="clutter-card-title">{title}</p>}
+          {title && <p className={side ? 'clutter-card-title clutter-card-side' : 'clutter-card-title'}>{title}</p>}
           {breakdown.heading && <p className="clutter-card-heading">{breakdown.heading}</p>}
           {breakdown.rows.length > 0 && (
             <table>
@@ -183,19 +185,22 @@ export function Zoom({ tiles, index, preview, onMove, onClose }: { tiles: Tile[]
   const tile = tiles[index]!;
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  // Loaded again only for another photo: the page redraws its grids (the lab looks for requests every few
+  // seconds), and a photo loaded again for each new copy of its tile flickered.
+  const thumbUrl = tile.thumbUrl;
   useEffect(() => {
     setUrl(null);
     setFailed(false);
-    if (!tile.thumbUrl) {
+    if (!thumbUrl) {
       setFailed(true);
       return;
     }
     let alive = true;
-    preview(tile.thumbUrl, ZOOM_PX).then((u) => alive && setUrl(u), () => alive && setFailed(true));
+    preview(thumbUrl, ZOOM_PX).then((u) => alive && setUrl(u), () => alive && setFailed(true));
     return () => {
       alive = false;
     };
-  }, [tile, preview]);
+  }, [thumbUrl, preview]);
   const previous = () => onMove(Math.max(0, index - 1));
   const next = () => onMove(Math.min(tiles.length - 1, index + 1));
   useOverlayKeys((e) => {
@@ -325,13 +330,17 @@ export function OptionalNumber({ value, label, placeholder, onChange }: { value:
 /**
  * One category in the editor, closed to begin with so the list fits on a screen; a category added in
  * the editor (with no descriptions yet) starts open, to fill in. It stays as the user left it while
- * edited, as long as the category is there.
+ * edited, as long as the category is there. Closed, [closedNote] (its descriptions) follows the heading;
+ * open, the fields inside show them.
  */
-export function Collapsible({ heading, kind, startOpen, children }: { heading: string; kind: CategoryKind | 'neutral'; startOpen: boolean; children: React.ReactNode }) {
+export function Collapsible({ heading, kind, startOpen, closedNote, children }: { heading: string; kind: CategoryKind | 'neutral'; startOpen: boolean; closedNote?: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(startOpen);
   return (
     <details className="clutter-tuning-category clutter-edit-category" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary className={`clutter-kind-${kind}`}>{heading}</summary>
+      <summary className={`clutter-kind-${kind}`}>
+        {heading}
+        {!open && closedNote && <span className="clutter-closed-note">{closedNote}</span>}
+      </summary>
       {children}
     </details>
   );

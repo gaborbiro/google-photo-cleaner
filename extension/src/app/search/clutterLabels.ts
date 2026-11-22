@@ -142,6 +142,24 @@ export interface LabelScores {
   judged: number;
 }
 
+/**
+ * The labelled photos to look at: offered though labelled keep ([wrong]), and labelled clutter offered
+ * nowhere ([missed], by the kind given: a category's id, OTHER_KIND, or "unspecified").
+ */
+export function labelExamples(matches: AxisMatch[], categories: readonly AxisCategory[], exceptions: readonly PairException[], photos: Map<string, ClutterPhoto>, labels: Labels): { wrong: string[]; missed: Record<string, string[]> } {
+  const wrong: string[] = [];
+  const missed: Record<string, string[]> = {};
+  for (const m of matches) {
+    const label = labels[m.mediaKey];
+    const photo = photos.get(m.mediaKey);
+    if (!label || label.verdict === 'unsure' || !photo || !photo.eligible || photo.approved) continue;
+    const offered = offeredIn(m, categories, exceptions).length > 0;
+    if (label.verdict === 'keep' && offered) wrong.push(m.mediaKey);
+    if (label.verdict === 'clutter' && !offered) (missed[label.kind ?? 'unspecified'] ??= []).push(m.mediaKey);
+  }
+  return { wrong, missed };
+}
+
 /** The suggestions [matches] make, scored against [labels]: per category, what it offers rightly, harmlessly and wrongly, and what it misses. */
 export function scoreLabels(matches: AxisMatch[], categories: readonly AxisCategory[], exceptions: readonly PairException[], photos: Map<string, ClutterPhoto>, labels: Labels): LabelScores {
   const clutterIds = categories.filter((c) => c.verdict === 'clutter' && c.axis !== 'baseline');

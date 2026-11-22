@@ -98,6 +98,24 @@ export const AXIS_LIST: AxisList = {
     subject('menus', 'Menus', 'clutter', ['a restaurant menu', 'a menu board in a cafe']),
     subject('tickets', 'Tickets and passes', 'clutter', ['a paper ticket', 'a printed boarding pass', 'a boarding pass on a phone screen', 'a paper train ticket', 'an event ticket']),
     subject('products', 'Products', 'clutter', ['a product on a shop shelf', 'a price tag', 'a product label', 'product packaging']),
+    // Things at home (labels, lab r16): photos of an object held up or set on a table, to show someone, to buy it
+    // again or to give it away. Most people take these; "household items around the home" held them back as
+    // neutral. 11 more found for 1 more wrong in 783 labels.
+    subject('homeitems', 'Things at home to buy, sell or show', 'clutter', [
+      'a single object on a table, photographed to show someone', 'an almost empty bottle or packet', 'an item laid out to be sold online',
+      'a charger, cable or battery pack', 'a household product photographed at home',
+    ]),
+    // Flat viewings and moving (labels, lab r21): rooms photographed to compare flats or to show the state of a
+    // place when moving in or out, and the boxes and vans of a move; once the move is done they're clutter.
+    // No wrong among 95 offered in 561 labels, once People took people standing in rooms (r22d).
+    subject('viewings', 'Flat viewings and moving', 'clutter', [
+      'an empty room in a flat to rent', 'an empty kitchen at a flat viewing', 'cardboard boxes packed for moving house', 'an empty wardrobe or cupboard', 'a bare room with no furniture',
+    ]),
+    // Food to buy or use up (labels, lab r21): what's in the fridge, an ingredients list, a use-by date, groceries
+    // just bought; meals stay in Food and drink, which most people keep. No wrong among 43 offered in 561 labels.
+    subject('groceries', 'Food to buy or use up', 'clutter', [
+      'the ingredients list on a food packet', 'the inside of an open fridge', 'groceries unpacked on a kitchen counter', 'a use-by date on food packaging',
+    ]),
     // No "a parcel on a doorstep" (2026-11-21): it took front doors, and people standing at them.
     subject('parcels', 'Parcels and deliveries', 'clutter', ['a cardboard delivery box', 'a shipping label on a parcel']),
     subject('codes', 'Labels, barcodes and QR codes', 'clutter', ['a barcode', 'a QR code', 'a serial number sticker', 'an appliance model plate', 'a care label on clothing', 'a laundry care label with washing symbols']),
@@ -111,12 +129,16 @@ export const AXIS_LIST: AxisList = {
       'a cartoon image with a caption', 'text written over a picture', 'a greeting card image with flowers and text', 'a joke picture with a punchline',
     ]),
     subject('accidental', 'Accidental shots', 'clutter', ['a blurry photo taken by accident', 'a dark photo with nothing visible']),
+    // A person on stairs (lab r16): Things at home took a person on a staircase at home.
+    // A person in a room, holding up a picture (lab r22d): Flat viewings took a person in a kitchen and one holding
+    // a framed picture in a show flat. 3 fewer wrong for 8 less clutter found in 561 labels.
     // An audience, a person at a desk (lab r9, raw scores): people in a wide shot lost to what was in front of
     // them, audiences at talks went to Whiteboards and people at their desks to Screen photos. "A person working
     // at a desk" also keeps desk setups with nobody in them: the safe side, to refine later.
     subject('people', 'People', 'keep', [
       'a portrait of a person', 'a group of people smiling', 'a selfie', 'people at a party', 'a couple together', 'a family photo', 'friends together', 'photo of a person holding a phone',
       'a mirror selfie', 'grandparents with their grandchildren', 'people sharing a meal', 'people dancing', 'a pregnant belly', 'an audience at a talk or show', 'a person working at a desk',
+      'a person on stairs or in a hallway', 'a person standing in a room at home', 'a person holding up a picture or poster',
     ]),
     // "A child using a tablet or computer": children at computers went to Photos of screens.
     subject('children', 'Children', 'keep', ['a baby', 'a child playing', 'a toddler', 'children at a birthday party', "a child's drawing", 'a child using a tablet or computer', 'a child in school uniform', 'a school play or performance']),
@@ -607,17 +629,23 @@ export function pairRows(matches: AxisMatch[], categories: readonly AxisCategory
 export interface AxisBreakdown {
   /** "Clutter: Products is clutter", "Kept: People keeps", "Neither: nothing that counts says clutter". */
   outcome: string;
-  sides: { title: string; rows: BreakdownRow[] }[];
+  /** Each side's rows, and how many descriptions were left out below them (for a photo opened large). */
+  sides: { title: string; rows: BreakdownRow[]; more: number }[];
 }
+
+/** A photo opened large lists each side's best descriptions: this share of them, but never fewer than [LARGE_MIN_ROWS]. */
+export const LARGE_SHARE = 0.1;
+export const LARGE_MIN_ROWS = 10;
 
 const verdictKind = (v: Verdict): BreakdownRow['kind'] => (v === 'clutter' ? 'clutter' : v === 'keep' ? 'counterweight' : 'neutral');
 
 /**
  * The outcome and the [shown] best subjects and settings, each with its score, the description it scores
- * as and its weight; or, with [shown] 'every', every description of every subject and setting, best first
- * (for a photo opened large).
+ * as and its weight; or, with [shown] 'large' (for a photo opened large), the descriptions of every
+ * subject and setting, best first: the best tenth of each side ([LARGE_SHARE], at least [LARGE_MIN_ROWS]),
+ * and how many more there are.
  */
-export function axisBreakdown(row: Float32Array, scored: ScoredAxis[], overlap: Overlap, settings: AxisSettings, exceptions: readonly PairException[], shown: number | 'every'): AxisBreakdown {
+export function axisBreakdown(row: Float32Array, scored: ScoredAxis[], overlap: Overlap, settings: AxisSettings, exceptions: readonly PairException[], shown: number | 'large'): AxisBreakdown {
   const categories = scored.map((s) => s.category);
   const match = matchAxes('', row, scored, overlap, settings);
   const outcome = axisOutcome(match, categories, exceptions);
@@ -626,7 +654,7 @@ export function axisBreakdown(row: Float32Array, scored: ScoredAxis[], overlap: 
   const all = weightedDescriptionScores(row, scored as ScoredCategory[], settings);
   // What a side lists: each category as its best description, or every description.
   const entries = (axis: SideAxis) =>
-    categories.flatMap((c, i) => (c.axis !== axis ? [] : shown === 'every' ? c.descriptions.map((_, d) => ({ i, description: d, score: all[starts[i]! + d]! })) : [{ i, description: scores[i]!.description, score: scores[i]!.score }]));
+    categories.flatMap((c, i) => (c.axis !== axis ? [] : shown === 'large' ? c.descriptions.map((_, d) => ({ i, description: d, score: all[starts[i]! + d]! })) : [{ i, description: scores[i]!.description, score: scores[i]!.score }]));
   const floor = categories.map((c, i) => ({ c, i })).filter(({ c }) => c.axis === 'baseline').sort((a, b) => scores[b.i]!.score - scores[a.i]!.score)[0];
   const weight = (c: AxisCategory, d: string) => {
     const w = (settings.categoryWeights[c.id] ?? 0) + (settings.descriptionWeights[d] ?? 0);
@@ -634,9 +662,11 @@ export function axisBreakdown(row: Float32Array, scored: ScoredAxis[], overlap: 
   };
   const side = (axis: SideAxis) => {
     const pick = match[axis]!;
-    const rows = entries(axis)
+    const listed = entries(axis);
+    const keep = shown === 'large' ? Math.max(LARGE_MIN_ROWS, Math.ceil(listed.length * LARGE_SHARE)) : shown;
+    const rows = listed
       .sort((a, b) => b.score - a.score)
-      .slice(0, shown === 'every' ? undefined : shown)
+      .slice(0, keep)
       .map((s): BreakdownRow => {
         const c = categories[s.i]!;
         const description = c.descriptions[s.description]!;
@@ -651,7 +681,7 @@ export function axisBreakdown(row: Float32Array, scored: ScoredAxis[], overlap: 
     const keeper = pick.keeper && pick.keeper.index !== pick.best ? ` · ${categories[pick.keeper.index]!.label} close behind, keeps` : '';
     const belowFloor = clutter && settings.baseline !== null && pick.baselineGap !== null && pick.baselineGap < settings.baseline;
     const status = pick.counts ? 'counts' : belowFloor ? 'below the floor, no say' : 'too close, no say';
-    return { title: `${name}: ${categories[pick.best]!.label}, ${against}${pools}${aboveFloor} · ${status}${keeper}`, rows };
+    return { title: `${name}: ${categories[pick.best]!.label}, ${against}${pools}${aboveFloor} · ${status}${keeper}`, rows, more: shown === 'large' ? Math.max(0, listed.length - keep) : 0 };
   };
   const word = outcome.verdict === 'clutter' ? 'Clutter' : outcome.verdict === 'keep' ? 'Kept' : 'Neither';
   const formed = formOutcome(match, categories);

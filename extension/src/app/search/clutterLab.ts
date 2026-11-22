@@ -15,6 +15,7 @@ import type { LabelScores } from './clutterLabels';
  * to keep it. [settings]: fields of that scoring's settings to replace (a field replaces the whole of
  * it, e.g. all of `margins`). [apply]: keep the change on the page afterwards, as Apply does; otherwise
  * it is only measured. [review]: the categories (ids) to save review files for, with the change.
+ * [labelSheets]: contact sheets of the labelled photos offered wrongly and missed, by kind, with the change.
  */
 export interface LabRequest {
   id: string;
@@ -23,6 +24,7 @@ export interface LabRequest {
   settings: Partial<AxisSettings> | null;
   apply: boolean;
   review: string[] | 'all';
+  labelSheets: boolean;
 }
 
 /** [text] (request.json) as a request, or why it can't be one, as the result file says it. */
@@ -39,6 +41,7 @@ export function readLabRequest(text: string): { request: LabRequest } | { proble
   if (r.scoring !== undefined && r.scoring !== null && r.scoring !== 'raw' && r.scoring !== 'evened') return { problem: '"scoring" must be "raw" or "evened"' };
   if (r.settings !== undefined && r.settings !== null && (typeof r.settings !== 'object' || Array.isArray(r.settings))) return { problem: '"settings" must be an object of settings fields' };
   if (r.apply !== undefined && typeof r.apply !== 'boolean') return { problem: '"apply" must be true or false' };
+  if (r.labelSheets !== undefined && typeof r.labelSheets !== 'boolean') return { problem: '"labelSheets" must be true or false' };
   const review = r.review === undefined ? [] : r.review;
   if (review !== 'all' && !(Array.isArray(review) && review.every((x) => typeof x === 'string'))) return { problem: '"review" must be "all" or a list of category ids' };
   if (r.list !== undefined && r.list !== null && (typeof r.list !== 'object' || Array.isArray(r.list))) return { problem: '"list" must be a list like AXIS_LIST: { categories, exceptions }' };
@@ -50,6 +53,7 @@ export function readLabRequest(text: string): { request: LabRequest } | { proble
       settings: (r.settings as Partial<AxisSettings> | undefined) ?? null,
       apply: r.apply === true,
       review: review as string[] | 'all',
+      labelSheets: r.labelSheets === true,
     },
   };
 }
@@ -141,9 +145,11 @@ export interface LabResult {
   reviews: string[];
   /** The suggestions scored against the user's labels (clutterLabels.ts), before and after; null with no labels yet. */
   labels: { before: LabelScores; after: LabelScores } | null;
+  /** With [LabRequest.labelSheets]: the labelled photos offered wrongly, and missed by kind, after the change. */
+  labelGroups: LabMoveGroup[];
 }
 
 /** A refused request's result. */
 export function labRefusal(id: string, problems: string[]): LabResult {
-  return { id, state: 'refused', problems, notes: [], applied: false, scoring: null, totals: null, categories: [], moves: [], reviews: [], labels: null };
+  return { id, state: 'refused', problems, notes: [], applied: false, scoring: null, totals: null, categories: [], moves: [], reviews: [], labels: null, labelGroups: [] };
 }

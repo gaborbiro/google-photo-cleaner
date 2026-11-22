@@ -38,8 +38,10 @@ away, can take a photo out with one tap, and trashed photos stay in Google Photo
 
 **Label photos…** on the developer page shows a sample one photo at a time and asks one question:
 *if Photo Cleaner offered this for the trash, would that be fine, or wrong?* **K** keep (wrong to offer),
-**C** clutter (fine to offer) then its kind (the best guess pre-selected: Enter takes it; **o** for clutter
-no category fits; **0** kind not given), **U** unsure (counts for nothing), **←** back. The labels are about
+**Space** (or **C**) clutter (fine to offer) then its kind (the best guess pre-selected: Enter takes it; **o** for clutter
+no category fits; **0** kind not given), **Enter** clutter of the best-guess kind straight away, **N** clutter
+with its kind not given straight away, **U** unsure
+(counts for nothing), **←** back. By touch, the same as large buttons. The labels are about
 the outcome, not how the matcher works, so they stay valid whatever is changed.
 
 The sample (`labelSample` in `clutterLabels.ts`): each clutter category's riskiest 8 and just missed 6, 40
@@ -87,6 +89,9 @@ folder `lab/<id>/` already has a `result.json` is done and is not run again.
 - `apply` (optional, default false): keep the change on the page afterwards, as Apply does. Otherwise
   it is only measured against what the page has now.
 - `review` (optional): category ids, or `"all"`, to save review files for, with the change.
+- `labelSheets` (optional, default false): contact sheets of the labelled photos the change offers though
+  they're labelled keep (`label-wrong.png`), and of the labelled clutter it misses, by kind
+  (`label-missed-<kind>.png`), with their scores in `labels.txt`.
 
 ## The result, in `lab/<id>/`
 

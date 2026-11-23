@@ -594,7 +594,7 @@ export function countAxes(matches: AxisMatch[], categories: readonly AxisCategor
     clutter: counts.filter((c) => (c.category as AxisCategory).verdict === 'clutter' && (c.category as AxisCategory).axis !== 'form').sort(bySize),
     forms: counts.filter((c) => (c.category as AxisCategory).verdict === 'clutter' && (c.category as AxisCategory).axis === 'form').sort(bySize),
     keepers: counts.filter((c) => (c.category as AxisCategory).verdict === 'keep' && (c.category as AxisCategory).axis !== 'form').sort(bySize),
-    totals: `Clutter ${n(clutter)}${share(clutter)} · kept ${n(kept)}${share(kept)} · neither ${n(neither)}${share(neither)}${categories.some((c) => c.axis === 'form') ? ` · and, by form, clutter ${n(screenshots)}${share(screenshots)}` : ''}`,
+    totals: `Clutter ${n(clutter)}${share(clutter)} · kept ${n(kept)}${share(kept)} · neither ${n(neither)}${share(neither)}${categories.some((c) => c.axis === 'form') ? ` · and clutter because of form ${n(screenshots)}${share(screenshots)}` : ''}`,
     photos: matches.length,
   };
 }
@@ -882,7 +882,8 @@ export function axisSummary(what: string, effects: AxisEffects, lists: AxisLists
     what,
     leave: `${n(leaves.length)} ${leaves.length === 1 ? 'photo leaves' : 'photos leave'} the suggestions`,
     leaveFrom: leaves.length > 0 ? tally(leaves, lists.before, (c) => c.before.category!) : null,
-    join: joins.length > 0 ? `${n(joins.length)} ${joins.length === 1 ? 'joins' : 'join'} (${tally(joins, lists.after, (c) => c.after.category!)})` : null,
+    join: joins.length > 0 ? `${n(joins.length)} ${joins.length === 1 ? 'photo joins' : 'photos join'} the suggestions` : null,
+    joinTo: joins.length > 0 ? tally(joins, lists.after, (c) => c.after.category!) : null,
     move: moves.length > 0 ? `${n(moves.length)} ${moves.length === 1 ? 'moves' : 'move'} between them` : null,
   };
 }
@@ -895,6 +896,11 @@ export function axisSections(categories: readonly AxisCategory[]): { axis: Axis;
     { axis: 'form', title: 'Form: what kind of image it is, decided on its own', categories: categories.filter((c) => c.axis === 'form') },
     { axis: 'baseline', title: 'Baseline: what any photo scores, for the floor', categories: categories.filter((c) => c.axis === 'baseline') },
   ];
+}
+
+/** How many different descriptions (phrases) the list's categories have, each counted once. */
+export function axisDescriptionCount(list: AxisList): number {
+  return new Set(list.categories.flatMap((c) => c.descriptions)).size;
 }
 
 /** "21 subjects, 7 settings, 2 forms and 1 baseline, 1 exception"; an axis with none is left out, but for subjects and settings. */

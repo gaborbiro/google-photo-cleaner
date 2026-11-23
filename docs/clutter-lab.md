@@ -25,23 +25,29 @@ The list ships to every user. Tuning it on one library must not make it fit only
 Perfect isn't the goal: the user sees every suggestion before it is trashed, the riskiest a short scroll
 away, can take a photo out with one tap, and trashed photos stay in Google Photos' trash for 60 days.
 
-- **Done**: its Riskiest 24 (the smallest leads, where mistakes bunch up) hold **at most one wrong
-  photo, and that one harmless**: a thing mistaken for another thing, never a photo someone keeps
-  (a face, a child, a once-only moment). Then the whole category is well above 99% right. Wrong means
-  it shouldn't be trashed: clutter under another category's name (a printed letter among Screenshots)
-  is still rightly trashed, so it is harmless.
+What counts as clutter, and the measures the whole list is held to (precision and recall on random
+photos), are in [clutter-rules.md](clutter-rules.md).
+
+- **Done**: at its **edge** (its riskiest 24, the smallest leads, where mistakes bunch up), **at least 10
+  photos are labelled and at most one of them is labelled keep**. The page and every lab result say this
+  per category (`edge`: pass, fail, or needs labels; **Label edges and misses…** tops each edge up to 10). Then the
+  whole category is well above that. Clutter under another category's name (a printed letter among
+  Screenshots) is still rightly trashed, so it isn't wrong. Before it ships, its wrong photos are looked
+  at: a face, a child or a once-only moment stops it, whatever the numbers.
 - **Not done**: change one or two things that hold for every library (above), and look again.
 - **Can't get there**: the category ships low in the list of suggestions, or is held back until
   better descriptions exist. Say which, and why, in its comment in `AXIS_LIST`.
 
 ## Labels
 
-**Label photos…** on the developer page shows a sample one photo at a time and asks one question:
-*if Photo Cleaner offered this for the trash, would that be fine, or wrong?* **K** keep (wrong to offer),
-**Space** (or **C**) clutter (fine to offer) then its kind (the best guess pre-selected: Enter takes it; **o** for clutter
-no category fits; **0** kind not given), **Enter** clutter of the best-guess kind straight away, **N** clutter
-with its kind not given straight away, **U** unsure
-(counts for nothing), **←** back. By touch, the same as large buttons. The labels are about
+**Label edges and misses…** on the developer page shows a sample (each category's edge topped up to 10
+labelled, a few it just missed, and some photos no category offers) one photo at a time and asks one
+question: *if Photo Cleaner offered this for the trash, would that be fine, or wrong?* Every kind of
+clutter is listed beside the photo, in a box between Keep and Unsure. **Space** (or **K**) keep (don't
+offer), **Enter** clutter (fine to offer) of the highlighted kind (the best guess first; the arrows move it),
+a kind's key for another kind, **o** other clutter (you know its kind and no category fits: a hint that one
+is missing), **0** clutter with its kind not given, **U** unsure, also for a matter of taste (counts for
+nothing, see [clutter-rules.md](clutter-rules.md)), **Backspace** back. By touch, the same as large buttons. The labels are about
 the outcome, not how the matcher works, so they stay valid whatever is changed.
 
 The sample (`labelSample` in `clutterLabels.ts`): each clutter category's riskiest 8 and just missed 6, 40
@@ -49,10 +55,27 @@ photos that are "neither", and 150 from the whole library (what shows clutter mi
 photos that may be trashed, shuffled, none labelled already. The labels stay in the browser
 (`dev-clutter-labels`).
 
+**Label random photos…** draws 100 photos at a time at random from the whole library (only photos that may be
+trashed) and marks their labels `random`; a drawn photo labelled before in the sample above keeps its verdict
+and is marked random too, so the close calls aren't left out. The mixed sample is for finding mistakes fast;
+the random labels alone measure the library: **precision** (of the labelled photos offered, the share that is
+clutter) and **recall** (of the labelled clutter, the share offered), shown in the labels line on the page.
+Both are for the whole list, not per category (per category: right, another kind, wrong and missed, in Copy
+scores and the edge). Results shows them under its totals, random photos first; the Save popups for the
+categories and the settings show what the change does to them (before → after), from 2026-11-23.
+
+**Copy scores** copies the scores as text, for someone who labelled their own library to send back (a second
+library, without a lab folder): the version, the list's changes from the shipped one and the settings, the
+labels line, per category on the random labels and on all of them (right, another kind, wrong, missed), and
+the edge. Numbers and the list's own words only, never a photo key or a label (`scoresReport`). Before they
+label, apply the list to be tested on their page, so their scores are for that list.
+
 Every lab result then has `labels`: before and after, per clutter category its offered photos that are
 right, harmless (clutter of another kind) or wrong (keep), and the clutter of its kind it misses; and in
 all, how many offered photos are wrong, and how much labelled clutter is found. That scores a change
-without looking at a single photo.
+without looking at a single photo. `labelParts` has the same for parts of the labels: `random` (the
+library's precision and recall), and `a` and `b`, all labels in two fixed halves by photo: tune looking at one
+half, and keep a change only if it holds on the other, so the list isn't fitted to a few hundred photos.
 
 ## Connecting (the user, once)
 

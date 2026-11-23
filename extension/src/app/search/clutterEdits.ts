@@ -63,10 +63,13 @@ function descriptionAt(category: DraftCategory, index: number): DraftDescription
   return description;
 }
 
-/** A category's heading in the editor, where it is collapsed: "Screen photos · clutter · 9 descriptions". */
+/**
+ * A category's heading in the editor: "Screen photos · clutter". Collapsed, its descriptions follow it, so
+ * they aren't counted; one with none yet says so.
+ */
 export function draftHeading(category: DraftCategory): string {
-  const count = category.descriptions.length;
-  return `${category.label.trim() || 'No name yet'} · ${category.verdict} · ${count} ${count === 1 ? 'description' : 'descriptions'}`;
+  const none = category.descriptions.length === 0 ? ' · no descriptions yet' : '';
+  return `${category.label.trim() || 'No name yet'} · ${category.verdict}${none}`;
 }
 
 /** [draft] with [text] added to category [id]. Empty or repeated words are refused at Save ([draftProblems]). */

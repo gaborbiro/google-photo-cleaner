@@ -39,7 +39,8 @@ itself. That would need a second, generative model (see Later).
 - Counts include only photos that may be trashed: never protected or unknown ones, and none already
   in the trash queue. The number on a suggestion is exactly the number of photos it opens with.
 - Kinds of photo people keep (people, children, celebrations, pets, holidays) are never suggested
-  for the trash, only for thinning (milestone 3).
+  for the trash, only for thinning (milestone 3). What counts as clutter, photo by photo, and the
+  measures a list is held to: [clutter-rules.md](clutter-rules.md).
 - Size is not clutter: a big group of similar photos may be memories (2,000 birthday photos).
 - **Experiment first**: each milestone starts on a developer page (`dev-*.html`, not shipped), judged
   on my library and one other, before it goes into the product.

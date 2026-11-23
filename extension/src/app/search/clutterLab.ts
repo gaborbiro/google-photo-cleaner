@@ -7,7 +7,7 @@
 import { readAxisTuning, type AxisCategory, type AxisCounts, type AxisList, type AxisSettings, type AxisTuning } from './clutterAxes';
 import { readAxisList } from './clutterEdits';
 import type { CategoryCount, Scoring } from './clutter';
-import type { LabelScores } from './clutterLabels';
+import type { EdgeScore, LabelScores } from './clutterLabels';
 
 /**
  * What the agent asks for. [list]: the whole list of subjects, settings and forms to use (as
@@ -147,9 +147,23 @@ export interface LabResult {
   labels: { before: LabelScores; after: LabelScores } | null;
   /** With [LabRequest.labelSheets]: the labelled photos offered wrongly, and missed by kind, after the change. */
   labelGroups: LabMoveGroup[];
+  /**
+   * The same scores for parts of the labels (clutterLabels.ts labelParts): [random], those drawn at random from
+   * the library, for its precision and recall; [a] and [b], every label in two fixed halves, so a change tuned
+   * looking at one half can be checked on the other. Null with no labels yet.
+   */
+  labelParts: { random: LabelPart; a: LabelPart; b: LabelPart } | null;
+  /** Each clutter category and form at its edge after the change (clutterLabels.ts edgeScores); null with no labels yet. */
+  edge: EdgeScore[] | null;
+}
+
+/** A part of the labels scored before and after a change. */
+export interface LabelPart {
+  before: LabelScores;
+  after: LabelScores;
 }
 
 /** A refused request's result. */
 export function labRefusal(id: string, problems: string[]): LabResult {
-  return { id, state: 'refused', problems, notes: [], applied: false, scoring: null, totals: null, categories: [], moves: [], reviews: [], labels: null, labelGroups: [] };
+  return { id, state: 'refused', problems, notes: [], applied: false, scoring: null, totals: null, categories: [], moves: [], reviews: [], labels: null, labelGroups: [], labelParts: null, edge: null };
 }

@@ -237,6 +237,8 @@ table.counts tr.count-detail td { color: var(--pc-muted); }
 /* The developer calibration page: its own spacing (the review tab's comes from its tab sections). */
 body.review main.calibration { gap: var(--space-5); }
 .calibration header { display: flex; flex-direction: column; gap: var(--space-2); }
+/* As much room under the account line as over it, from the title. */
+.calibration header .account { margin: var(--space-2) 0; }
 .calibration .card { gap: var(--space-3); }
 table.calibration-table { max-width: 820px; margin-top: var(--space-3); }
 input[type='file'] { font: inherit; color: var(--pc-muted); }
@@ -413,6 +415,34 @@ h3.clutter-axis-heading { font-size: 24px; line-height: 32px; font-weight: 700; 
 .clutter-weight { width: 72px; min-height: 28px; height: 28px; padding: 0 6px; }
 /* Editing the list of categories, and how it differs from the shipped one. */
 .clutter-list-changes { margin: var(--space-3) 0; padding: var(--space-3); border: 1px solid var(--pc-border); border-radius: var(--radius-control); }
+/* Results: the totals under the heading as its subtitle, then Suggested searches and Kept as its parts. */
+.clutter-results-title { font-size: 20px; }
+p.clutter-results-totals { margin: var(--space-1) 0 var(--space-1); color: var(--pc-muted); }
+/* Precision and recall on the labels, under the totals. */
+p.clutter-results-scores { margin: 0 0 var(--space-1); }
+.clutter-results-export { margin-top: 0; }
+.clutter-results-part { margin-top: var(--space-6); }
+/* The developer pages grow smoothly: a folded part slides open and shut, and a card filled in once the
+   library is read fades and grows in. Not for anyone who asked their system for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .calibration { interpolate-size: allow-keywords; }
+  .calibration details::details-content { height: 0; overflow: clip; transition: height 0.25s ease, content-visibility 0.25s allow-discrete; }
+  .calibration details[open]::details-content { height: auto; }
+  .calibration .clutter-appear { animation: clutter-appear 0.3s ease-out; }
+}
+@keyframes clutter-appear { from { opacity: 0.5; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* Before the library is read: the same shape, greyed out. */
+.clutter-results-waiting { opacity: 0.5; }
+p.clutter-results-part-waiting { font-size: 18px; font-weight: 650; }
+.clutter-results-part > summary { font-size: 18px; font-weight: 650; cursor: pointer; }
+.clutter-results-part[open] > summary { margin-bottom: var(--space-3); }
+/* A suggestion's line inside a part: room between them, so the list reads row by row. */
+.clutter-results-part details > summary { padding: var(--space-1) 0; }
+/* The categories' Save and Discard, for the whole list: apart from its last part (the exceptions). */
+.clutter-edit-footer { margin-top: var(--space-8); padding-top: var(--space-4); border-top: 2px solid var(--pc-border); }
+/* Clear weights and minimum leads: apart from the text above it. */
+.clutter-clear-weights { margin-top: var(--space-4); }
+.clutter-list-changes > summary { cursor: pointer; font-weight: 600; }
 .clutter-list-changes ul { margin: var(--space-1) 0 var(--space-2); padding-left: var(--space-5); }
 .clutter-editor h2 { margin-top: 0; }
 .clutter-edit-category > summary { font-weight: 650; cursor: pointer; user-select: none; }
@@ -428,6 +458,9 @@ h3.clutter-axis-heading { font-size: 24px; line-height: 32px; font-weight: 700; 
 .clutter-popup-photos { margin-top: var(--space-4); }
 .clutter-toggle { display: inline-flex; align-items: center; gap: 6px; }
 .clutter-popup-count { margin: var(--space-2) 0 0; font-size: 18px; }
+/* Which categories the photos leave or join, after the count: smaller, so the counts read first. */
+.clutter-popup-where { font-size: 14px; color: var(--pc-muted); }
+.clutter-popup-scores { margin: var(--space-2) 0 0; }
 .clutter-popup-details { margin-bottom: var(--space-3); }
 .clutter-popup-details p { margin: 2px 0; }
 /* The photo a buff was chosen for, at the top of the popup. */
@@ -479,23 +512,40 @@ details[open]:has(> .clutter-sample-title) { padding-bottom: var(--space-6); }
 .clutter-viewer-scores p.clutter-card-title { font-size: 15px; font-weight: 650; color: var(--pc-text); margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--pc-border); }
 .clutter-viewer-scores .clutter-card-scoring + .clutter-card-scoring { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--pc-border); }
 @media (max-width: 760px) { .clutter-viewer-body { flex-direction: column; } .clutter-viewer-scores { flex: 0 0 40%; } }
-/* The labelling screen: the photo, and the kinds of clutter to pick from beside it. */
+/* The labelling screen: the photo with its count and question on the left, the answers beside it in a column of
+   the full height (lots of kinds). Sizes follow the window's height, so the kinds fit without scrolling where they can. */
 /* Touch as well as keys: large targets, no double-tap zoom. */
-.clutter-labeller { touch-action: manipulation; }
-/* The column beside the photo: the verdict, or the kinds, and Back and Close at its foot. */
-.clutter-label-side { flex: 0 0 min(440px, 42%); display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.clutter-label-buttons { display: flex; flex-direction: column; gap: 10px; }
-.clutter-label-nav { display: flex; gap: 10px; margin-top: auto; }
-.clutter-label-nav button { flex: 1; min-height: 56px; font-size: 16px; }
-.clutter-kinds { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; align-content: start; }
-.clutter-kinds button { min-height: 56px; text-align: left; font-size: 16px; }
-.clutter-kinds-note { grid-column: 1 / -1; margin: 4px 0 0; }
+.clutter-labeller { touch-action: manipulation; padding: clamp(8px, 2vh, var(--space-6)); --label-gap: clamp(4px, 0.8vh, 10px); --label-font: clamp(13px, 1.7vh, 17px); --label-h: clamp(30px, 4.6vh, 56px); }
+.clutter-labeller .clutter-viewer-body { gap: clamp(8px, 1.5vw, var(--space-4)); }
+.clutter-label-main { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--label-gap); }
+/* The count and the question wrap rather than squeeze, on any width. */
+.clutter-label-info { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: var(--label-font); }
+/* The column beside the photo: Keep, Clutter and its kinds, Unsure, then Back and Close at its foot. */
+.clutter-label-side { flex: 0 0 clamp(300px, 40%, 560px); display: flex; flex-direction: column; gap: var(--label-gap); min-height: 0; }
+.clutter-labeller button { font-size: var(--label-font); }
+/* The developer page's Settings, folded away until wanted: the summary reads as the card's heading. */
+.clutter-settings > summary { font-size: 20px; font-weight: 600; cursor: pointer; }
+/* Open, room between its parts, and none under the heading when closed (the card's padding is the same all round). */
+.clutter-settings[open] > summary { margin-bottom: var(--space-4); }
+.clutter-settings > * + * { margin-top: var(--space-3); }
+.clutter-settings > p { margin-bottom: 0; }
+/* Each field's label and box side by side at the start of the line, the lead just after the score. */
+.clutter-settings .row { justify-content: flex-start; gap: var(--space-2) var(--space-6); }
+/* The three answers: Keep, Clutter (a box holding its kinds) and Unsure. */
+.clutter-labeller .clutter-answer { flex: 0 0 auto; min-height: var(--label-h); font-size: calc(var(--label-font) + 1px); padding: 0 14px; text-align: left; }
+button.clutter-answer.keep { border: 2px solid var(--pc-keep); }
+.clutter-kinds-box { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--label-gap); margin: 0; padding: 2px 10px 10px; border: 2px solid var(--pc-trash); border-radius: var(--radius-control); }
+.clutter-kinds-box legend { font-size: calc(var(--label-font) + 1px); padding: 0 6px; }
+.clutter-label-nav { display: flex; gap: var(--label-gap); }
+.clutter-labeller .clutter-label-nav button { flex: 1; min-height: var(--label-h); }
+/* Two columns: ↑ ↓ move a row (KIND_COLUMNS in clutterAxes.tsx). */
+.clutter-kinds { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: max-content; gap: var(--label-gap); align-content: start; }
+.clutter-labeller .clutter-kinds button { min-height: calc(var(--label-h) * 0.75); padding: 4px 10px; text-align: left; line-height: 1.25; }
+.clutter-kinds-note { margin: 0; font-size: calc(var(--label-font) - 2px); }
 .clutter-kinds button.selected { background: var(--pc-accent); border-color: var(--pc-accent); color: var(--pc-on-accent); }
-.clutter-label-buttons button { min-height: 64px; font-size: 18px; padding: 0 20px; text-align: left; }
-.clutter-label-buttons button.keep { border-color: var(--pc-keep); }
-.clutter-label-buttons button.clutter { border-color: var(--pc-trash); }
 .clutter-kinds kbd, .clutter-labeller kbd { font-family: var(--font-mono, monospace); font-weight: 700; margin-right: 6px; opacity: 0.7; }
-@media (max-width: 760px) { .clutter-label-side { flex: 0 0 45%; } }
+/* Narrow: the photo above, the answers below it, scrolling inside their box. */
+@media (max-width: 760px) { .clutter-labeller .clutter-viewer-body { flex-direction: column; } .clutter-label-main { flex: 0 0 35%; } .clutter-label-side { flex: 1 1 auto; } }
 .clutter-card.right { left: calc(100% + 8px); }
 .clutter-card.left { right: calc(100% + 8px); }
 .clutter-card p { margin: 0; }

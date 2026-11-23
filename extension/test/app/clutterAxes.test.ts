@@ -16,6 +16,7 @@ import {
   axisCaption,
   axisEffects,
   axisGroups,
+  axisDescriptionCount,
   axisListSummary,
   axisOutcome,
   axisSections,
@@ -264,11 +265,12 @@ describe('clutter by subject and setting', () => {
     expect(effects.joins).toEqual([]);
     expect(axisCaption(effects.leaves[0]!, lists).map((p) => p.text).join('')).toBe('Products → kept (People)');
     expect(axisGroups(effects.leaves, categories, (c) => c.before.category!).map((g) => [g.key, g.title])).toEqual([['products', 'Products · 1']]);
-    expect(axisSummary('+0.0600 to “a selfie”', effects, lists)).toEqual({ what: '+0.0600 to “a selfie”', leave: '1 photo leaves the suggestions', leaveFrom: 'Products 1', join: null, move: null });
+    expect(axisSummary('+0.0600 to “a selfie”', effects, lists)).toEqual({ what: '+0.0600 to “a selfie”', leave: '1 photo leaves the suggestions', leaveFrom: 'Products 1', join: null, joinTo: null, move: null });
     // Undone, it joins; with Products made a setting-less clutter elsewhere, a move.
     const undone = axisEffects(after, before, lists, photos);
     expect(undone.joins.map((c) => c.mediaKey)).toEqual(['selfie-ish']);
     expect(axisCaption(undone.joins[0]!, lists).map((p) => p.text).join('')).toBe('kept (People) → Products');
+    expect(axisSummary('−0.0600 to “a selfie”', undone, lists)).toEqual({ what: '−0.0600 to “a selfie”', leave: '0 photos leave the suggestions', leaveFrom: null, join: '1 photo joins the suggestions', joinTo: 'Products 1', move: null });
     const moved = axisEffects(before, rows.map(([k, r]) => matchAxes(k, r, scored, free(scored), withAxisBuff(settings, 'a broken item', 0.4))), lists, photos);
     // Both from Products to Repairs, the higher score first.
     expect(moved.moves.map((c) => [c.mediaKey, categories[c.before.category!]!.id, categories[c.after.category!]!.id])).toEqual([['car park', 'products', 'repairs'], ['selfie-ish', 'products', 'repairs']]);
@@ -282,6 +284,10 @@ describe('clutter by subject and setting', () => {
     expect(new Set(descriptions).size).toBe(descriptions.length);
     expect(AXIS_LIST.categories.every((c) => c.kind === kindOf(c.verdict))).toBe(true);
     expect(axisListSummary(AXIS_LIST)).toBe('36 subjects, 13 settings, 2 forms and 1 baseline');
+    expect(axisDescriptionCount(AXIS_LIST)).toBe(descriptions.length);
+    // A phrase in two categories (as an edit can leave it) counts once.
+    const twice = { categories: [{ ...AXIS_LIST.categories[0]!, descriptions: ['a', 'b'] }, { ...AXIS_LIST.categories[1]!, descriptions: ['b', 'c'] }], exceptions: [] };
+    expect(axisDescriptionCount(twice)).toBe(3);
     expect(axisSections(AXIS_LIST.categories).map((s) => [s.axis, s.categories.length])).toEqual([['subject', 36], ['setting', 13], ['form', 2], ['baseline', 1]]);
     const named = (id: string) => AXIS_LIST.categories.find((c) => c.id === id)!;
     // Screenshots are a form, against Not a screenshot: as a setting they won wherever no place fitted.
@@ -346,7 +352,7 @@ describe('form: screenshots, decided on their own', () => {
     expect(counts.forms.map((c) => [c.category.id, c.trashable.map((p) => p.mediaKey)])).toEqual([['screenshots', ['chat', 'selfie shot']]]);
     expect(counts.clutter.find((c) => c.category.id === 'products')!.trashable.map((p) => p.mediaKey)).toEqual(['chat']);
     expect(counts.clutter.map((c) => c.category.id)).not.toContain('screenshots');
-    expect(counts.totals).toBe('Clutter 1 (33%) · kept 2 (67%) · neither 0 (0%) · and, by form, clutter 2 (67%)');
+    expect(counts.totals).toBe('Clutter 1 (33%) · kept 2 (67%) · neither 0 (0%) · and clutter because of form 2 (67%)');
   });
 
   it('buffs Not a screenshot to leave a photo out of Screenshots, and Stay brings it back; effects say which side', () => {

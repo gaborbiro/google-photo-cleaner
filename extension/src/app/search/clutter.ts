@@ -337,8 +337,10 @@ export interface ChangeSummary {
   leave: string;
   /** Where they leave from: 'Screen photos 65 · Products 161', or null when none leave. */
   leaveFrom: string | null;
-  /** '20 join (Screen photos 18 · Memes and forwarded images 2)', or null when none join. */
+  /** '20 photos join the suggestions', or null when none join. */
   join: string | null;
+  /** Where they join: 'Screen photos 18 · Memes and forwarded images 2', or null when none join. */
+  joinTo: string | null;
   /** '24 move between them', or null when none move. */
   move: string | null;
 }

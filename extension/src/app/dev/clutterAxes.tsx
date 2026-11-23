@@ -16,6 +16,7 @@ import {
   axisCaption,
   axisEffects,
   axisGroups,
+  axisDescriptionCount,
   axisListSummary,
   axisOutcome,
   formOutcome,
@@ -39,6 +40,7 @@ import {
   type AxisCategory,
   type AxisChange,
   type AxisLists,
+  type AxisMatch,
   type AxisSettings,
   type AxisTuning,
   type Overlap,
@@ -79,13 +81,13 @@ import {
   type Draft,
   type DraftWeights,
 } from '../search/clutterEdits';
-import { kindGuesses, labelExamples, labelSample, OTHER_KIND, readLabels, SAMPLE_SIZES, saveLabels, scoreLabels, type Labels, type PhotoLabel } from '../search/clutterLabels';
+import { edgeLines, edgeScores, kindGuesses, labelExamples, labelLine, labelParts, labelSample, OTHER_KIND, RANDOM_SAMPLE_SIZE, randomSample, readLabels, SAMPLE_SIZES, saveLabels, scoreLabels, scoresChange, scoresLine, scoresReport, type LabelScorePair, type Labels, type PhotoLabel } from '../search/clutterLabels';
 import { LAB_SHEET_MAX, labCategoryLines, labRefusal, labReviewIds, labTarget, readLabRequest, type LabMoveGroup, type LabRequest, type LabResult } from '../search/clutterLab';
 import type { LibraryPhoto } from '../search/searchModel';
 import { searchDeps } from '../search/session';
 import { accountLabel } from '../shared/jobView';
-import { useAccount } from '../ui/hooks';
-import { AddField, ANSWER, APPLIED, APPLY, APPLY_WAIT_MS, ASK, ChangePopup, CHUNK, Collapsible, HANDOVER_WAIT_MS, OptionalNumber, PhotoGrid, plain, SAMPLE, useOverlayKeys, ZOOM_PX, type BuffOption, type Nudge, type Preview, type Tile, type TitledBreakdown } from './clutterUi';
+import { extensionVersion, openPhotos, useAccount } from '../ui/hooks';
+import { AddField, ANSWER, APPLIED, APPLY, APPLY_WAIT_MS, ASK, ChangePopup, CHUNK, Collapsible, HANDOVER_WAIT_MS, OptionalNumber, pause, PhotoGrid, plain, SAMPLE, useOverlayKeys, usePageScrollLocked, ZOOM_PX, type BuffOption, type Nudge, type Preview, type Tile, type TitledBreakdown } from './clutterUi';
 
 /** Where the page keeps its list (with exceptions) and its settings in this browser. */
 const LIST_KEY = 'dev-clutter-axes-list';
@@ -145,10 +147,10 @@ async function work(photos: Map<string, LibraryPhoto>, order: LibraryPhoto[], sc
   for (let i = 0; i < order.length; i += CHUNK) {
     for (const p of order.slice(i, i + CHUNK)) raw.set(p.mediaKey, descriptionScores(p.vector, scored));
     say(`Scoring photos: ${raw.size.toLocaleString()} of ${order.length.toLocaleString()}`);
-    await new Promise((resolve) => setTimeout(resolve));
+    await pause();
   }
   say('Evening out the scores and measuring how the descriptions overlap…');
-  await new Promise((resolve) => setTimeout(resolve));
+  await pause();
   const evened = evenedRows(raw);
   return { photos, scored, rows: { raw, evened }, overlap: descriptionOverlap([...evened.values()]) };
 }
@@ -320,7 +322,7 @@ function AxisCategoryCard({ count, worked, rows, settings, exceptions, preview, 
   const c = count.category as AxisCategory;
   return (
     <details onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>{countLine(count)} <span className="muted small">{c.axis} · {c.descriptions.join(' · ')}</span></summary>
+      <summary>{countLine(count)}</summary>
       {samples && (
         <>
           <div className="buttons clutter-show-all">
@@ -340,12 +342,18 @@ function AxisCategoryCard({ count, worked, rows, settings, exceptions, preview, 
   );
 }
 
-/** The keys of the kinds of clutter in the labelling screen, in the order shown; "o" is Other clutter. */
-const KIND_KEYS = '123456789abdefghijlmnpqrstvwxyz';
+/**
+ * The keys of the kinds of clutter in the labelling screen, in the order shown. Not k (keep), o (Other clutter)
+ * or u (unsure); 0 is clutter, kind not given. Not t either, which was taste, so a habit doesn't mislabel.
+ */
+const KIND_KEYS = '123456789abcdefghijlmnpqrsvwxyz';
+/** The columns of the kinds' grid (`.clutter-kinds` in app.css): ↑ ↓ move a whole row. */
+const KIND_COLUMNS = 2;
 
 /**
- * Labelling, one photo at a time, from the keyboard: K keep (wrong to offer), C clutter (fine to offer)
- * then its kind (the best guess pre-selected: Enter takes it), U unsure, ← back to the last photo.
+ * Labelling, one photo at a time, from the keyboard, all on one screen: Space or K keep (wrong to offer), Enter
+ * clutter of the highlighted kind (the best guess first; the arrows move it), a kind's key for another, U unsure,
+ * Backspace back to the last photo. (Taste, from before, is no longer offered here; its labels still count as taste.)
  */
 function LabelScreen({ queue, labels, kinds, guesses, thumbUrl, preview, onLabel, onUndo, onClose }: {
   /** The photos still to label, in order. */
@@ -362,13 +370,21 @@ function LabelScreen({ queue, labels, kinds, guesses, thumbUrl, preview, onLabel
   onClose: () => void;
 }) {
   const key = queue[0] ?? null;
-  const [step, setStep] = useState<'verdict' | 'kind'>('verdict');
   const [selected, setSelected] = useState(0);
   const [url, setUrl] = useState<string | null>(null);
   const order = useMemo(() => (key ? guesses(key) : []), [key, guesses]);
   const shown = useMemo(() => order.map((id) => kinds.find((k) => k.id === id)!).filter(Boolean), [order, kinds]);
+  // Every clutter answer in the grid, in order, for the arrows and Enter: the kinds, then Other and kind not given.
+  const choices = useMemo<{ kind: string | null; label: string; key: string }[]>(
+    () => [...shown.map((k, i) => ({ kind: k.id, label: k.label, key: KIND_KEYS[i] ?? '' })), { kind: OTHER_KIND, label: 'Other clutter: none of these fits', key: 'o' }, { kind: null, label: 'Clutter, kind not given', key: '0' }],
+    [shown],
+  );
+  const choiceButtons = useRef<(HTMLButtonElement | null)[]>([]);
+  // The highlighted answer is always in view, also when the arrows move it past the grid's scrolled edge.
   useEffect(() => {
-    setStep('verdict');
+    choiceButtons.current[selected]?.scrollIntoView({ block: 'nearest' });
+  }, [selected, key]);
+  useEffect(() => {
     setSelected(0);
     setUrl(null);
     if (!key) return;
@@ -385,71 +401,64 @@ function LabelScreen({ queue, labels, kinds, guesses, thumbUrl, preview, onLabel
   const give = (label: PhotoLabel) => {
     if (key) onLabel(key, label);
   };
+  usePageScrollLocked();
   useOverlayKeys((e) => {
     const k = e.key.toLowerCase();
-    // A button tapped last keeps the focus: Enter or Space would click it too, and label a second photo.
-    if (e.key === 'Enter' || e.key === ' ') e.preventDefault();
-    if (e.key === 'Escape') {
-      if (step === 'kind') setStep('verdict');
-      else onClose();
-    } else if (e.key === 'ArrowLeft' || e.key === 'Backspace') {
-      if (step === 'kind') setStep('verdict');
-      else onUndo();
-    } else if (!key) {
-      return;
-    } else if (step === 'verdict') {
-      if (k === 'k') give({ verdict: 'keep', kind: null });
-      else if (k === 'u') give({ verdict: 'unsure', kind: null });
-      else if (k === 'n') give({ verdict: 'clutter', kind: null });
-      else if (e.key === 'Enter' && shown[0]) give({ verdict: 'clutter', kind: shown[0].id });
-      else if (k === 'c' || e.key === ' ') setStep('kind');
-    } else {
-      if (e.key === 'Enter') give({ verdict: 'clutter', kind: shown[selected]?.id ?? null });
-      else if (e.key === 'ArrowDown') setSelected((s) => Math.min(shown.length - 1, s + 1));
-      else if (e.key === 'ArrowUp') setSelected((s) => Math.max(0, s - 1));
-      else if (k === 'o') give({ verdict: 'clutter', kind: OTHER_KIND });
-      else if (k === '0') give({ verdict: 'clutter', kind: null });
-      else {
-        const at = KIND_KEYS.indexOf(k);
-        if (at >= 0 && at < shown.length) give({ verdict: 'clutter', kind: shown[at]!.id });
-      }
+    // A button tapped last keeps the focus: Enter or Space would click it too, and label a second photo. The arrows would scroll.
+    if (['Enter', ' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
+    if (e.key === 'Escape') onClose();
+    else if (e.key === 'Backspace') onUndo();
+    else if (!key) return;
+    else if (k === 'k' || e.key === ' ') give({ verdict: 'keep', kind: null });
+    else if (k === 'u') give({ verdict: 'unsure', kind: null });
+    else if (e.key === 'Enter') give({ verdict: 'clutter', kind: choices[selected]!.kind });
+    else if (e.key === 'ArrowDown') setSelected((s) => (s + KIND_COLUMNS < choices.length ? s + KIND_COLUMNS : s));
+    else if (e.key === 'ArrowUp') setSelected((s) => (s - KIND_COLUMNS >= 0 ? s - KIND_COLUMNS : s));
+    else if (e.key === 'ArrowLeft') setSelected((s) => (s % KIND_COLUMNS > 0 ? s - 1 : s));
+    else if (e.key === 'ArrowRight') setSelected((s) => (s % KIND_COLUMNS < KIND_COLUMNS - 1 && s + 1 < choices.length ? s + 1 : s));
+    else if (k === 'o') give({ verdict: 'clutter', kind: OTHER_KIND });
+    else if (k === '0') give({ verdict: 'clutter', kind: null });
+    else {
+      const at = KIND_KEYS.indexOf(k);
+      if (at >= 0 && at < shown.length) give({ verdict: 'clutter', kind: shown[at]!.id });
     }
   });
   const done = Object.keys(labels).length;
   return (
     <div className="viewer clutter-labeller" role="dialog" aria-modal="true" aria-label="Label photos">
-      <div className="viewer-info">
-        <span className="mono">{key ? `${queue.length.toLocaleString()} to go` : 'All labelled'} · {done.toLocaleString()} labelled in all</span>
-        <span className="muted">If Photo Cleaner offered this for the trash, would that be fine, or wrong?</span>
-      </div>
       <div className="clutter-viewer-body">
-        <div className="viewer-photo">{key ? (url ? <img src={url} alt="" /> : <span className="muted">Loading…</span>) : <span className="muted">Nothing left to label in this sample. Esc closes.</span>}</div>
+        {/* The count and question over the photo only, so the answers beside it get the full height. */}
+        <div className="clutter-label-main">
+          <div className="clutter-label-info">
+            <span className="mono">{key ? `${queue.length.toLocaleString()} to go` : 'All labelled'} · {done.toLocaleString()} labelled in all</span>
+            <span className="muted">If Photo Cleaner offered this for the trash, would that be fine, or wrong?</span>
+          </div>
+          <div className="viewer-photo">{key ? (url ? <img src={url} alt="" /> : <span className="muted">Loading…</span>) : <span className="muted">Nothing left to label in this sample. Esc closes.</span>}</div>
+        </div>
         {/* Beside the photo, so the eyes don't leave it; large, so a touch screen works as well as the keys. */}
         <div className="clutter-label-side">
-          {step === 'verdict' ? (
-            <div className="clutter-label-buttons" role="group" aria-label="Your verdict">
-              <button className="keep" disabled={!key} onClick={() => give({ verdict: 'keep', kind: null })}><kbd>K</kbd> Keep: wrong to offer</button>
-              {shown[0] && <button className="clutter" disabled={!key} onClick={() => give({ verdict: 'clutter', kind: shown[0]!.id })}><kbd>Enter</kbd> Clutter: {shown[0].label}</button>}
-              <button className="clutter" disabled={!key} onClick={() => setStep('kind')}><kbd>Space</kbd> Clutter: another kind…</button>
-              <button className="clutter" disabled={!key} onClick={() => give({ verdict: 'clutter', kind: null })}><kbd>N</kbd> Clutter, kind not given</button>
-              <button disabled={!key} onClick={() => give({ verdict: 'unsure', kind: null })}><kbd>U</kbd> Unsure</button>
-              <p className="muted small">Only clutter gets a kind. A photo you'd keep (people, travel, a landmark, a pet…) is simply Keep.</p>
-            </div>
-          ) : (
-            <div className="clutter-kinds" role="group" aria-label="Which kind of clutter">
-              {shown.map((k, i) => (
-                <button key={k.id} className={i === selected ? 'selected' : ''} onClick={() => give({ verdict: 'clutter', kind: k.id })}><kbd>{KIND_KEYS[i]}</kbd> {k.label}</button>
+          {/* Three answers, one under the other: Keep, Clutter (with its kinds inside) and Unsure. */}
+          <button className="clutter-answer keep" disabled={!key} onClick={() => give({ verdict: 'keep', kind: null })}>
+            <kbd>Space</kbd> Keep. Don't offer
+          </button>
+          <fieldset className="clutter-answer clutter-kinds-box" disabled={!key}>
+            <legend>Clutter. Fine to offer for the trash.</legend>
+            <div className="clutter-kinds" role="group" aria-label="Clutter, of which kind">
+              {choices.map((c, i) => (
+                <button key={c.kind ?? 'none'} ref={(el) => { choiceButtons.current[i] = el; }} className={i === selected ? 'selected' : ''} onClick={() => give({ verdict: 'clutter', kind: c.kind })}>
+                  <kbd>{i === selected ? 'Enter' : c.key}</kbd> {c.label}
+                </button>
               ))}
-              <button onClick={() => give({ verdict: 'clutter', kind: OTHER_KIND })}><kbd>o</kbd> Other clutter: none of these fits</button>
-              <button onClick={() => give({ verdict: 'clutter', kind: null })}><kbd>0</kbd> Clutter, kind not given</button>
-              <p className="muted small clutter-kinds-note">
-                Tap a kind, or <kbd>Enter</kbd> for the highlighted one (↑ ↓ to move), or its key. Other: you know its kind and none is listed. Kind not given: clutter, without saying which (never wrong).
-              </p>
-              <button onClick={() => setStep('verdict')}><kbd>Esc</kbd> Not clutter after all</button>
             </div>
-          )}
+            <p className="muted small clutter-kinds-note">
+              <kbd>Enter</kbd> takes the highlighted kind, the best guess; the arrows move it. A photo you'd keep (people, travel, a landmark, a pet…) is simply Keep.
+            </p>
+          </fieldset>
+          <button className="clutter-answer" disabled={!key} onClick={() => give({ verdict: 'unsure', kind: null })}>
+            <kbd>U</kbd> Unsure
+          </button>
           <div className="clutter-label-nav">
-            <button onClick={() => onUndo()}><kbd>←</kbd> Back</button>
+            <button onClick={() => onUndo()}><kbd>⌫</kbd> Back</button>
             <button onClick={onClose}>Close</button>
           </div>
         </div>
@@ -516,7 +525,7 @@ function AxisEditor({ editing, edited, onChange, settings, scoring, problems, wo
         {scoringName(scoring)}; each scoring keeps its own); an empty minimum lead uses its axis&apos;s. Edits count only once saved and applied (the lab measures against what is applied): Save shows what they do,
         to apply or go back to; Discard drops them.
       </p>
-      <div className="buttons">
+      <div className="buttons clutter-clear-weights">
         <button onClick={() => weighted({ categoryWeights: {}, descriptionWeights: {}, margins: {} })}>Clear weights and minimum leads</button>
       </div>
       {(['subject', 'setting', 'form', 'baseline'] as const).map((axis) => (
@@ -587,13 +596,16 @@ function AxisEditor({ editing, edited, onChange, settings, scoring, problems, wo
         </select>
         <button disabled={pair.subject === '' || pair.setting === ''} onClick={() => onChange({ ...editing, exceptions: [...exceptions, pair] })}>Add exception</button>
       </div>
-      {problems.map((p) => <p key={p} className="warn small">{p}</p>)}
-      {!canSave && <p className="muted small">Save works once suggestions are worked out: new words need the AI model.</p>}
-      {working && <p className="working" role="status"><span className="spinner-inline" />{working}</p>}
-      <div className="buttons">
-        <button className="primary" disabled={!edited || !canSave || working !== null} onClick={onSave}>Save…</button>
-        <button disabled={!edited || working !== null} onClick={onDiscard}>Discard</button>
-        <span className="muted small">{edited ? 'Edits not applied yet.' : 'No edits: change anything above, then Save.'}</span>
+      {/* For every part above, not only the exceptions: set apart by a rule across the whole list. */}
+      <div className="clutter-edit-footer">
+        {problems.map((p) => <p key={p} className="warn small">{p}</p>)}
+        {!canSave && <p className="muted small">Save works once the library is read: new words need the AI model.</p>}
+        {working && <p className="working" role="status"><span className="spinner-inline" />{working}</p>}
+        <div className="buttons">
+          <button className="primary" disabled={!edited || !canSave || working !== null} onClick={onSave}>Save categories…</button>
+          <button disabled={!edited || working !== null} onClick={onDiscard}>Discard</button>
+          <span className="muted small">{edited ? 'Edits to the categories not applied yet.' : 'No edits: change anything in the categories, then Save.'}</span>
+        </div>
       </div>
     </div>
   );
@@ -611,7 +623,7 @@ function withLead(record: Record<string, number>, key: string, value: number | u
   return value === undefined ? rest : { ...rest, [key]: value };
 }
 
-/** The list, weights and leads, always open to editing ([children]: the editor), and how it differs from the shipped list. */
+/** The list, weights and leads, always open to editing ([children]: the editor), then how it differs from the shipped list, folded away. */
 function AxisListView({ list, changes, copied, open, onToggle, onCopy, canReset, onReset, children }: {
   list: { categories: AxisCategory[]; exceptions: PairException[] };
   /** Whether the list is open: kept by the page. */
@@ -626,19 +638,19 @@ function AxisListView({ list, changes, copied, open, onToggle, onCopy, canReset,
 }) {
   return (
     <details className="clutter-categories" open={open} onToggle={(e) => onToggle(e.currentTarget.open)}>
-      <summary>Subjects, settings and weights: {axisListSummary(list)}{changes.length > 0 && ' (edited)'}</summary>
+      <summary>Categories: {axisListSummary(list)}{changes.length > 0 && ' (edited)'}</summary>
+      {children}
       {changes.length > 0 && (
-        <div className="clutter-list-changes">
-          <p className="small"><strong>Changed from the shipped list</strong> <span className="muted">(kept in this browser only)</span></p>
+        <details className="clutter-list-changes">
+          <summary>Your changes to the shipped list · {changes.length.toLocaleString()} <span className="muted small">(kept in this browser only)</span></summary>
           <ul className="small">{changes.map((c) => <li key={c}>{c}</li>)}</ul>
           <div className="buttons">
             <button onClick={onCopy}>Copy changes</button>
             <button disabled={!canReset} onClick={onReset}>Reset to the shipped list…</button>
             {copied && <span className="muted small">{copied}</span>}
           </div>
-        </div>
+        </details>
       )}
-      {children}
     </details>
   );
 }
@@ -714,11 +726,14 @@ export function AxesPage() {
     }
   }, [tuning, list]);
 
+  // No Google Photos tab yet, so no account: the page says so with a link, and reads the library once one is open.
+  const [needsPhotos, setNeedsPhotos] = useState(false);
   const workOut = async () => {
     setWorked(null);
     setProblem(null);
+    setNeedsPhotos(deps === null);
+    if (!deps) return;
     try {
-      if (!deps) throw new Error('Open Google Photos first, so the account is known.');
       setProgress('Reading the library…');
       const library = await deps.loadLibrary();
       if (library.blocked) throw new Error(`The library scan can't be used (${library.blocked}): check for new photos on the Scan tab first.`);
@@ -736,6 +751,9 @@ export function AxesPage() {
     started.current = true;
     void workOut();
   });
+  useEffect(() => {
+    if (needsPhotos && deps) void workOut();
+  }, [needsPhotos, deps]);
 
   // The categories the photos were scored against: the list when worked out, or since applied.
   const inUse = useMemo(() => (worked ? worked.scored.map((s) => s.category) : list.categories), [worked, list]);
@@ -840,7 +858,7 @@ export function AxesPage() {
     const effects = axisEffects(matches, afterMatches, lists, new Map([...worked.photos].map(([k, p]) => [k, p as ClutterPhoto])));
     const raised = weightChanges(pendingEdit.settings[scoring], after, pendingEdit.categories).map((c) => `${c.by > 0 ? '+' : '−'}${Math.abs(c.by).toFixed(4)} to “${c.description}”`);
     const what = [...pendingEdit.edits, ...raised];
-    return { after, lists, effects, summary: axisSummary(what.length === 0 ? 'No changes' : what.join(' · '), effects, lists) };
+    return { after, afterMatches, lists, effects, summary: axisSummary(what.length === 0 ? 'No changes' : what.join(' · '), effects, lists) };
   }, [pendingEdit, matches, worked, inUse, list.exceptions, scoring]);
   const applyEdits = () => {
     if (!pendingEdit || !editWeighed) throw new Error('No edits to apply');
@@ -919,7 +937,7 @@ export function AxesPage() {
         breakdowns: () => [...axisCards(before, worked.scored, worked.overlap, settings, list.exceptions, 'Now'), ...axisCards(after, worked.scored, worked.overlap, cardSettings, list.exceptions, 'With the settings')],
       };
     };
-    return { summary: axisSummary(cardEdits.join(' · '), effects, lists), grids: changeGrids(effects, lists, tile) };
+    return { afterMatches, summary: axisSummary(cardEdits.join(' · '), effects, lists), grids: changeGrids(effects, lists, tile) };
   }, [cardSaving, matches, worked, cardEdits, cardScoring, cardSettings, inUse, list.exceptions, scoring, settings]);
   const applyCard = () => {
     if (!cardDraft) throw new Error('No settings to apply');
@@ -943,7 +961,7 @@ export function AxesPage() {
     const back = lastOn[`${cardScoring} ${key}`] ?? (key === 'pooling' ? STARTING_POOLING : STARTING_FLOOR)[cardScoring];
     setSettings((s) => ({ ...s, [key]: on ? back : key === 'pooling' ? 0 : null }));
   };
-  // Save all for review: one folder picked, then every clutter category's files written into it.
+  // Export summary to folder: one folder picked, then every clutter category's files written into it.
   const [reviewing, setReviewing] = useState<string | null>(null);
   // Set by Cancel; the saving stops before the next category, keeping the files already written.
   const cancelReview = useRef(false);
@@ -1099,6 +1117,12 @@ export function AxesPage() {
       reviews,
       labels: Object.keys(labels).length === 0 ? null : { before: scoreLabels(matches, inUse, list.exceptions, photos, labels), after: scoreLabels(afterMatches, target.list.categories, target.list.exceptions, photos, labels) },
       labelGroups,
+      labelParts: Object.keys(labels).length === 0 ? null : (() => {
+        const parts = labelParts(labels);
+        const both = (part: Labels) => ({ before: scoreLabels(matches, inUse, list.exceptions, photos, part), after: scoreLabels(afterMatches, target.list.categories, target.list.exceptions, photos, part) });
+        return { random: both(parts.random), a: both(parts.a), b: both(parts.b) };
+      })(),
+      edge: Object.keys(labels).length === 0 ? null : edgeScores(afterCounts, labels),
     };
     await writeFile(out, 'result.json', JSON.stringify(result, null, 2));
     if (request.apply) {
@@ -1180,6 +1204,23 @@ export function AxesPage() {
       return {};
     }
   });
+  // The labels scored against suggestions [m] from a list: all of them and the random ones; null with no labels yet.
+  const scored = useCallback((m: AxisMatch[] | null, categories: readonly AxisCategory[], exceptions: readonly PairException[]): LabelScorePair | null => {
+    if (!worked || !m || Object.keys(labels).length === 0) return null;
+    const photos = new Map([...worked.photos].map(([k, p]) => [k, { eligible: p.eligible, approved: p.approved }]));
+    return { all: scoreLabels(m, categories, exceptions, photos, labels), random: scoreLabels(m, categories, exceptions, photos, labelParts(labels).random) };
+  }, [worked, labels]);
+  // What the edits and settings waiting in a Save popup do to precision and recall.
+  const editScores = useMemo(() => {
+    if (!pendingEdit || !editWeighed) return null;
+    const [before, after] = [scored(matches, inUse, list.exceptions), scored(editWeighed.afterMatches, pendingEdit.categories, pendingEdit.exceptions)];
+    return before && after ? scoresChange(before, after) : null;
+  }, [pendingEdit, editWeighed, scored, matches, inUse, list.exceptions]);
+  const cardScores = useMemo(() => {
+    if (!cardWeighed) return null;
+    const [before, after] = [scored(matches, inUse, list.exceptions), scored(cardWeighed.afterMatches, inUse, list.exceptions)];
+    return before && after ? scoresChange(before, after) : null;
+  }, [cardWeighed, scored, matches, inUse, list.exceptions]);
   useEffect(() => {
     try {
       localStorage.setItem(LABELS_KEY, saveLabels(labels));
@@ -1188,11 +1229,19 @@ export function AxesPage() {
     }
   }, [labels]);
   // The photos to label (the sample, when opened), and the ones labelled since, to go back through.
-  const [labelling, setLabelling] = useState<{ queue: string[]; history: string[] } | null>(null);
-  const openLabelling = () => {
+  // [random]: photos drawn at random from the library, whose labels are marked so (labelParts).
+  const [labelling, setLabelling] = useState<{ queue: string[]; history: string[]; random: boolean } | null>(null);
+  const openLabelling = (random: boolean) => {
     if (!worked || !matches || !counts) throw new Error('Labelling needs the suggestions worked out');
     const photos = new Map([...worked.photos].map(([k, p]) => [k, { eligible: p.eligible, approved: p.approved }]));
-    setLabelling({ queue: labelSample(matches, counts, inUse, list.exceptions, photos, labels, SAMPLE_SIZES, 1), history: [] });
+    if (!random) {
+      setLabelling({ queue: labelSample(matches, counts, inUse, list.exceptions, photos, labels, SAMPLE_SIZES, 1), history: [], random });
+      return;
+    }
+    // Drawn photos labelled before keep their verdict, now counted as random too; the rest are asked.
+    const { queue, reused } = randomSample(matches, photos, labels, RANDOM_SAMPLE_SIZE, 2);
+    setLabels((l) => ({ ...l, ...Object.fromEntries(reused.map((k) => [k, { ...l[k]!, random: true as const }])) }));
+    setLabelling({ queue, history: [], random });
   };
   const labelKinds = useMemo(() => inUse.filter((c) => c.verdict === 'clutter' && c.axis !== 'baseline').map((c) => ({ id: c.id, label: c.label })), [inUse]);
   const labelGuesses = useCallback((key: string) => {
@@ -1201,21 +1250,60 @@ export function AxesPage() {
     return kindGuesses(row, worked.scored, settings);
   }, [worked, rows, settings]);
   const labelThumb = useCallback((key: string) => worked?.photos.get(key)?.thumbUrl ?? null, [worked]);
-  const labelScores = useMemo(() => (worked && matches && Object.keys(labels).length > 0 ? scoreLabels(matches, inUse, list.exceptions, new Map([...worked.photos].map(([k, p]) => [k, { eligible: p.eligible, approved: p.approved }])), labels) : null), [worked, matches, inUse, list.exceptions, labels]);
+  const labelText = useMemo(() => {
+    const now = scored(matches, inUse, list.exceptions);
+    return now ? labelLine(now.all, now.random) : null;
+  }, [scored, matches, inUse, list.exceptions]);
+  // Precision and recall now, for the top of Results.
+  const scoresText = useMemo(() => {
+    const now = scored(matches, inUse, list.exceptions);
+    return now ? scoresLine(now) : null;
+  }, [scored, matches, inUse, list.exceptions]);
+  const edge = useMemo(() => (counts && Object.keys(labels).length > 0 ? edgeLines(edgeScores(counts, labels)) : null), [counts, labels]);
+  // Copy scores: the numbers alone, for someone who labelled their own library to send back.
+  const [scoresCopied, setScoresCopied] = useState<string | null>(null);
+  const copyScores = () => {
+    if (!worked || !matches || !counts) throw new Error('Copy scores needs the suggestions worked out');
+    const photos = new Map([...worked.photos].map(([k, p]) => [k, { eligible: p.eligible, approved: p.approved }]));
+    const text = scoresReport({
+      version: extensionVersion(), matched: counts.photos, totals: counts.totals, changes: changesFromShipped, scoring, settings,
+      all: scoreLabels(matches, inUse, list.exceptions, photos, labels), random: scoreLabels(matches, inUse, list.exceptions, photos, labelParts(labels).random), edge: edgeScores(counts, labels),
+    });
+    navigator.clipboard.writeText(text).then(() => setScoresCopied('Copied: numbers only, no photos.'), (error: unknown) => setScoresCopied(`Couldn't copy (${String(error)}).`));
+  };
   const suggested = counts ? counts.clutter.filter((c) => c.trashable.length >= minPhotos) : [];
   const tooFew = counts ? counts.clutter.filter((c) => c.trashable.length < minPhotos) : [];
   const floorWords = inUse.filter((c) => c.axis === 'baseline').flatMap((c) => c.descriptions).map((d) => `“${d}”`).join(', ');
   return (
     <main className="review calibration">
       <header>
-        <h1>Photo Cleaner <span className="muted">/ clutter by subject and setting (developer tool)</span></h1>
-        <p className="account mono">{account ? accountLabel(account, answer?.account?.email ?? null) : 'No account yet'}</p>
+        <h1>Photo Cleaner <span className="muted">/ clutter categories (developer tool)</span></h1>
+        <p className="account mono">{account ? `Google Photos account: ${accountLabel(account, answer?.account?.email ?? null)}` : 'No account yet'}</p>
         <p className="muted">
-          Each analysed photo gets its best subject (what it is of) and its best setting (where it is), from {axisListSummary(list)}. Their verdicts decide: an
-          exception for the exact pair first, then keep wins, then clutter. A subject or setting too close to the next of its kind doesn&apos;t count: it has no say. Hover over a
-          photo to see how it scored. Nothing is trashed from here; the list and settings are kept in this browser.
+          The AI compares each analysed photo with {axisDescriptionCount(list).toLocaleString()} short descriptions, grouped into categories ({axisListSummary(list)}),
+          and gives it its best subject (what it is of) and its best setting (where it is). Each category is either clutter, keep or neutral. A subject or setting counts only
+          when it leads the best one of another verdict by at least its minimum lead; too close, it has no say. Then an exception for that exact pair of subject and
+          setting decides first; otherwise a keeper keeps the photo; otherwise clutter offers it for the trash. A form (such as a screenshot) decides on its own. Hover
+          over a photo to see how it scored. Nothing is trashed from this page: it is for tuning the suggestions, and its list and settings stay in this browser.
         </p>
       </header>
+      {/* The library, read and scored when the page opens: every photo against every description, the slow part. A saved change to the
+          categories scores the same photos again by itself (only new descriptions go to the AI); the settings need no scoring at all. */}
+      <section className="card">
+        <h2>Library</h2>
+        {progress && <p className="working" role="status"><span className="spinner-inline" />{progress}</p>}
+        {problem && <p className="warn">{problem}</p>}
+        {needsPhotos && (
+          <p className="warn">
+            <a href="https://photos.google.com/" onClick={(e) => { e.preventDefault(); void openPhotos(); }}>Open Google Photos</a> first, so the account is known.
+          </p>
+        )}
+        {counts && <p className="mono">{counts.photos.toLocaleString()} photos matched</p>}
+        <div className="buttons clutter-show-all">
+          <button disabled={progress !== null} onClick={() => void workOut()}>Read the library again</button>
+          <span className="muted small">Read and scored automatically when this page opens, which takes a while. Needed again only after a new scan finds new photos: saving changes to the categories or settings works out the suggestions again by itself.</span>
+        </div>
+      </section>
       <section className="card">
         {loaded.notes.map((note) => <p key={note} className="warn small">{note}</p>)}
         {saveProblem && <p className="warn small">{saveProblem}</p>}
@@ -1223,18 +1311,14 @@ export function AxesPage() {
           <AxisEditor editing={editing ?? applied} edited={editing !== null} onChange={setEditing} settings={settings} scoring={scoring} problems={editProblems} working={editWorking} canSave={worked !== null && progress === null} onSave={() => void saveEdits()} onDiscard={() => { setEditing(null); setEditProblems([]); }} />
         </AxisListView>
       </section>
-      <section className="card">
-        <div className="buttons"><button className="primary" disabled={progress !== null} onClick={() => void workOut()}>Work out suggestions</button></div>
-        <div className="buttons clutter-show-all">
-          {lab.state !== 'watching' && <button onClick={() => void connectLab()}>{lab.state === 'reconnect' ? 'Reconnect the lab folder' : 'Connect a lab folder…'}</button>}
-          <span className="muted small">Lab folder: {lab.message} A coding agent writes request.json there; the page applies it and writes the results back (lab/ in the project).</span>
-        </div>
-        {progress && <p className="working" role="status"><span className="spinner-inline" />{progress}</p>}
-        {problem && <p className="warn">{problem}</p>}
-      </section>
-      {counts && (
+      {/* Shown straight away, like the categories: the fields need no scores; Save waits for them. */}
         <section className="card">
-          <h2>Settings</h2>
+          <details className="clutter-settings">
+          <summary>Settings{cardEdits.length > 0 && <span className="muted small"> · not saved yet</span>}</summary>
+          <div className="row">
+            <label>Photos for a suggestion <input type="number" value={minPhotos} step={5} min={0} onChange={(e) => Number.isFinite(e.target.valueAsNumber) && setMinPhotos(e.target.valueAsNumber)} /></label>
+            <span className="muted small">A category offering fewer isn't suggested (it is listed at the end of Suggested searches). Counts at once, without Save.</span>
+          </div>
           <div className="segmented" role="group" aria-label="Scoring">
             <button className={cardScoring === 'raw' ? 'selected' : ''} aria-pressed={cardScoring === 'raw'} onClick={() => setCard((t) => ({ ...t, scoring: 'raw' }))}>Raw scores</button>
             <button className={cardScoring === 'evened' ? 'selected' : ''} aria-pressed={cardScoring === 'evened'} onClick={() => setCard((t) => ({ ...t, scoring: 'evened' }))}>Evened out</button>
@@ -1290,48 +1374,51 @@ export function AxesPage() {
             <button disabled={cardDraft === null} onClick={() => setCardDraft(null)}>Discard</button>
             <span className="muted small">{cardEdits.length === 0 ? 'Changes here count only once saved and applied; the lab measures against what is applied.' : `Not applied yet: ${cardEdits.join(' · ')}`}</span>
           </div>
-          <div className="row">
-            <label>Photos for a suggestion <input type="number" value={minPhotos} step={5} min={0} onChange={(e) => Number.isFinite(e.target.valueAsNumber) && setMinPhotos(e.target.valueAsNumber)} /></label>
+          </details>
+        </section>
+      {/* What the list and settings come to, as they stand: worked out again at once on every saved change. */}
+      {/* Shown from the start, greyed out until the library is read, so the page keeps its shape. */}
+      {!(counts && worked && rows) && (
+        <section className="card clutter-results-waiting" aria-busy="true">
+          <h2 className="clutter-results-title">Results</h2>
+          <p className="clutter-results-totals">{needsPhotos ? 'Once Google Photos is open and the library is read.' : 'Once the library is read.'}</p>
+          <div className="buttons clutter-show-all clutter-results-export">
+            <button disabled>Export summary to folder…</button>
           </div>
-          <p className="mono">{counts.photos.toLocaleString()} photos matched</p>
-          <p className="mono">{counts.totals}</p>
-          <div className="buttons clutter-show-all">
-            <button onClick={openLabelling}>Label photos…</button>
-            <span className="muted small">
-              {labelScores
-                ? `Labels: ${labelScores.judged.toLocaleString()} judged · of those offered ${labelScores.offered}, ${labelScores.wrong} wrong · of the clutter ${labelScores.clutter}, ${labelScores.found} found${labelScores.otherKind > 0 ? ` · ${labelScores.otherKind} of a kind no category fits` : ''}`
-                : 'Your verdict on a sample of photos (keep, clutter and which kind, unsure), which the lab scores every change against.'}
-            </span>
-          </div>
+          {['To suggest for deletion', 'Kept', 'Subject × setting matrix'].map((part) => (
+            <p key={part} className="clutter-results-part clutter-results-part-waiting">▸ {part}</p>
+          ))}
         </section>
       )}
       {counts && worked && rows && (
-        <section className="card">
-          <h2>Suggested searches</h2>
-          <div className="buttons clutter-show-all">
-            <button disabled={reviewing !== null && reviewing.endsWith('…')} onClick={() => void saveAllForReview()}>Save all for review…</button>
+        <section className="card clutter-appear">
+          <h2 className="clutter-results-title">Results</h2>
+          <p className="mono clutter-results-totals">{counts.totals}</p>
+          <p className="clutter-results-scores">{scoresText ?? 'Precision and recall: none yet. They show once photos are labelled (Labelling lab, below).'}</p>
+          <div className="buttons clutter-show-all clutter-results-export">
+            <button disabled={reviewing !== null && reviewing.endsWith('…')} onClick={() => void saveAllForReview()}>Export summary to folder…</button>
             {reviewing !== null && reviewing.endsWith('…') && (
               <button onClick={() => { cancelReview.current = true; setReviewing('Cancelling after this category…'); }}>Cancel</button>
             )}
             <span className="muted small">{reviewing ?? 'Every clutter category’s Riskiest, Lowest scores and Just missed as numbered contact sheets, with each photo’s scores as text, into a folder you choose.'}</span>
           </div>
+          {/* Its parts fold away, closed until wanted. */}
+          <details className="clutter-results-part">
+          <summary>To suggest for deletion</summary>
           {counts.forms.length > 0 && <p className="muted small">By form, decided on its own: a photo here can also be in a suggestion below.</p>}
           {counts.forms.map((c) => <AxisCategoryCard key={c.category.id} count={c} worked={worked} rows={rows} settings={settings} exceptions={list.exceptions} preview={preview} openAll={() => openAll(c)} />)}
           {suggested.length === 0 && <p className="muted">None by subject and setting with these settings.</p>}
           {suggested.map((c) => <AxisCategoryCard key={c.category.id} count={c} worked={worked} rows={rows} settings={settings} exceptions={list.exceptions} preview={preview} openAll={() => openAll(c)} />)}
           {tooFew.length > 0 && <p className="muted small">Too few to suggest: {tooFew.map(countLine).join(' · ')}</p>}
-        </section>
-      )}
-      {counts && worked && rows && (
-        <section className="card">
-          <h2>Kept</h2>
-          <p className="muted small">The photos each keep subject or setting keeps. A clutter photo here is one a keeper took away; check these hold the photos that should stay.</p>
+          </details>
+          <details className="clutter-results-part">
+          <summary>Kept</summary>
+          <p className="muted small">The photos each keep subject or setting keeps. A clutter photo here is one a keeper took away; check these hold the photos that should not be offered for the trash.</p>
           {counts.keepers.map((c) => <AxisCategoryCard key={c.category.id} count={c} worked={worked} rows={rows} settings={settings} exceptions={list.exceptions} preview={preview} openAll={() => openAll(c)} />)}
-        </section>
-      )}
-      {pairs.length > 0 && (
-        <section className="card">
-          <h2>Subject × setting</h2>
+          </details>
+          {pairs.length > 0 && (
+          <details className="clutter-results-part">
+          <summary>Subject × setting matrix</summary>
           <div className="segmented" role="group" aria-label="Group the pairs">
             <button className={pairsBy === null ? 'selected' : ''} aria-pressed={pairsBy === null} onClick={() => setPairsBy(null)}>All pairs</button>
             <button className={pairsBy === 'subject' ? 'selected' : ''} aria-pressed={pairsBy === 'subject'} onClick={() => setPairsBy('subject')}>By subject</button>
@@ -1353,6 +1440,40 @@ export function AxesPage() {
               ))}
             </>
           )}
+          </details>
+          )}
+        </section>
+      )}
+      {/* Like Results: shown from the start, greyed out until the library is read. */}
+      {!counts && (
+        <section className="card clutter-results-waiting" aria-busy="true">
+          <h2>Labelling lab</h2>
+          <div className="buttons clutter-show-all">
+            <button disabled>Label edges and misses…</button>
+            <button disabled>Label random photos…</button>
+            <button disabled>Copy scores</button>
+            <span className="muted small">Once the library is read.</span>
+          </div>
+        </section>
+      )}
+      {counts && (
+        <section className="card clutter-appear">
+          <h2>Labelling lab</h2>
+          <div className="buttons clutter-show-all">
+            <button onClick={() => openLabelling(false)}>Label edges and misses…</button>
+            <button onClick={() => openLabelling(true)}>Label random photos…</button>
+            <button disabled={Object.keys(labels).length === 0} onClick={copyScores}>Copy scores</button>
+            {scoresCopied && <span className="muted small">{scoresCopied}</span>}
+            <span className="muted small">
+              {labelText ?? 'Your verdict on a sample of photos (keep, clutter and which kind, unsure), which the lab scores every change against. Random photos, drawn from the whole library, show its precision and recall.'}
+            </span>
+          </div>
+          {edge && (
+            <details className="clutter-edge">
+              <summary className="small">{edge.summary}</summary>
+              <ul className="small">{edge.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+            </details>
+          )}
         </section>
       )}
       {labelling && (
@@ -1364,23 +1485,34 @@ export function AxesPage() {
           thumbUrl={labelThumb}
           preview={preview}
           onLabel={(key, label) => {
-            setLabels((l) => ({ ...l, [key]: label }));
-            setLabelling((s) => (s ? { queue: s.queue.filter((k) => k !== key), history: [...s.history, key] } : s));
+            setLabels((l) => ({ ...l, [key]: labelling.random ? { ...label, random: true } : label }));
+            setLabelling((s) => (s ? { ...s, queue: s.queue.filter((k) => k !== key), history: [...s.history, key] } : s));
           }}
           onUndo={() => {
             const last = labelling.history.at(-1);
             if (last === undefined) return false;
             setLabels((l) => Object.fromEntries(Object.entries(l).filter(([k]) => k !== last)));
-            setLabelling((s) => (s ? { queue: [last, ...s.queue], history: s.history.slice(0, -1) } : s));
+            setLabelling((s) => (s ? { ...s, queue: [last, ...s.queue], history: s.history.slice(0, -1) } : s));
             return true;
           }}
           onClose={() => setLabelling(null)}
         />
       )}
+      {/* For a coding agent tuning the list from the project (lab/ in it): of no use without one, so folded away at the foot. */}
+      <section className="card">
+        <details className="clutter-settings" open={lab.state === 'reconnect'}>
+          <summary>Lab folder <span className="muted small">· {lab.message}</span></summary>
+          <div className="buttons clutter-show-all">
+            {lab.state !== 'watching' && <button onClick={() => void connectLab()}>{lab.state === 'reconnect' ? 'Reconnect the lab folder' : 'Connect a lab folder…'}</button>}
+            <span className="muted small">Only for a coding agent working in the project: it writes request.json into lab/ there; this page applies it to the list and settings and writes the results back. Without one, leave it unconnected.</span>
+          </div>
+        </details>
+      </section>
       {pendingEdit && editWeighed && (
         <ChangePopup
           title="What the edits change"
           summary={editWeighed.summary}
+          scores={editScores}
           note="Each caption says what the photo was and what it becomes; hover over one to see how it scores now and with the edits. Under a photo the edits take out of clutter: the description it scored as there, whose weight Stay raises just enough to keep it there (and others like it). Nothing changes until you apply them; Back to editing keeps your edits."
           applyLabel="Apply the edits"
           cancelLabel="Back to editing"
@@ -1395,6 +1527,7 @@ export function AxesPage() {
         <ChangePopup
           title="What the settings change"
           summary={cardWeighed.summary}
+          scores={cardScores}
           note="Each caption says what the photo was and what it becomes; hover over one to see how it scores now and with the settings. Nothing changes until you apply them; Back to the settings keeps your changes."
           applyLabel="Apply the settings"
           cancelLabel="Back to the settings"

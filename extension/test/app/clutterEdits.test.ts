@@ -121,12 +121,12 @@ describe('editing the list of subjects and settings', () => {
     expect(settingsForList(settings, edited, renames)).toEqual(at({ categoryWeights: { screens: 0.01 }, margins: { screens: 0.04 }, descriptionWeights: { 'a screenshot of a phone app': -0.01 } }));
   });
 
-  it('heads a collapsed category with its name, verdict and number of descriptions', () => {
+  it('heads a category with its name and verdict, and says when it has no descriptions yet', () => {
     const draft = draftOf(list);
-    expect(draftHeading(draft[0]!)).toBe('Screen photos · clutter · 2 descriptions');
-    expect(draftHeading(draft[1]!)).toBe('Memes · clutter · 1 description');
+    expect(draftHeading(draft[0]!)).toBe('Screen photos · clutter');
+    expect(draftHeading(draft[1]!)).toBe('Memes · clutter');
     const added = addAxisCategory(draft, '  ', 'setting', 'keep');
-    expect(draftHeading(added.find((c) => c.descriptions.length === 0)!)).toBe('No name yet · keep · 0 descriptions');
+    expect(draftHeading(added.find((c) => c.descriptions.length === 0)!)).toBe('No name yet · keep · no descriptions yet');
   });
 
   it('edits weights with the list: a reworded description takes its weight along', () => {

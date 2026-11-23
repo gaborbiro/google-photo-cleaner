@@ -7,6 +7,19 @@ import { hoverCardTop, stayButton, stayTitle, typedNumber, type Breakdown, type 
 
 /** Photos scored between pauses, so the page keeps drawing while it works. */
 export const CHUNK = 500;
+
+/**
+ * A pause between chunks that lets the page draw. Not setTimeout: Chrome holds a hidden tab's timers
+ * back to one a second, then one a minute, which stalled scoring whenever the tab was in the background.
+ * A message to itself isn't held back.
+ */
+export function pause(): Promise<void> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => { channel.port1.close(); resolve(); };
+    channel.port2.postMessage(null);
+  });
+}
 /** Photos shown in each of a category's samples (strongest, weakest, just counted, just missed). */
 export const SAMPLE = 24;
 /** How far outside the window a photo's preview starts loading, so scrolling finds it ready. */
@@ -160,6 +173,21 @@ export function useOverlayKeys(onKey: (e: KeyboardEvent) => void) {
     return () => {
       window.removeEventListener('keydown', key);
       overlays.splice(overlays.indexOf(me), 1);
+    };
+  }, []);
+}
+
+/**
+ * Holds the page behind still while a full-screen overlay is open: the wheel and the arrow keys would scroll it
+ * (and show its scrollbar) through the overlay.
+ */
+export function usePageScrollLocked() {
+  useEffect(() => {
+    const page = document.documentElement;
+    const was = page.style.overflow;
+    page.style.overflow = 'hidden';
+    return () => {
+      page.style.overflow = was;
     };
   }, []);
 }
@@ -367,9 +395,11 @@ export function AddField({ label, placeholder, onAdd, children }: { label: strin
  * scored as there to strengthen and keep it, and every photo that brings in, by suggestion, and where
  * each goes; nothing changes until Apply.
  */
-export function ChangePopup({ title, summary, note, applyLabel, cancelLabel, chosen, grids, preview, problem, onApply, onCancel }: {
+export function ChangePopup({ title, summary, scores = null, note, applyLabel, cancelLabel, chosen, grids, preview, problem, onApply, onCancel }: {
   title: string;
   summary: ChangeSummary;
+  /** What it does to precision and recall on the labels ("Random photos: precision 94.9% → 97.5% · …"); null without labels. */
+  scores?: string | null;
   note: string;
   applyLabel: string;
   cancelLabel: string;
@@ -390,12 +420,18 @@ export function ChangePopup({ title, summary, note, applyLabel, cancelLabel, cho
       <div className="clutter-popup-box card">
         <h2>{title}</h2>
         <p>{summary.what}</p>
-        <p className="clutter-popup-count"><strong>{summary.leave}</strong></p>
-        <div className="clutter-popup-details small">
-          {summary.leaveFrom && <p>From {summary.leaveFrom}</p>}
-          {summary.join && <p>{summary.join}</p>}
-          {summary.move && <p>{summary.move}</p>}
-        </div>
+        <p className="clutter-popup-count">
+          <strong>{summary.leave}</strong>
+          {summary.leaveFrom && <span className="clutter-popup-where"> ({summary.leaveFrom})</span>}
+        </p>
+        {summary.join && (
+          <p className="clutter-popup-count">
+            <strong>{summary.join}</strong>
+            {summary.joinTo && <span className="clutter-popup-where"> ({summary.joinTo})</span>}
+          </p>
+        )}
+        {summary.move && <p className="clutter-popup-details small">{summary.move}</p>}
+        {scores && <p className="clutter-popup-scores">On your labels: {scores}</p>}
         {chosen && (
           <div className="clutter-chosen">
             <PhotoGrid tiles={chosen.tiles} preview={preview} />

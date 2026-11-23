@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apart, countAxes, kindOf, matchAxes, STARTING_AXIS_SETTINGS, type AxisCategory, type ScoredAxis } from '../../src/app/search/clutterAxes';
+import { apart, countAxes, kindOf, matchAxes, PLAIN_AXIS_SETTINGS, type AxisCategory, type ScoredAxis } from '../../src/app/search/clutterAxes';
 import { edgeLines, edgeScores, kindGuesses, labelExamples, labelLine, labelMetrics, labelParts, labelSample, OTHER_KIND, offeredIn, randomSample, readLabels, saveLabels, scoreLabels, scoresChange, scoresLine, scoresReport, type LabelScores, type Labels } from '../../src/app/search/clutterLabels';
 
 const v = (...xs: number[]) => Float32Array.from(xs);
@@ -7,7 +7,7 @@ const cat = (id: string, axis: 'subject' | 'setting' | 'form', verdict: 'clutter
 // Subjects: Products, Receipts (clutter), People (keep). Setting: Shops (neutral). Form: Screenshots (clutter), Photos (neutral).
 const list = [cat('products', 'subject', 'clutter', ['a price tag']), cat('receipts', 'subject', 'clutter', ['a receipt']), cat('people', 'subject', 'keep', ['a selfie']), cat('shops', 'setting', 'neutral', ['inside a shop']), cat('screenshots', 'form', 'clutter', ['a phone screenshot']), cat('photos', 'form', 'neutral', ['a photo'])];
 const scored: ScoredAxis[] = list.map((category, i) => ({ category, vectors: [v(...list.map((_, j) => (i === j ? 1 : 0)))] }));
-const settings = STARTING_AXIS_SETTINGS.raw;
+const settings = PLAIN_AXIS_SETTINGS.raw;
 const match = (key: string, row: Float32Array) => matchAxes(key, row, scored, apart(6), settings);
 const rows: [string, Float32Array][] = [
   ['tag', v(0.7, 0.3, 0.3, 0.6, 0.3, 0.6)], // Products
@@ -143,7 +143,7 @@ describe('labels drawn at random, and the measures they give', () => {
     const all = scoreLabels(matches, list, [], photos, labels);
     const random = scoreLabels(matches, list, [], photos, labelParts(labels).random);
     const report = scoresReport({
-      version: '0.5.108', matched: 1234, totals: 'Clutter 4 (1%)', changes: ['Products: added "a shelf label"'], scoring: 'raw', settings: STARTING_AXIS_SETTINGS.raw,
+      version: '0.5.108', matched: 1234, totals: 'Clutter 4 (1%)', changes: ['Products: added "a shelf label"'], scoring: 'raw', settings: PLAIN_AXIS_SETTINGS.raw,
       all, random, edge: [{ id: 'products', label: 'Products', photos: 30, labelled: 10, wrong: 1, state: 'pass' }],
     });
     const lines = report.split('\n');

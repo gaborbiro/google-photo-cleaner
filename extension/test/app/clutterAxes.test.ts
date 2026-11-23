@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { leadText, type ClutterPhoto } from '../../src/app/search/clutter';
 import {
   AXIS_LIST,
-  STARTING_AXIS_SETTINGS,
+  PLAIN_AXIS_SETTINGS,
   STARTING_AXIS_TUNING,
   apart,
   descriptionOverlap,
@@ -52,7 +52,7 @@ const food = cat('food', 'subject', 'neutral', ['a meal on a plate']);
 const categories = [products, people, repairs, shops, museums, carparks, food];
 // One direction per description, in the order of the categories.
 const scored: ScoredAxis[] = categories.map((category, i) => ({ category, vectors: [v(...categories.map((_, j) => (i === j ? 1 : 0)))] }));
-const settings: AxisSettings = STARTING_AXIS_SETTINGS.raw;
+const settings: AxisSettings = PLAIN_AXIS_SETTINGS.raw;
 const trashable: ClutterPhoto = { eligible: true, approved: false };
 const outcome = (row: Float32Array, exceptions: PairException[] = [], s = settings) => axisOutcome(matchAxes('p', row, scored, free(scored), s), categories, exceptions);
 
@@ -283,12 +283,16 @@ describe('clutter by subject and setting', () => {
     const descriptions = AXIS_LIST.categories.flatMap((c) => c.descriptions);
     expect(new Set(descriptions).size).toBe(descriptions.length);
     expect(AXIS_LIST.categories.every((c) => c.kind === kindOf(c.verdict))).toBe(true);
-    expect(axisListSummary(AXIS_LIST)).toBe('36 subjects, 13 settings, 2 forms and 1 baseline');
+    // 2026-11-23: Everyday objects folded into Things to buy; Close-up, no clear place added; paper clutter in keep settings.
+    expect(axisListSummary(AXIS_LIST)).toBe('35 subjects, 14 settings, 2 forms and 1 baseline, 40 exceptions');
+    // Each exception names a clutter subject and a keep setting of the list.
+    const byId = new Map(AXIS_LIST.categories.map((c) => [c.id, c]));
+    expect(AXIS_LIST.exceptions.every((e) => byId.get(e.subject)?.axis === 'subject' && byId.get(e.setting)?.axis === 'setting' && byId.get(e.setting)?.verdict === 'keep')).toBe(true);
     expect(axisDescriptionCount(AXIS_LIST)).toBe(descriptions.length);
     // A phrase in two categories (as an edit can leave it) counts once.
     const twice = { categories: [{ ...AXIS_LIST.categories[0]!, descriptions: ['a', 'b'] }, { ...AXIS_LIST.categories[1]!, descriptions: ['b', 'c'] }], exceptions: [] };
     expect(axisDescriptionCount(twice)).toBe(3);
-    expect(axisSections(AXIS_LIST.categories).map((s) => [s.axis, s.categories.length])).toEqual([['subject', 36], ['setting', 13], ['form', 2], ['baseline', 1]]);
+    expect(axisSections(AXIS_LIST.categories).map((s) => [s.axis, s.categories.length])).toEqual([['subject', 35], ['setting', 14], ['form', 2], ['baseline', 1]]);
     const named = (id: string) => AXIS_LIST.categories.find((c) => c.id === id)!;
     // Screenshots are a form, against Not a screenshot: as a setting they won wherever no place fitted.
     // Photos of screens stay a subject.
@@ -511,9 +515,9 @@ describe('the floor: clutter must score clearly above “a photo”', () => {
     const m = matchAxes('p', v(0.62, 0.5, 0.6, 0.61), s4, apart(4), settings);
     expect(Object.keys(m)).toEqual(['mediaKey', 'subject', 'setting', 'form']);
     expect(() => matchAxes('p', v(0.62, 0.5, 0.6), s4.slice(0, 3), apart(3), floored)).toThrow('The floor needs a baseline description');
-    expect(floorProblem({ raw: floored, evened: STARTING_AXIS_SETTINGS.evened }, list.slice(0, 3))).toBe('The floor is on (raw), and needs a baseline description such as “a photo”: keep one, or turn the floor off first.');
-    expect(floorProblem({ raw: floored, evened: STARTING_AXIS_SETTINGS.evened }, list)).toBeNull();
-    expect(floorProblem(STARTING_AXIS_SETTINGS, list.slice(0, 3))).toBeNull();
+    expect(floorProblem({ raw: floored, evened: PLAIN_AXIS_SETTINGS.evened }, list.slice(0, 3))).toBe('The floor is on (raw), and needs a baseline description such as “a photo”: keep one, or turn the floor off first.');
+    expect(floorProblem({ raw: floored, evened: PLAIN_AXIS_SETTINGS.evened }, list)).toBeNull();
+    expect(floorProblem(PLAIN_AXIS_SETTINGS, list.slice(0, 3))).toBeNull();
   });
 });
 
@@ -522,23 +526,26 @@ describe("the page's saved settings, one set per scoring", () => {
 
   it('starts from the starting tuning when nothing is saved, and reads back what it saved', () => {
     expect(readAxisTuning(null, list)).toEqual({ tuning: STARTING_AXIS_TUNING, notes: [] });
-    const tuning = { scoring: 'evened' as const, settings: { raw: { ...STARTING_AXIS_SETTINGS.raw, pooling: 0.02, baseline: 0.01 }, evened: { ...STARTING_AXIS_SETTINGS.evened, descriptionWeights: { 'a selfie': 0.2 } } } };
+    // The shipped tuning names only what is in the shipped list: read back whole, nothing dropped.
+    expect(readAxisTuning(JSON.stringify(STARTING_AXIS_TUNING), list)).toEqual({ tuning: STARTING_AXIS_TUNING, notes: [] });
+    expect(STARTING_AXIS_TUNING.settings.raw.pooling).toBe(0.02);
+    const tuning = { scoring: 'evened' as const, settings: { raw: { ...PLAIN_AXIS_SETTINGS.raw, pooling: 0.02, baseline: 0.01 }, evened: { ...PLAIN_AXIS_SETTINGS.evened, descriptionWeights: { 'a selfie': 0.2 } } } };
     expect(readAxisTuning(JSON.stringify(tuning), list)).toEqual({ tuning, notes: [] });
   });
 
   it('reads settings saved before evening out as the raw ones, with no pooling or floor, and says so', () => {
     const old = { subject: { minScore: 0, margin: 0.04 }, setting: { minScore: 0, margin: 0.02 }, form: { minScore: 0, margin: 0.02 }, margins: { repairs: 0.04 }, categoryWeights: {}, descriptionWeights: { 'a selfie': 0.01 } };
     const { tuning, notes } = readAxisTuning(JSON.stringify(old), list);
-    expect(tuning).toEqual({ scoring: 'raw', settings: { raw: { ...old, pooling: 0, baseline: null }, evened: STARTING_AXIS_SETTINGS.evened } });
+    expect(tuning).toEqual({ scoring: 'raw', settings: { raw: { ...old, pooling: 0, baseline: null }, evened: PLAIN_AXIS_SETTINGS.evened } });
     expect(notes).toEqual(['The settings were saved before evening out came to subject and setting: they are the raw settings now, and the evened-out ones start afresh.']);
   });
 
   it('drops weights for what is no longer in the list, and turns off a floor with no baseline, naming each', () => {
-    const saved = { scoring: 'raw', settings: { raw: { ...STARTING_AXIS_SETTINGS.raw, baseline: 0.02, descriptionWeights: { tools: 0.01 } }, evened: STARTING_AXIS_SETTINGS.evened } };
+    const saved = { scoring: 'raw', settings: { raw: { ...PLAIN_AXIS_SETTINGS.raw, baseline: 0.02, descriptionWeights: { tools: 0.01 } }, evened: PLAIN_AXIS_SETTINGS.evened } };
     const { tuning, notes } = readAxisTuning(JSON.stringify(saved), list.filter((c) => c.axis !== 'baseline'));
-    expect(tuning.settings.raw).toEqual(STARTING_AXIS_SETTINGS.raw);
+    expect(tuning.settings.raw).toEqual(PLAIN_AXIS_SETTINGS.raw);
     expect(notes).toEqual(['Turned the raw floor off: the list has no baseline description to measure it by.', 'Dropped the raw weight for “tools”, no longer in the list.']);
-    expect(() => readAxisTuning(JSON.stringify({ scoring: 'raw', settings: { raw: { ...STARTING_AXIS_SETTINGS.raw, pooling: 'x' } } }), list)).toThrow('no number for pooling');
+    expect(() => readAxisTuning(JSON.stringify({ scoring: 'raw', settings: { raw: { ...PLAIN_AXIS_SETTINGS.raw, pooling: 'x' } } }), list)).toThrow('no number for pooling');
   });
 });
 

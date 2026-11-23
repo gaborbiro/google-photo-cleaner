@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apart, axisBreakdown, kindOf, STARTING_AXIS_SETTINGS, STARTING_AXIS_TUNING, type AxisCategory, type Axis, type ScoredAxis, type Verdict } from '../../src/app/search/clutterAxes';
+import { apart, axisBreakdown, kindOf, PLAIN_AXIS_SETTINGS, STARTING_AXIS_TUNING, type AxisCategory, type Axis, type ScoredAxis, type Verdict } from '../../src/app/search/clutterAxes';
 import {
   addAxisCategory,
   addDescription,
@@ -180,13 +180,13 @@ describe('a verdict changed in the editor, as Save shows it', () => {
     const home = cat('home', 'Home', 'setting', 'neutral', ['a kitchen']);
     const { list } = listOf(setVerdict(draftOf([food, people, home]), 'food', 'clutter'));
     const scored: ScoredAxis[] = list.map((category) => ({ category, vectors: [Float32Array.from([1])] }));
-    const rows = axisBreakdown(Float32Array.from([0.8, 0.5, 0.7]), scored, apart(3), STARTING_AXIS_SETTINGS.raw, [], 3).sides[0]!.rows;
+    const rows = axisBreakdown(Float32Array.from([0.8, 0.5, 0.7]), scored, apart(3), PLAIN_AXIS_SETTINGS.raw, [], 3).sides[0]!.rows;
     expect(rows.map((r) => [r.label, r.kind])).toEqual([['Food and drink', 'clutter'], ['People', 'counterweight']]);
   });
 });
 
 describe('the Settings card, saved before it counts', () => {
-  const raw = STARTING_AXIS_SETTINGS.raw;
+  const raw = PLAIN_AXIS_SETTINGS.raw;
   const tuning = (scoring: 'raw' | 'evened', rawSettings = raw) => ({ scoring, settings: { ...STARTING_AXIS_TUNING.settings, raw: rawSettings } });
 
   it('says what the card changes, one line each, and nothing when it is as applied', () => {

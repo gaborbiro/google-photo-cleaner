@@ -81,6 +81,8 @@ const baseline = (id: string, label: string, descriptions: string[]): AxisCatego
  * adventure"); noisy categories were narrowed (Signs, Things to fix). Screenshots are a form, decided on
  * their own against Not a screenshot. Lessons in docs/cleanup-roadmap.md, among them: no incidental words ("on a table", "held in
  * a hand"); no "a photo of the floor" or "of a ceiling" (they matched church interiors and frescoes).
+ * 2026-11-23: tuned on the developer page against 999 labels, 266 of them random (lab e01–e37, docs/clutter-lab.md):
+ * random precision 97.9%, recall 52.3%. Before a second library has been checked (docs/clutter-rules.md).
  */
 export const AXIS_LIST: AxisList = {
   categories: [
@@ -97,13 +99,15 @@ export const AXIS_LIST: AxisList = {
     ]),
     subject('menus', 'Menus', 'clutter', ['a restaurant menu', 'a menu board in a cafe']),
     subject('tickets', 'Tickets and passes', 'clutter', ['a paper ticket', 'a printed boarding pass', 'a boarding pass on a phone screen', 'a paper train ticket', 'an event ticket']),
-    subject('products', 'Products', 'clutter', ['a product on a shop shelf', 'a price tag', 'a product label', 'product packaging']),
+    subject('products', 'Products', 'clutter', ['a product on a shop shelf', 'a price tag', 'a product label', 'product packaging', 'groceries in a shop']),
     // Things at home (labels, lab r16): photos of an object held up or set on a table, to show someone, to buy it
     // again or to give it away. Most people take these; "household items around the home" held them back as
-    // neutral. 11 more found for 1 more wrong in 783 labels.
-    subject('homeitems', 'Things at home to buy, sell or show', 'clutter', [
+    // neutral. 11 more found for 1 more wrong in 783 labels. 2026-11-23: Everyday objects (neutral) folded in,
+    // and the tools from Things to fix; its riskiest are rooms, to check with labels.
+    subject('homeitems', 'Things to buy, sell or show', 'clutter', [
       'a single object on a table, photographed to show someone', 'an almost empty bottle or packet', 'an item laid out to be sold online',
-      'a charger, cable or battery pack', 'a household product photographed at home',
+      'a charger, cable or battery pack', 'a household product photographed at home', 'a tool on a workbench', 'tools laid out for a repair',
+      'furniture in a room', 'kitchen appliances', 'household items around the home', 'a bookshelf full of books',
     ]),
     // Flat viewings and moving (labels, lab r21): rooms photographed to compare flats or to show the state of a
     // place when moving in or out, and the boxes and vans of a move; once the move is done they're clutter.
@@ -122,7 +126,7 @@ export const AXIS_LIST: AxisList = {
     subject('readings', 'Meters and warning lights', 'clutter', ['a meter reading', 'a car dashboard warning light', 'a thermostat display', 'a bathroom scale display']),
     // Narrowed: "a damaged wall" took old stone walls, "a leaking pipe" a museum warship's engine.
     subject('repairs', 'Things to fix', 'clutter', [
-      'a crack or damp patch on a wall', 'a broken household item', 'a leaking pipe under a sink', 'a tool on a workbench', 'tools laid out for a repair', 'mould in the corner of a room', 'a tape measure showing a measurement',
+      'a crack or damp patch on a wall', 'a broken household item', 'a leaking pipe under a sink', 'mould in the corner of a room', 'a tape measure showing a measurement',
     ]),
     subject('memes', 'Memes and forwarded images', 'clutter', [
       'a meme with text', 'a cartoon', 'a motivational quote image', 'a greeting image with text', 'a funny picture from the internet',
@@ -139,9 +143,16 @@ export const AXIS_LIST: AxisList = {
       'a portrait of a person', 'a group of people smiling', 'a selfie', 'people at a party', 'a couple together', 'a family photo', 'friends together', 'photo of a person holding a phone',
       'a mirror selfie', 'grandparents with their grandchildren', 'people sharing a meal', 'people dancing', 'a pregnant belly', 'an audience at a talk or show', 'a person working at a desk',
       'a person on stairs or in a hallway', 'a person standing in a room at home', 'a person holding up a picture or poster',
+      // 2026-11-23 (lab e03): people at a meal or a café went to Food and drink and Things to buy; a person on a
+      // train or posing by a car went to Transport and Vehicles.
+      'a person eating or drinking', 'a selfie with a drink or food', 'friends at a table in a cafe or restaurant', 'a person sitting alone at a cafe table',
+      'a person sitting on a train or bus', 'a person posing next to a car',
     ]),
-    // "A child using a tablet or computer": children at computers went to Photos of screens.
-    subject('children', 'Children', 'keep', ['a baby', 'a child playing', 'a toddler', 'children at a birthday party', "a child's drawing", 'a child using a tablet or computer', 'a child in school uniform', 'a school play or performance']),
+    // "A child using a tablet or computer": children at computers went to Photos of screens. "In a shopping trolley" (lab e03): to Products.
+    subject('children', 'Children', 'keep', [
+      'a baby', 'a child playing', 'a toddler', 'children at a birthday party', "a child's drawing", 'a child using a tablet or computer', 'a child in school uniform', 'a school play or performance',
+      'a child in a shopping trolley',
+    ]),
     subject('celebrations', 'Celebrations (subject)', 'keep', [
       'a birthday cake with candles', 'a decorated Christmas tree', 'wrapped presents', 'balloons and party decorations', 'a wedding cake', 'fireworks in the night sky',
       'a Halloween costume or carved pumpkin', 'people raising glasses in a toast', 'festival lights and lanterns', 'painted Easter eggs',
@@ -160,10 +171,11 @@ export const AXIS_LIST: AxisList = {
     subject('memories', 'Old photos and keepsakes', 'keep', [
       'a scanned old photograph', 'an old printed photo', 'a handwritten letter from family', 'an old paper document', 'an ultrasound scan picture', 'a page of an old photo album', 'a framed family photo',
     ]),
+    // Neutral (lab e01): as clutter it took meals with friends, a pizza night, cocktails with a view.
     subject('food', 'Food and drink', 'neutral', [
       'a meal on a plate', 'a drink', 'an ice cream cone', 'a dessert', 'street food', 'a snack', 'a cup of coffee', 'a glass of wine or a cocktail', 'food cooking in a pan', 'a home-baked cake or bread',
+      'pizza',
     ]),
-    subject('objects', 'Everyday objects', 'neutral', ['furniture in a room', 'kitchen appliances', 'household items around the home', 'a bookshelf full of books']),
     // Neutral, not keep: greeting images with flowers are memes.
     subject('plants', 'Plants and flowers', 'neutral', ['a flower in bloom', 'a bouquet of flowers', 'a houseplant', 'a tree in blossom']),
     subject('vehicles', 'Vehicles', 'neutral', ['a classic car', 'a motorbike', 'a boat', 'a bicycle', 'a train', 'an aeroplane']),
@@ -195,6 +207,9 @@ export const AXIS_LIST: AxisList = {
     setting('streets', 'Streets and buildings', 'neutral', ['a street', 'a building', 'a city view', 'a residential street with houses', 'a shop front with its sign']),
     setting('work', 'Work and study', 'neutral', ['an office with desks', 'a meeting room', 'a classroom or lecture hall', 'a building site', 'a workshop or garage']),
     setting('hospitals', 'Hospitals and clinics', 'neutral', ['a hospital room', "a doctor's waiting room"]),
+    // A close-up has no place, and without this one it got the least wrong: a smartwatch on a wrist "a sports
+    // game", a TV "the open sea", and the keep setting kept it (2026-11-23, lab e35: random recall 44% → 52%).
+    setting('closeup', 'Close-up, no clear place', 'neutral', ['a close-up of an object', 'an object filling the frame', 'a close-up of a screen']),
     // A form again (2026-11-21): as a setting, Screenshots won wherever no place fitted (selfies, hands, close-ups).
     form('screenshots', 'Screenshots', 'clutter', [
       'a phone screenshot', 'screenshot of a text message', 'a screenshot of a chat conversation', 'a screenshot of a web page', 'a screenshot of an app', 'a screenshot of a social media post', 'a screenshot of a computer desktop',
@@ -211,7 +226,11 @@ export const AXIS_LIST: AxisList = {
     ]),
     baseline('baseline', 'Any photo', ['a photo', 'a picture']),
   ],
-  exceptions: [],
+  // Paper and readings are clutter wherever they are photographed: a receipt on holiday, a ticket at a museum
+  // (lab e04: Documents 19 → 51, no new wrong). Not Screen photos: a screen at a concert or a match is a memory.
+  exceptions: ['documents', 'cards', 'receipts', 'readings', 'codes', 'notes', 'tickets', 'whiteboards'].flatMap((subject) =>
+    ['travel', 'heritage', 'nature', 'occasions', 'adventures'].map((setting) => ({ subject, setting, verdict: 'clutter' as const })),
+  ),
 };
 
 /** What a subject, or a setting, needs to count: its score at least [minScore], its lead over the next of its axis at least [margin]; less is too close. */
@@ -239,12 +258,33 @@ export interface AxisSettings {
 }
 
 /**
- * Where each scoring's settings start. Evened-out scores count in spreads, so they run larger; for
- * them a minimum score of 0 means at least the description's average.
+ * Each scoring's settings with nothing tuned: no category's own lead, no weights, no pooling, no floor;
+ * what a setting missing from saved settings falls back to. Evened-out scores count in spreads, so they
+ * run larger; for them a minimum score of 0 means at least the description's average.
  */
-export const STARTING_AXIS_SETTINGS: Record<Scoring, AxisSettings> = {
+export const PLAIN_AXIS_SETTINGS: Record<Scoring, AxisSettings> = {
   raw: { subject: { minScore: 0, margin: 0.02 }, setting: { minScore: 0, margin: 0.02 }, form: { minScore: 0, margin: 0.02 }, margins: {}, categoryWeights: {}, descriptionWeights: {}, pooling: 0, baseline: null },
   evened: { subject: { minScore: 0, margin: 0.3 }, setting: { minScore: 0, margin: 0.3 }, form: { minScore: 0, margin: 0.3 }, margins: {}, categoryWeights: {}, descriptionWeights: {}, pooling: 0, baseline: null },
+};
+
+/** What the page starts with: the plain settings, raw ones tuned with the shipped list ([AXIS_LIST]), whose ids and descriptions they name. */
+export const STARTING_AXIS_SETTINGS: Record<Scoring, AxisSettings> = {
+  // Tuned with the list (2026-11-23, lab e21–e37): smaller leads where no wrong photo came with them, larger for
+  // Signs, Things to fix and Parcels, whose edges failed; weights for the categories that missed most.
+  raw: {
+    subject: { minScore: 0, margin: 0.02 },
+    setting: { minScore: 0, margin: 0.02 },
+    form: { minScore: 0, margin: 0.02 },
+    margins: {
+      products: 0.005, documents: 0.01, viewings: 0.01, groceries: 0.01, codes: 0.01, menus: 0.01, receipts: 0.01, notes: 0.01, readings: 0.01, screens: 0.01,
+      signs: 0.035, repairs: 0.035, parcels: 0.035,
+    },
+    categoryWeights: { products: 0.02, homeitems: 0.015, viewings: 0.015, screens: 0.01, memes: 0.005 },
+    descriptionWeights: { 'a page of printed text': 0.0034, 'a child playing': 0.0335 },
+    pooling: 0.02,
+    baseline: null,
+  },
+  evened: PLAIN_AXIS_SETTINGS.evened,
 };
 
 /** Where pooling starts when it is turned on, per scoring. */
@@ -959,8 +999,9 @@ export function readAxisTuning(text: string | null, categories: readonly AxisCat
   const descriptions = new Set(categories.flatMap((c) => c.descriptions));
   const hasBaseline = categories.some((c) => c.axis === 'baseline');
   const fit = (s: Partial<AxisSettings> | undefined, scoring: Scoring): AxisSettings => {
-    const start = STARTING_AXIS_SETTINGS[scoring];
-    if (!s) return start;
+    // A scoring with nothing saved starts as shipped; a setting missing from what was saved (saved before it existed) is off.
+    if (!s) return STARTING_AXIS_SETTINGS[scoring];
+    const start = PLAIN_AXIS_SETTINGS[scoring];
     const lead = (l: Partial<AxisLead> | undefined, axis: SideAxis): AxisLead => (l ? { minScore: number(l.minScore, `the ${axis} minimum score`), margin: number(l.margin, `the ${axis} minimum lead`) } : start[axis]);
     const known = (record: unknown, keep: Set<string>, what: string): Record<string, number> => {
       const out: Record<string, number> = {};
@@ -988,7 +1029,7 @@ export function readAxisTuning(text: string | null, categories: readonly AxisCat
   };
   if (saved.settings === undefined) {
     notes.push('The settings were saved before evening out came to subject and setting: they are the raw settings now, and the evened-out ones start afresh.');
-    return { tuning: { scoring: 'raw', settings: { raw: fit(saved, 'raw'), evened: STARTING_AXIS_SETTINGS.evened } }, notes };
+    return { tuning: { scoring: 'raw', settings: { raw: fit(saved, 'raw'), evened: fit(undefined, 'evened') } }, notes };
   }
   return { tuning: { scoring: saved.scoring === 'evened' ? 'evened' : 'raw', settings: { raw: fit(saved.settings.raw, 'raw'), evened: fit(saved.settings.evened, 'evened') } }, notes };
 }

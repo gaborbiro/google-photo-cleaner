@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AXIS_LIST, STARTING_AXIS_TUNING, countAxes, kindOf, matchAxes, apart, STARTING_AXIS_SETTINGS, type AxisCategory, type ScoredAxis } from '../../src/app/search/clutterAxes';
+import { AXIS_LIST, STARTING_AXIS_TUNING, countAxes, kindOf, matchAxes, apart, PLAIN_AXIS_SETTINGS, STARTING_AXIS_SETTINGS, type AxisCategory, type ScoredAxis } from '../../src/app/search/clutterAxes';
 import { labCategoryLines, labRefusal, labReviewIds, labTarget, readLabRequest } from '../../src/app/search/clutterLab';
 
 const v = (...xs: number[]) => Float32Array.from(xs);
@@ -47,7 +47,7 @@ describe('the lab folder: requests an agent writes for the developer page', () =
     const scored: ScoredAxis[] = list.map((category, i) => ({ category, vectors: [v(...list.map((_, j) => (i === j ? 1 : 0)))] }));
     const rows: [string, Float32Array][] = [['a', v(0.7, 0.4, 0.6)], ['b', v(0.62, 0.6, 0.6)]];
     const photos = new Map(rows.map(([k]) => [k, { eligible: true, approved: false }]));
-    const count = (margin: number) => countAxes(rows.map(([k, row]) => matchAxes(k, row, scored, apart(3), { ...STARTING_AXIS_SETTINGS.raw, subject: { minScore: 0, margin } })), list, [], photos, STARTING_AXIS_SETTINGS.raw);
+    const count = (margin: number) => countAxes(rows.map(([k, row]) => matchAxes(k, row, scored, apart(3), { ...PLAIN_AXIS_SETTINGS.raw, subject: { minScore: 0, margin } })), list, [], photos, PLAIN_AXIS_SETTINGS.raw);
     // b: Products 0.62, People 0.60. With a minimum lead of 0.05 People is heard and keeps it; with 0.01, Products counts.
     expect(labCategoryLines(count(0.05), count(0.01))).toEqual([
       { id: 'products', label: 'Products', axis: 'subject', verdict: 'clutter', before: 1, after: 2, closeCallsAfter: 0 },

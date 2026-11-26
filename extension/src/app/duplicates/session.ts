@@ -45,7 +45,7 @@ export function wakeTrashQueue(): void {
   });
 }
 
-async function loadQueue({ inventory, analysis, review, preferences }: DuplicatesStores, account: string, nowMs: number): Promise<LoadedQueue> {
+async function loadQueue({ inventory, analysis, review, preferences }: DuplicatesStores, account: string, nowMs: number, decided = true): Promise<LoadedQueue> {
   const run = await inventory.latestRun(account);
   const snapshot = run ? await inventory.snapshot(run.id) : null;
   const settings = await analysis.settings(account);
@@ -63,7 +63,8 @@ async function loadQueue({ inventory, analysis, review, preferences }: Duplicate
       height: facts?.height ?? null,
     };
   });
-  const decisions = (await review.activeDecisions(account)).map(({ id, groupId, kind, items, members, createdAtMs }) => ({ id, groupId, kind, items, members, createdAtMs }));
+  // [decided] false: as if nothing were decided, so every group is listed.
+  const decisions = !decided ? [] : (await review.activeDecisions(account)).map(({ id, groupId, kind, items, members, createdAtMs }) => ({ id, groupId, kind, items, members, createdAtMs }));
   const choices = await preferences.protection(account);
   const queueAt = (atMs: number): ReviewQueue =>
     reviewQueue(snapshot, atMs, photos, embeddings.map((e) => e.vector), decisions, groupingSettings(settings?.detail ?? PREFERRED_DETAIL), choices);
@@ -94,6 +95,16 @@ export function reviewDeps(account: string, stores: DuplicatesStores = sharedSto
     groupsLeft: async (count) => stores.review.saveSummary({ account, groupsToReview: count, atMs: now(), protection: await stores.preferences.protection(account) }),
     sizeMemory: browserSizeMemory('photo-cleaner.duplicates-photo-size'),
   };
+}
+
+/**
+ * Every moment of near-duplicates in [account]'s library, by the shared grouping rules, decided ones too (as
+ * media keys): the developer clutter page copies a label to a photo's near-duplicates. Empty while the groups
+ * can't be built (no finished scan).
+ */
+export async function duplicateMoments(account: string, stores: DuplicatesStores = sharedStores(), now: () => number = Date.now): Promise<string[][]> {
+  const queue = await loadQueue(stores, account, now(), false);
+  return queue.blocked ? [] : queue.pending.map((g) => g.members.map((m) => m.mediaKey));
 }
 
 /**

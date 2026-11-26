@@ -11,6 +11,8 @@ import {
   STARTING_FLOOR,
   STARTING_POOLING,
   axisBreakdown,
+  axisComparison,
+  categoryParts,
   axisBuffButton,
   axisBuffsFor,
   axisCaption,
@@ -19,7 +21,8 @@ import {
   axisDescriptionCount,
   axisListSummary,
   axisOutcome,
-  formOutcome,
+  sideOf,
+  sideOutcome,
   axisStayRaise,
   axisSummary,
   changesLine,
@@ -48,6 +51,9 @@ import {
   type PairRow,
   type ReviewPhoto,
   type ScoredAxis,
+  type BreakdownInput,
+  type BreakdownSide,
+  type Side,
   type SideAxis,
   type Verdict,
 } from '../search/clutterAxes';
@@ -71,6 +77,10 @@ import {
   rewordDescription,
   saveAxisList,
   setAxis,
+  setCheck,
+  draftChecks,
+  draftSections,
+  verdictChoices,
   setVerdict,
   settingsForList,
   tuningEdits,
@@ -81,19 +91,25 @@ import {
   type Draft,
   type DraftWeights,
 } from '../search/clutterEdits';
-import { edgeLines, edgeScores, kindGuesses, labelExamples, labelLine, labelParts, labelSample, OTHER_KIND, RANDOM_SAMPLE_SIZE, randomSample, readLabels, SAMPLE_SIZES, saveLabels, scoreLabels, scoresChange, scoresLine, scoresReport, type LabelScorePair, type Labels, type PhotoLabel } from '../search/clutterLabels';
+import { edgeLines, edgeScores, kindGuesses, labelExamples, labelLine, labelParts, labelSample, OTHER_KIND, RANDOM_SAMPLE_SIZE, randomSample, readLabels, earlierAnswer, isLabelKind, labelAgainQueue, reviewQueue, reviewedLabel, reviewStartedOver, kindAgainChoices, blindSample, blindDrawOf, relabelBlind, rememberBlindDraw, sameBlindDraw, kindChoices, moveInGrid, withDuplicates, oneOfEachMoment, copiedLine, SAMPLE_SIZES, saveLabels, scoreLabels, scoresChange, scoresLine, scoresReport, type BlindAnswer, type LabelScorePair, type LabelMode, type Labels, type PhotoLabel } from '../search/clutterLabels';
 import { LAB_SHEET_MAX, labCategoryLines, labRefusal, labReviewIds, labTarget, readLabRequest, type LabMoveGroup, type LabRequest, type LabResult } from '../search/clutterLab';
 import type { LibraryPhoto } from '../search/searchModel';
 import { searchDeps } from '../search/session';
 import { accountLabel } from '../shared/jobView';
 import { extensionVersion, openPhotos, useAccount } from '../ui/hooks';
-import { AddField, ANSWER, APPLIED, APPLY, APPLY_WAIT_MS, ASK, ChangePopup, CHUNK, Collapsible, HANDOVER_WAIT_MS, OptionalNumber, pause, PhotoGrid, plain, SAMPLE, useOverlayKeys, usePageScrollLocked, ZOOM_PX, type BuffOption, type Nudge, type Preview, type Tile, type TitledBreakdown } from './clutterUi';
+import { cachedRows, ClutterCache, packScores, scoresKey } from './clutterCache';
+import { duplicateMoments } from '../duplicates/session';
+import { AddField, ANSWER, CommitField, APPLIED, APPLY, APPLY_WAIT_MS, ASK, ChangePopup, CHUNK, Collapsible, HANDOVER_WAIT_MS, OptionalNumber, pause, PhotoGrid, SAMPLE, useOverlayKeys, usePageScrollLocked, ZOOM_PX, type BuffOption, type Nudge, type Preview, type Tile, type TitledBreakdown } from './clutterUi';
 
 /** Where the page keeps its list (with exceptions) and its settings in this browser. */
 const LIST_KEY = 'dev-clutter-axes-list';
 const SAVED_KEY = 'dev-clutter-axes-tuning';
 /** Where the page keeps the labels in this browser. */
 const LABELS_KEY = 'dev-clutter-labels';
+/** Where the page keeps how the labelling screen asks ([LabelMode]); all kinds unless switched to simple. */
+const LABEL_MODE_KEY = 'dev-clutter-label-mode';
+/** Where the page keeps the photos of its latest blind draws (rememberBlindDraw), for relabelling by number. */
+const BLIND_DRAWS_KEY = 'dev-clutter-blind-draws';
 /** Rows of each axis in a photo's hover card, best first. */
 const SIDE_ROWS = 7;
 /** Pairs listed in the grid of subject and setting, most photos first. */
@@ -132,17 +148,47 @@ function loadSaved(): { list: { categories: AxisCategory[]; exceptions: PairExce
 /** Each description's words as the AI model reads them, kept so an edit only describes what is new. */
 const described = new Map<string, Float32Array>();
 
+/**
+ * The AI work kept from one visit to the next (clutterCache.ts): a cache that can't be read or written
+ * only costs time, so the page says so in the console and does the work.
+ */
+// globalThis: where there's no database at all, opening it fails as a read or write would, not the page.
+const cache = () => new ClutterCache(globalThis.indexedDB);
+const cacheProblem = (what: string) => (error: unknown) => console.warn(`Photo Cleaner: the clutter page's cache couldn't ${what}; the AI work is done afresh`, error);
+
 async function describe(deps: Deps, categories: readonly AxisCategory[], say: (text: string) => void): Promise<ScoredAxis[]> {
-  const fresh = [...new Set(categories.flatMap((c) => c.descriptions))].filter((d) => !described.has(d));
+  const wanted = [...new Set(categories.flatMap((c) => c.descriptions))].filter((d) => !described.has(d));
+  if (wanted.length > 0) {
+    const kept = await cache().texts(wanted).catch((error: unknown) => (cacheProblem('be read')(error), new Map<string, Float32Array>()));
+    for (const [d, v] of kept) described.set(d, v);
+  }
+  const fresh = wanted.filter((d) => !described.has(d));
+  const made = new Map<string, Float32Array>();
   for (const [i, d] of fresh.entries()) {
-    described.set(d, await deps.embedQuery(d, (f) => say(`Loading the AI model… ${Math.round(f * 100)}%`)));
+    const vector = await deps.embedQuery(d, (f) => say(`Loading the AI model… ${Math.round(f * 100)}%`));
+    described.set(d, vector);
+    made.set(d, vector);
     say(`Describing the categories to the AI model: ${i + 1} of ${fresh.length}`);
   }
+  if (made.size > 0) await cache().keepTexts(made).catch(cacheProblem('keep the descriptions'));
   return categories.map((category) => ({ category, vectors: category.descriptions.map((d) => described.get(d)!) }));
 }
 
-/** Every photo's scores for [scored], raw and evened out, and how the descriptions overlap, a chunk at a time so the page keeps drawing. */
+/**
+ * Every photo's scores for [scored], raw and evened out, and how the descriptions overlap, a chunk at a time so the page keeps drawing;
+ * kept from before when the descriptions and every photo's fingerprint are the same.
+ */
 async function work(photos: Map<string, LibraryPhoto>, order: LibraryPhoto[], scored: ScoredAxis[], say: (text: string) => void): Promise<AxisWorked> {
+  say('Looking for the scores kept from before…');
+  await pause();
+  const key = scoresKey(scored.flatMap((s) => s.category.descriptions), order);
+  const kept = await cache().scores(key).catch((error: unknown) => (cacheProblem('be read')(error), null));
+  if (kept) {
+    say('Evening out the scores kept from before…');
+    await pause();
+    const raw = cachedRows(kept);
+    return { photos, scored, rows: { raw, evened: evenedRows(raw) }, overlap: { width: kept.width, values: kept.overlap } };
+  }
   const raw = new Map<string, Float32Array>();
   for (let i = 0; i < order.length; i += CHUNK) {
     for (const p of order.slice(i, i + CHUNK)) raw.set(p.mediaKey, descriptionScores(p.vector, scored));
@@ -152,21 +198,51 @@ async function work(photos: Map<string, LibraryPhoto>, order: LibraryPhoto[], sc
   say('Evening out the scores and measuring how the descriptions overlap…');
   await pause();
   const evened = evenedRows(raw);
-  return { photos, scored, rows: { raw, evened }, overlap: descriptionOverlap([...evened.values()]) };
+  const overlap = descriptionOverlap([...evened.values()]);
+  await cache().keepScores(packScores(key, raw, overlap.values, Date.now())).catch(cacheProblem('keep the scores'));
+  return { photos, scored, rows: { raw, evened }, overlap };
+}
+
+/** A caption from [text], its category names and descriptions set apart as in the hover cards ([categoryParts]). */
+function captionOf(text: string, scored: ScoredAxis[]): CaptionPart[] {
+  return categoryParts(text, scored.map((s) => s.category)).map((p) => ({ text: p.text, kind: p.kind, term: p.term }));
+}
+
+/** [cards] with their category names set apart, those of [scored] lists ([categoryParts]). */
+function named(cards: TitledBreakdown[], ...scored: ScoredAxis[][]): TitledBreakdown[] {
+  const labels = scored.flatMap((list) => list.map((s) => s.category));
+  return cards.map((c) => ({
+    ...c,
+    titleParts: c.title === null ? undefined : categoryParts(c.title, labels),
+    fold: c.fold ? { ...c.fold, summaryParts: categoryParts(c.fold.summary, labels), parts: named(c.fold.parts, ...scored) } : undefined,
+  }));
 }
 
 /** A photo's hover card: its outcome, then its best subjects and best settings, under [title] when there are two. */
 function axisCards(row: Float32Array, scored: ScoredAxis[], overlap: Overlap, settings: AxisSettings, exceptions: readonly PairException[], title: string | null, shown: number | 'large' = SIDE_ROWS): TitledBreakdown[] {
   const b = axisBreakdown(row, scored, overlap, settings, exceptions, shown);
   // A part's name and its outcome on one line ("Now · Clutter: Products is clutter"); without a name, the outcome alone.
-  return [{ title: title === null ? null : `${title} · ${b.outcome}`, breakdown: { heading: title === null ? b.outcome : '', rows: [], more: null } },...b.sides.map((s) => ({ title: s.title, side: true, breakdown: { heading: '', rows: s.rows, more: s.more > 0 ? `and ${s.more.toLocaleString()} more, lower` : null } }))];
+  return named([{ title: title === null ? b.outcome : `${title} · ${b.outcome}`, breakdown: { heading: '', rows: [], more: null } }, ...b.sides.map((s) => ({ title: s.title, side: true, breakdown: { heading: '', rows: s.rows, more: s.more > 0 ? `and ${s.more.toLocaleString()} more, lower` : null } }))], scored);
+}
+
+/** A photo's breakdown under two lists or settings ([names]), each part said once where they agree ([axisComparison]). */
+function comparedCards(before: BreakdownInput, after: BreakdownInput, names: readonly [string, string]): TitledBreakdown[] {
+  const c = axisComparison(before, after, names, SIDE_ROWS);
+  const sideCard = (s: BreakdownSide): TitledBreakdown => ({ title: s.title, side: true, breakdown: { heading: '', rows: s.rows, more: s.more > 0 ? `and ${s.more.toLocaleString()} more, lower` : null } });
+  const empty = { heading: '', rows: [], more: null };
+  // Three sections: what each part comes to, each side that changed, and what didn't change; one divider between sections.
+  const changed = c.changed.flatMap((s): TitledBreakdown[] => [{ title: s.title, breakdown: empty }, { title: s.before, side: true, joined: true, breakdown: { heading: '', rows: s.beforeRows, more: null } }, { title: '↓', side: true, joined: true, breakdown: empty }, { title: s.after, side: true, joined: true, breakdown: { heading: '', rows: s.rows, more: null } }]);
+  const rest: TitledBreakdown[] = c.unchangedLine === null ? c.unchanged.map(sideCard) : [{ title: null, breakdown: empty, fold: { summary: c.unchangedLine, parts: c.unchanged.map(sideCard) } }];
+  const lines = (texts: string[], first: boolean) => texts.map((line, i): TitledBreakdown => ({ title: line, side: true, joined: !first || i > 0, breakdown: empty }));
+  const outcome = [...lines(c.summary.before, true), ...(c.summary.after ? [{ title: '↓', side: true, joined: true, breakdown: empty }, ...lines(c.summary.after, false)] : [])];
+  return named([...outcome, ...changed, ...rest], before.scored, after.scored);
 }
 
 /** What a tab of finds needs: the photos to show, and for a clutter category's, what a buff needs to weigh its effect. */
 interface AxisFinds {
   account: string;
-  /** The side the photos were counted on: by subject and setting, or by form (Screenshots). */
-  side: 'content' | 'form';
+  /** The side the photos were counted on: by subject and setting, or in a check (Screenshots). */
+  side: Side;
   title: string;
   settingsLine: string;
   photos: { mediaKey: string; thumbUrl: string | null; caption: CaptionPart[]; row: Float32Array }[];
@@ -193,30 +269,36 @@ const scoringName = (s: Scoring) => (s === 'raw' ? 'raw scores' : 'evened-out sc
 const SHEET_COLUMNS = 6;
 // 192 px: still recognisable, and a sheet half the size of one at 256 for the agent reading it (lab/).
 const SHEET_CELL = 192;
+/** A zoom sheet's columns and photos (a lab request's zoom): a few at a time, large. */
+const ZOOM_COLUMNS = 2;
+const ZOOM_PER_SHEET = 4;
 
-/** [photos] as one numbered contact sheet (PNG), their previews fitted into square cells; "no preview" where there is none. */
-async function contactSheet(photos: { number: number; url: string | null }[]): Promise<Blob> {
-  const rows = Math.ceil(photos.length / SHEET_COLUMNS);
+/**
+ * [photos] as one numbered contact sheet (PNG), their previews fitted into square cells of [cell] px in [columns];
+ * "no preview" where there is none. Larger cells for a closer look (a lab request's zoom).
+ */
+async function contactSheet(photos: { number: number; url: string | null }[], cell = SHEET_CELL, columns = SHEET_COLUMNS): Promise<Blob> {
+  const rows = Math.ceil(photos.length / columns);
   const canvas = document.createElement('canvas');
-  canvas.width = SHEET_COLUMNS * SHEET_CELL;
-  canvas.height = rows * SHEET_CELL;
+  canvas.width = columns * cell;
+  canvas.height = rows * cell;
   const g = canvas.getContext('2d');
   if (!g) throw new Error('This browser can’t draw a contact sheet');
   g.fillStyle = '#111';
   g.fillRect(0, 0, canvas.width, canvas.height);
   for (const [i, p] of photos.entries()) {
-    const [x, y] = [(i % SHEET_COLUMNS) * SHEET_CELL, Math.floor(i / SHEET_COLUMNS) * SHEET_CELL];
+    const [x, y] = [(i % columns) * cell, Math.floor(i / columns) * cell];
     if (p.url) {
       const image = new Image();
       image.src = p.url;
       await image.decode();
-      const fit = Math.min((SHEET_CELL - 4) / image.width, (SHEET_CELL - 4) / image.height);
+      const fit = Math.min((cell - 4) / image.width, (cell - 4) / image.height);
       const [w, h] = [image.width * fit, image.height * fit];
-      g.drawImage(image, x + (SHEET_CELL - w) / 2, y + (SHEET_CELL - h) / 2, w, h);
+      g.drawImage(image, x + (cell - w) / 2, y + (cell - h) / 2, w, h);
     } else {
       g.fillStyle = '#888';
       g.font = '16px sans-serif';
-      g.fillText('no preview', x + 80, y + SHEET_CELL / 2);
+      g.fillText('no preview', x + 8, y + cell / 2);
     }
     g.fillStyle = '#000c';
     g.fillRect(x + 2, y + 2, 58, 30);
@@ -310,7 +392,7 @@ function AxisCategoryCard({ count, worked, rows, settings, exceptions, preview, 
   const tile = (p: CategoryPhoto): Tile => {
     const row = rows.get(p.mediaKey);
     if (!row) throw new Error('A counted photo is missing from the scores');
-    return { mediaKey: p.mediaKey, thumbUrl: worked.photos.get(p.mediaKey)?.thumbUrl ?? null, caption: plain(photoCaption(p)), breakdowns: () => axisCards(row, worked.scored, worked.overlap, settings, exceptions, null), everything: () => axisCards(row, worked.scored, worked.overlap, settings, exceptions, null, 'large') };
+    return { mediaKey: p.mediaKey, thumbUrl: worked.photos.get(p.mediaKey)?.thumbUrl ?? null, caption: captionOf(photoCaption(p), worked.scored), breakdowns: () => axisCards(row, worked.scored, worked.overlap, settings, exceptions, null), everything: () => axisCards(row, worked.scored, worked.overlap, settings, exceptions, null, 'large') };
   };
   const grid = (title: string, photos: CategoryPhoto[]) =>
     photos.length > 0 && (
@@ -328,7 +410,7 @@ function AxisCategoryCard({ count, worked, rows, settings, exceptions, preview, 
           <div className="buttons clutter-show-all">
             <button onClick={openAll}>Open all {count.trashable.length.toLocaleString()} in a new tab</button>            {c.verdict === 'clutter' && (
               <span className="muted small">
-                There, a photo opened large can be buffed out of {c.label}: {c.axis === 'form' ? 'a form that isn’t clutter (Not a screenshot)' : 'a subject or setting that keeps it'} strengthened just enough, shown first for every photo it changes.
+                There, a photo opened large can be buffed out of {c.label}: {c.axis === 'form' ? 'a form of its check that isn’t clutter (Not a screenshot)' : 'a subject or setting that keeps it'} strengthened just enough, shown first for every photo it changes.
               </span>
             )}
           </div>
@@ -342,50 +424,63 @@ function AxisCategoryCard({ count, worked, rows, settings, exceptions, preview, 
   );
 }
 
-/**
- * The keys of the kinds of clutter in the labelling screen, in the order shown. Not k (keep), o (Other clutter)
- * or u (unsure); 0 is clutter, kind not given. Not t either, which was taste, so a habit doesn't mislabel.
- */
-const KIND_KEYS = '123456789abcdefghijlmnpqrsvwxyz';
 /** The columns of the kinds' grid (`.clutter-kinds` in app.css): ↑ ↓ move a whole row. */
 const KIND_COLUMNS = 2;
 
 /**
- * Labelling, one photo at a time, from the keyboard, all on one screen: Space or K keep (wrong to offer), Enter
- * clutter of the highlighted kind (the best guess first; the arrows move it), a kind's key for another, U unsure,
- * Backspace back to the last photo. (Taste, from before, is no longer offered here; its labels still count as taste.)
+ * Labelling, one photo at a time, from the keyboard, all on one screen (2026-11-24). First the answer: Space (or
+ * K) keep, Delete clutter, U unsure, which saves. After Keep or Clutter, what should have decided the photo: that
+ * side's kinds ([kindChoices]), the AI's best guess highlighted; Enter or the same key again, a click, or a kind's
+ * key saves with it; Backspace goes back to the answer. Simple mode saves the answer alone. Backspace on the answer
+ * goes back a photo, Shift+Delete clears an answer, → skips a photo labelled before, ← goes back a photo (both only on the answer, as the arrows move between kinds). (2026-11-25: clutter was Enter, which also confirmed, so Enter on
+ * a keeper picked with the arrows switched to Clutter instead; Enter now only confirms.) (Taste, from before, is no
+ * longer offered here; its labels still count as taste.)
  */
-function LabelScreen({ queue, labels, kinds, guesses, thumbUrl, preview, onLabel, onUndo, onClose }: {
+function LabelScreen({ mode, onMode, queue, labels, kinds, guesses, thumbUrl, preview, onLabel, onSkip, onUndo, onClear, onClose }: {
+  /** With the kind after the answer, or simple: Keep, Clutter or Unsure alone; switched on the screen, for anyone. */
+  mode: LabelMode;
+  onMode: (mode: LabelMode) => void;
   /** The photos still to label, in order. */
   queue: string[];
   labels: Labels;
-  /** The clutter categories and forms, by id. */
-  kinds: { id: string; label: string }[];
+  /** What a photo can be ([isLabelKind]), by id, with its side. */
+  kinds: { id: string; label: string; verdict: Verdict }[];
   guesses: (key: string) => string[];
   thumbUrl: (key: string) => string | null;
   preview: Preview;
   onLabel: (key: string, label: PhotoLabel) => void;
-  /** Takes back the last label given here; false when there is none. */
+  /** Moves on past a photo labelled before, its label as it was; Back returns to it. */
+  onSkip: (key: string) => void;
+  /** Goes back to the photo labelled last here, its label kept; false when there is none. */
   onUndo: () => boolean;
+  /** Takes the photo's label away: unlabelled, as if never answered. */
+  onClear: (key: string) => void;
   onClose: () => void;
 }) {
   const key = queue[0] ?? null;
+  const simple = mode === 'simple';
+  // Keep or Clutter pressed, its kinds shown; null while the answer is asked.
+  const [asking, setAsking] = useState<'keep' | 'clutter' | null>(null);
   const [selected, setSelected] = useState(0);
   const [url, setUrl] = useState<string | null>(null);
   const order = useMemo(() => (key ? guesses(key) : []), [key, guesses]);
-  const shown = useMemo(() => order.map((id) => kinds.find((k) => k.id === id)!).filter(Boolean), [order, kinds]);
-  // Every clutter answer in the grid, in order, for the arrows and Enter: the kinds, then Other and kind not given.
-  const choices = useMemo<{ kind: string | null; label: string; key: string }[]>(
-    () => [...shown.map((k, i) => ({ kind: k.id, label: k.label, key: KIND_KEYS[i] ?? '' })), { kind: OTHER_KIND, label: 'Other clutter: none of these fits', key: 'o' }, { kind: null, label: 'Clutter, kind not given', key: '0' }],
-    [shown],
-  );
+  const choices = useMemo(() => (asking ? kindChoices(asking, order, kinds) : []), [asking, order, kinds]);
+  const label = key ? labels[key] : undefined;
+  // Gone back to a photo labelled before: its answer is marked, and its kind when that answer's kinds are shown.
+  const earlier = useMemo(() => earlierAnswer(label, choices.map((c) => c.kind), simple), [label, choices, simple]);
+  const earlierHere = asking !== null && earlier.answer === asking ? earlier.chosen : null;
+  useEffect(() => {
+    setAsking(null);
+  }, [key, simple]);
+  useEffect(() => {
+    setSelected(earlierHere ?? 0);
+  }, [key, asking, earlierHere]);
   const choiceButtons = useRef<(HTMLButtonElement | null)[]>([]);
-  // The highlighted answer is always in view, also when the arrows move it past the grid's scrolled edge.
+  // The highlighted kind is always in view, also when the arrows move it past the column's scrolled edge.
   useEffect(() => {
     choiceButtons.current[selected]?.scrollIntoView({ block: 'nearest' });
-  }, [selected, key]);
+  }, [selected, asking]);
   useEffect(() => {
-    setSelected(0);
     setUrl(null);
     if (!key) return;
     let alive = true;
@@ -398,8 +493,14 @@ function LabelScreen({ queue, labels, kinds, guesses, thumbUrl, preview, onLabel
       alive = false;
     };
   }, [key, queue, thumbUrl, preview]);
-  const give = (label: PhotoLabel) => {
-    if (key) onLabel(key, label);
+  const save = (verdict: 'keep' | 'clutter' | 'unsure', kind: string | null) => {
+    if (key) onLabel(key, { verdict, kind });
+  };
+  // Keep or Clutter: in simple mode saved at once; otherwise its kinds are shown, and pressed again it saves with the highlighted one.
+  const answer = (verdict: 'keep' | 'clutter') => {
+    if (simple) save(verdict, null);
+    else if (asking === verdict) save(verdict, choices[selected]!.kind);
+    else setAsking(verdict);
   };
   usePageScrollLocked();
   useOverlayKeys((e) => {
@@ -407,23 +508,37 @@ function LabelScreen({ queue, labels, kinds, guesses, thumbUrl, preview, onLabel
     // A button tapped last keeps the focus: Enter or Space would click it too, and label a second photo. The arrows would scroll.
     if (['Enter', ' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
     if (e.key === 'Escape') onClose();
-    else if (e.key === 'Backspace') onUndo();
-    else if (!key) return;
-    else if (k === 'k' || e.key === ' ') give({ verdict: 'keep', kind: null });
-    else if (k === 'u') give({ verdict: 'unsure', kind: null });
-    else if (e.key === 'Enter') give({ verdict: 'clutter', kind: choices[selected]!.kind });
-    else if (e.key === 'ArrowDown') setSelected((s) => (s + KIND_COLUMNS < choices.length ? s + KIND_COLUMNS : s));
-    else if (e.key === 'ArrowUp') setSelected((s) => (s - KIND_COLUMNS >= 0 ? s - KIND_COLUMNS : s));
-    else if (e.key === 'ArrowLeft') setSelected((s) => (s % KIND_COLUMNS > 0 ? s - 1 : s));
-    else if (e.key === 'ArrowRight') setSelected((s) => (s % KIND_COLUMNS < KIND_COLUMNS - 1 && s + 1 < choices.length ? s + 1 : s));
-    else if (k === 'o') give({ verdict: 'clutter', kind: OTHER_KIND });
-    else if (k === '0') give({ verdict: 'clutter', kind: null });
+    else if (e.key === 'Backspace') {
+      if (asking) setAsking(null);
+      else onUndo();
+    } else if (!key) return;
+    else if (e.key === 'Delete' && e.shiftKey) {
+      if (earlier.answer !== null) onClear(key);
+    } else if (k === 'k' || e.key === ' ') answer('keep');
+    else if (e.key === 'Delete') answer('clutter');
+    else if (k === 'u') save('unsure', null);
+    // → on the answer passes over a photo labelled before, its label kept (2026-11-26: going through a list again
+    // needed Space or Del for each). Not on a new photo: skipping the hard ones of a random sample would flatter it.
+    else if (!asking && e.key === 'ArrowRight') {
+      if (earlier.answer !== null) onSkip(key);
+    } else if (!asking && e.key === 'ArrowLeft') onUndo();
+    else if (!asking) return;
+    // Enter confirms the highlighted kind, on either side.
+    else if (e.key === 'Enter') save(asking, choices[selected]!.kind);
+    else if (e.key === 'ArrowDown') setSelected((s) => moveInGrid(s, 'down', choices.length, KIND_COLUMNS));
+    else if (e.key === 'ArrowUp') setSelected((s) => moveInGrid(s, 'up', choices.length, KIND_COLUMNS));
+    else if (e.key === 'ArrowLeft') setSelected((s) => moveInGrid(s, 'left', choices.length, KIND_COLUMNS));
+    else if (e.key === 'ArrowRight') setSelected((s) => moveInGrid(s, 'right', choices.length, KIND_COLUMNS));
     else {
-      const at = KIND_KEYS.indexOf(k);
-      if (at >= 0 && at < shown.length) give({ verdict: 'clutter', kind: shown[at]!.id });
+      // A kind's key saves with it.
+      const chosen = choices.find((c) => c.key === k);
+      if (chosen) save(asking, chosen.kind);
     }
   });
   const done = Object.keys(labels).length;
+  // The kind given with the earlier answer, on that answer's button only.
+  const earlierKind = label && (label.verdict === 'keep' || label.verdict === 'clutter') && label.kind !== null ? (label.kind === OTHER_KIND ? 'Other' : kinds.find((c) => c.id === label.kind)?.label ?? null) : null;
+  const answerClass = (verdict: 'keep' | 'clutter' | 'unsure') => `clutter-answer ${verdict}${earlier.answer === verdict ? ' chosen' : ''}${asking === verdict ? ' asking' : ''}`;
   return (
     <div className="viewer clutter-labeller" role="dialog" aria-modal="true" aria-label="Label photos">
       <div className="clutter-viewer-body">
@@ -437,28 +552,43 @@ function LabelScreen({ queue, labels, kinds, guesses, thumbUrl, preview, onLabel
         </div>
         {/* Beside the photo, so the eyes don't leave it; large, so a touch screen works as well as the keys. */}
         <div className="clutter-label-side">
-          {/* Three answers, one under the other: Keep, Clutter (with its kinds inside) and Unsure. */}
-          <button className="clutter-answer keep" disabled={!key} onClick={() => give({ verdict: 'keep', kind: null })}>
-            <kbd>Space</kbd> Keep. Don't offer
+          {/* For anyone, off by default: simple asks only keep, clutter or unsure. */}
+          <label className="clutter-switch">
+            <input type="checkbox" role="switch" checked={simple} onChange={(e) => onMode(e.target.checked ? 'simple' : 'kinds')} />
+            <span className="clutter-switch-track" aria-hidden="true" />
+            Simple mode
+          </label>
+          {earlier.answer !== null && <p className="clutter-earlier small">Labelled before: your answer is marked ✓. Give it again, another, or clear it (Shift+Delete).</p>}
+          <button className={answerClass('keep')} disabled={!key} onClick={() => answer('keep')}>
+            <kbd>Space</kbd> Keep. Don't offer{earlier.answer === 'keep' && ' ✓'}
+            {earlier.answer === 'keep' && earlierKind && <span className="clutter-answer-kind"> · {earlierKind}</span>}
           </button>
-          <fieldset className="clutter-answer clutter-kinds-box" disabled={!key}>
-            <legend>Clutter. Fine to offer for the trash.</legend>
-            <div className="clutter-kinds" role="group" aria-label="Clutter, of which kind">
-              {choices.map((c, i) => (
-                <button key={c.kind ?? 'none'} ref={(el) => { choiceButtons.current[i] = el; }} className={i === selected ? 'selected' : ''} onClick={() => give({ verdict: 'clutter', kind: c.kind })}>
-                  <kbd>{i === selected ? 'Enter' : c.key}</kbd> {c.label}
-                </button>
-              ))}
-            </div>
-            <p className="muted small clutter-kinds-note">
-              <kbd>Enter</kbd> takes the highlighted kind, the best guess; the arrows move it. A photo you'd keep (people, travel, a landmark, a pet…) is simply Keep.
-            </p>
-          </fieldset>
-          <button className="clutter-answer" disabled={!key} onClick={() => give({ verdict: 'unsure', kind: null })}>
-            <kbd>U</kbd> Unsure
+          <button className={answerClass('clutter')} disabled={!key} onClick={() => answer('clutter')}>
+            <kbd>Del</kbd> Clutter. Fine to offer for the trash{earlier.answer === 'clutter' && ' ✓'}
+            {earlier.answer === 'clutter' && earlierKind && <span className="clutter-answer-kind"> · {earlierKind}</span>}
           </button>
+          <button className={answerClass('unsure')} disabled={!key} onClick={() => save('unsure', null)}>
+            <kbd>U</kbd> Unsure: people differ{earlier.answer === 'unsure' && ' ✓'}
+          </button>
+          {asking && (
+            <fieldset className={`clutter-answer clutter-kinds-box ${asking}`} disabled={!key}>
+              <legend>{asking === 'keep' ? 'Keep: what should have kept it?' : 'Clutter: what should have offered it?'}</legend>
+              <div className="clutter-kinds" role="group" aria-label={asking === 'keep' ? 'What should have kept it' : 'What should have offered it'}>
+                {choices.map((c, i) => (
+                  <button key={c.kind} ref={(el) => { choiceButtons.current[i] = el; }} className={`${i === selected ? 'selected' : ''}${i === earlierHere ? ' chosen' : ''}`} onClick={() => save(asking, c.kind)}>
+                    <kbd>{c.key}</kbd> {c.label}{i === earlierHere && ' ✓'}
+                  </button>
+                ))}
+              </div>
+              <p className="muted small clutter-kinds-note">
+                Enter, or {asking === 'keep' ? 'Space' : 'Del'} again, saves the highlighted one, the AI&apos;s best guess unless the arrows move it; a kind&apos;s key or a click saves with that kind. Backspace goes back to the answer.
+              </p>
+            </fieldset>
+          )}
           <div className="clutter-label-nav">
-            <button onClick={() => onUndo()}><kbd>⌫</kbd> Back</button>
+            <button onClick={() => (asking ? setAsking(null) : onUndo())}><kbd>⌫</kbd>{!asking && <kbd>←</kbd>} {asking ? 'Back to the answer' : 'Back'}</button>
+            <button disabled={!key || earlier.answer === null} onClick={() => key && onSkip(key)}><kbd>→</kbd> Skip, as it is</button>
+            <button disabled={!key || earlier.answer === null} onClick={() => key && onClear(key)}><kbd>Shift+Del</kbd> Clear answer</button>
             <button onClick={onClose}>Close</button>
           </div>
         </div>
@@ -474,10 +604,9 @@ interface AxisEditing {
   exceptions: PairException[];
 }
 
-const AXIS_HEADINGS: Record<Axis, string> = {
+const AXIS_HEADINGS = {
   subject: 'Subjects: what a photo is of',
   setting: 'Settings: where it is',
-  form: 'Form: what kind of image it is (decided on its own; a clutter form is a suggestion of its own)',
   baseline: 'Baseline: what any photo scores (for the floor; decides nothing on its own)',
 };
 
@@ -497,6 +626,7 @@ function AxisEditor({ editing, edited, onChange, settings, scoring, problems, wo
   const { draft, weights, exceptions } = editing;
   const [newAxis, setNewAxis] = useState<Axis>('subject');
   const [newVerdict, setNewVerdict] = useState<Verdict>('neutral');
+  const [newCheck, setNewCheck] = useState('');
   const [pair, setPair] = useState<PairException>({ subject: '', setting: '', verdict: 'keep' });
   const list = (next: Draft) => onChange({ ...editing, draft: next });
   const weighted = (next: DraftWeights) => onChange({ ...editing, weights: next });
@@ -504,19 +634,18 @@ function AxisEditor({ editing, edited, onChange, settings, scoring, problems, wo
     <select aria-label={label} value={value} onChange={(e) => set(e.target.value as Axis)}>
       <option value="subject">subject</option>
       <option value="setting">setting</option>
-      <option value="form">form</option>
+      <option value="form">form (in a check)</option>
       <option value="baseline">baseline</option>
     </select>
   );
-  const verdictSelect = (value: Verdict, label: string, set: (v: Verdict) => void) => (
+  const verdictSelect = (axis: Axis, value: Verdict, label: string, set: (v: Verdict) => void) => (
     <select aria-label={label} value={value} onChange={(e) => set(e.target.value as Verdict)}>
-      <option value="clutter">clutter</option>
-      <option value="keep">keep</option>
-      <option value="neutral">neutral</option>
+      {verdictChoices(axis, value).map((v) => <option key={v} value={v}>{v}</option>)}
     </select>
   );
   const named = (id: string) => draft.find((c) => c.id === id)?.label ?? id;
   const ofAxis = (axis: Axis) => draft.filter((c) => c.axis === axis);
+  const checks = draftChecks(draft);
   return (
     <div className="clutter-editor">
       <p className="muted small">
@@ -528,16 +657,22 @@ function AxisEditor({ editing, edited, onChange, settings, scoring, problems, wo
       <div className="buttons clutter-clear-weights">
         <button onClick={() => weighted({ categoryWeights: {}, descriptionWeights: {}, margins: {} })}>Clear weights and minimum leads</button>
       </div>
-      {(['subject', 'setting', 'form', 'baseline'] as const).map((axis) => (
-        <div key={axis}>
-          <h3 className="clutter-axis-heading">{AXIS_HEADINGS[axis]}</h3>
-          {ofAxis(axis).length === 0 && <p className="muted small">None yet: add one with Add at the bottom, choosing “{axis}”.</p>}
-          {ofAxis(axis).map((c) => (
+      <datalist id="clutter-checks">
+        {checks.map((check) => <option key={check} value={check} />)}
+      </datalist>
+      {draftSections(draft, AXIS_HEADINGS).map((section) => (
+        <details key={section.key} className="clutter-axis-part">
+          <summary className="clutter-axis-heading">{section.title}</summary>
+          {section.categories.length === 0 && <p className="muted small">None yet: add one with Add at the bottom, choosing “{section.axis}”.</p>}
+          {section.categories.map((c) => (
             <Collapsible key={c.id} heading={draftHeading(c)} kind={c.verdict === 'clutter' ? 'clutter' : c.verdict === 'keep' ? 'counterweight' : 'neutral'} startOpen={c.descriptions.length === 0} closedNote={c.descriptions.map((d) => d.text).join(' · ')}>
               <div className="clutter-tuning-head">
                 <input type="text" className="clutter-edit-label" aria-label="Category name" value={c.label} onChange={(e) => list(renameCategory(draft, c.id, e.target.value))} />
                 {axisSelect(c.axis, `${c.label} is a`, (a) => list(setAxis(draft, c.id, a)))}
-                {verdictSelect(c.verdict, `${c.label}'s verdict`, (v) => list(setVerdict(draft, c.id, v)))}
+                {c.axis === 'form' && (
+                  <label className="small">check <CommitField list="clutter-checks" className="clutter-edit-check" label={`${c.label}'s check`} value={c.check ?? ''} onCommit={(text) => list(setCheck(draft, c.id, text))} /></label>
+                )}
+                {verdictSelect(c.axis, c.verdict, `${c.label}'s verdict`, (v) => list(setVerdict(draft, c.id, v)))}
                 <label className="small">weight <OptionalNumber value={weights.categoryWeights[c.id]} label={`${c.label} weight`} placeholder="0" onChange={(w) => weighted({ ...weights, categoryWeights: withWeightOrNone(weights.categoryWeights, c.id, w) })} /></label>
                 {c.axis !== 'baseline' && (
                   <label className="small">minimum lead <OptionalNumber value={weights.margins[c.id]} label={`${c.label} minimum lead`} placeholder={String(settings[c.axis].margin)} onChange={(m) => weighted({ ...weights, margins: withLead(weights.margins, c.id, m) })} /></label>
@@ -560,42 +695,45 @@ function AxisEditor({ editing, edited, onChange, settings, scoring, problems, wo
               </div>
             </Collapsible>
           ))}
-        </div>
+        </details>
       ))}
       <div className="clutter-tuning-category">
-        <AddField label="Add" placeholder="a new subject or setting's name" onAdd={(label) => list(addAxisCategory(draft, label, newAxis, newVerdict))}>
+        <AddField label="Add" placeholder="a new category's name" onAdd={(label) => list(addAxisCategory(draft, label, newAxis, newVerdict, newCheck))}>
           {axisSelect(newAxis, 'The new one is a', setNewAxis)}
-          {verdictSelect(newVerdict, "The new one's verdict", setNewVerdict)}
+          {verdictSelect(newAxis, newVerdict, "The new one's verdict", setNewVerdict)}
+          {newAxis === 'form' && <input type="text" list="clutter-checks" className="clutter-edit-check" aria-label="The new one's check" placeholder="its check" value={newCheck} onChange={(e) => setNewCheck(e.target.value)} />}
         </AddField>
       </div>
-      <h3 className="clutter-axis-heading">Exceptions: what one exact pair comes to</h3>
-      {exceptions.length === 0 && <p className="muted small">None yet.</p>}
-      {exceptions.map((e, i) => (
-        <div key={`${e.subject} ${e.setting}`} className="clutter-edit-description">
-          <span className="small">{named(e.subject)} in {named(e.setting)} →</span>
-          <select aria-label="The pair's verdict" value={e.verdict} onChange={(ev) => onChange({ ...editing, exceptions: exceptions.map((x, j) => (j === i ? { ...x, verdict: ev.target.value as 'clutter' | 'keep' } : x)) })}>
+      <details className="clutter-axis-part">
+        <summary className="clutter-axis-heading">Exceptions: what one exact pair comes to</summary>
+        {exceptions.length === 0 && <p className="muted small">None yet.</p>}
+        {exceptions.map((e, i) => (
+          <div key={`${e.subject} ${e.setting}`} className="clutter-edit-description">
+            <span className="small">{named(e.subject)} in {named(e.setting)} →</span>
+            <select aria-label="The pair's verdict" value={e.verdict} onChange={(ev) => onChange({ ...editing, exceptions: exceptions.map((x, j) => (j === i ? { ...x, verdict: ev.target.value as 'clutter' | 'keep' } : x)) })}>
+              <option value="clutter">clutter</option>
+              <option value="keep">keep</option>
+            </select>
+            <button aria-label="Remove the exception" onClick={() => onChange({ ...editing, exceptions: exceptions.filter((_, j) => j !== i) })}>×</button>
+          </div>
+        ))}
+        <div className="clutter-add">
+          <select aria-label="Subject" value={pair.subject} onChange={(e) => setPair({ ...pair, subject: e.target.value })}>
+            <option value="" disabled>Subject…</option>
+            {ofAxis('subject').map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+          <span className="small">in</span>
+          <select aria-label="Setting" value={pair.setting} onChange={(e) => setPair({ ...pair, setting: e.target.value })}>
+            <option value="" disabled>Setting…</option>
+            {ofAxis('setting').map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+          <select aria-label="Verdict" value={pair.verdict} onChange={(e) => setPair({ ...pair, verdict: e.target.value as 'clutter' | 'keep' })}>
             <option value="clutter">clutter</option>
             <option value="keep">keep</option>
           </select>
-          <button aria-label="Remove the exception" onClick={() => onChange({ ...editing, exceptions: exceptions.filter((_, j) => j !== i) })}>×</button>
+          <button disabled={pair.subject === '' || pair.setting === ''} onClick={() => onChange({ ...editing, exceptions: [...exceptions, pair] })}>Add exception</button>
         </div>
-      ))}
-      <div className="clutter-add">
-        <select aria-label="Subject" value={pair.subject} onChange={(e) => setPair({ ...pair, subject: e.target.value })}>
-          <option value="" disabled>Subject…</option>
-          {ofAxis('subject').map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-        </select>
-        <span className="small">in</span>
-        <select aria-label="Setting" value={pair.setting} onChange={(e) => setPair({ ...pair, setting: e.target.value })}>
-          <option value="" disabled>Setting…</option>
-          {ofAxis('setting').map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-        </select>
-        <select aria-label="Verdict" value={pair.verdict} onChange={(e) => setPair({ ...pair, verdict: e.target.value as 'clutter' | 'keep' })}>
-          <option value="clutter">clutter</option>
-          <option value="keep">keep</option>
-        </select>
-        <button disabled={pair.subject === '' || pair.setting === ''} onClick={() => onChange({ ...editing, exceptions: [...exceptions, pair] })}>Add exception</button>
-      </div>
+      </details>
       {/* For every part above, not only the exceptions: set apart by a rule across the whole list. */}
       <div className="clutter-edit-footer">
         {problems.map((p) => <p key={p} className="warn small">{p}</p>)}
@@ -706,6 +844,9 @@ export function AxesPage() {
   const setCard = (change: (t: AxisTuning) => AxisTuning) => setCardDraft((d) => change(d ? withCardSettings(tuning, d) : tuning));
   const setSettings = (change: (s: AxisSettings) => AxisSettings) => setCard((t) => ({ ...t, settings: { ...t.settings, [t.scoring]: change(t.settings[t.scoring]) } }));
   const [worked, setWorked] = useState<AxisWorked | null>(null);
+  // The library's moments of near-duplicates (the Duplicates review's groups), for copying labels.
+  const [moments, setMoments] = useState<string[][]>([]);
+  const [momentsProblem, setMomentsProblem] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [saveProblem, setSaveProblem] = useState<string | null>(null);
@@ -739,6 +880,8 @@ export function AxesPage() {
       if (library.blocked) throw new Error(`The library scan can't be used (${library.blocked}): check for new photos on the Scan tab first.`);
       const scored = await describe(deps, list.categories, setProgress);
       setWorked(await work(library.photos, [...library.photos.values()], scored, setProgress));
+      // Near-duplicates take a label given to one of them (withDuplicates); without them, labels are only not copied.
+      if (account !== null) duplicateMoments(account).then((m) => { setMoments(m); setMomentsProblem(null); }, (error: unknown) => setMomentsProblem(`The near-duplicates couldn't be read (${error instanceof Error ? error.message : String(error)}); labels aren't copied to them.`));
     } catch (error) {
       setProblem(error instanceof Error ? error.message : String(error));
     } finally {
@@ -807,11 +950,11 @@ export function AxesPage() {
   const openAll = (count: CategoryCount) => {
     if (!worked) throw new Error('Finds can only be opened once they are worked out');
     const clutter = (count.category as AxisCategory).verdict === 'clutter';
-    hand({ side: (count.category as AxisCategory).axis === 'form' ? 'form' : 'content', title: countLine(count), settingsLine, photos: count.trashable.map((p) => photoOf(p.mediaKey, plain(photoCaption(p)))), scored: worked.scored, overlap: worked.overlap, scoring, settings, exceptions: list.exceptions, buffing: clutter ? forBuffs(worked) : null });
+    hand({ side: sideOf(count.category as AxisCategory), title: countLine(count), settingsLine, photos: count.trashable.map((p) => photoOf(p.mediaKey, captionOf(photoCaption(p), worked.scored))), scored: worked.scored, overlap: worked.overlap, scoring, settings, exceptions: list.exceptions, buffing: clutter ? forBuffs(worked) : null });
   };
   const openPair = (row: PairRow) => {
     if (!worked) throw new Error('Pairs can only be opened once they are worked out');
-    hand({ side: 'content', title: `${row.subject} in ${row.setting}: ${row.count.toLocaleString()} photos (${row.verdict === 'none' ? 'neither' : row.verdict})`, settingsLine, photos: row.mediaKeys.map((k) => photoOf(k, plain(`${row.subject} · ${row.setting}`))), scored: worked.scored, overlap: worked.overlap, scoring, settings, exceptions: list.exceptions, buffing: null });
+    hand({ side: 'content', title: `${row.subject} in ${row.setting}: ${row.count.toLocaleString()} photos (${row.verdict === 'none' ? 'neither' : row.verdict})`, settingsLine, photos: row.mediaKeys.map((k) => photoOf(k, captionOf(`${row.subject} · ${row.setting}`, worked.scored))), scored: worked.scored, overlap: worked.overlap, scoring, settings, exceptions: list.exceptions, buffing: null });
   };
 
   // Editing, Save (what it does), Stay under photos leaving, Apply.
@@ -914,7 +1057,7 @@ export function AxesPage() {
         mediaKey: c.mediaKey,
         thumbUrl: worked.photos.get(c.mediaKey)?.thumbUrl ?? null,
         caption: axisCaption(c, lists),
-        breakdowns: () => [...axisCards(before, worked.scored, worked.overlap, settings, list.exceptions, 'Now'), ...axisCards(after, pendingEdit.worked.scored, pendingEdit.worked.overlap, editWeighed.after, pendingEdit.exceptions, 'With the edits')],
+        breakdowns: () => comparedCards({ row: before, scored: worked.scored, overlap: worked.overlap, settings, exceptions: list.exceptions }, { row: after, scored: pendingEdit.worked.scored, overlap: pendingEdit.worked.overlap, settings: editWeighed.after, exceptions: pendingEdit.exceptions }, ['Now', 'With the edits']),
         nudge,
       };
     };
@@ -934,7 +1077,7 @@ export function AxesPage() {
         mediaKey: c.mediaKey,
         thumbUrl: worked.photos.get(c.mediaKey)?.thumbUrl ?? null,
         caption: axisCaption(c, lists),
-        breakdowns: () => [...axisCards(before, worked.scored, worked.overlap, settings, list.exceptions, 'Now'), ...axisCards(after, worked.scored, worked.overlap, cardSettings, list.exceptions, 'With the settings')],
+        breakdowns: () => comparedCards({ row: before, scored: worked.scored, overlap: worked.overlap, settings, exceptions: list.exceptions }, { row: after, scored: worked.scored, overlap: worked.overlap, settings: cardSettings, exceptions: list.exceptions }, ['Now', 'With the settings']),
       };
     };
     return { afterMatches, summary: axisSummary(cardEdits.join(' · '), effects, lists), grids: changeGrids(effects, lists, tile) };
@@ -1069,9 +1212,9 @@ export function AxesPage() {
     if (moved.length > 0) await writeFile(out, 'moves.txt', reviewText(`What ${request.id} moves`, afterLine, moved));
     // The labelled photos behind the scores, with the change: offered though kept, and clutter missed, by kind (most first).
     const labelGroups: LabMoveGroup[] = [];
-    if (request.labelSheets && Object.keys(labels).length > 0) {
-      const examples = labelExamples(afterMatches, target.list.categories, target.list.exceptions, photos, labels);
-      const kindName = (kind: string) => target.list.categories.find((c) => c.id === kind)?.label ?? (kind === OTHER_KIND ? 'other clutter' : 'kind not given');
+    if (request.labelSheets && Object.keys(seen).length > 0) {
+      const examples = labelExamples(afterMatches, target.list.categories, target.list.exceptions, photos, seen);
+      const kindName = (kind: string) => target.list.categories.find((c) => c.id === kind)?.label ?? (kind === OTHER_KIND ? 'kind missing' : 'kind unspecified');
       const sheets = [
         { key: 'label-wrong', title: 'Offered, labelled keep', keys: examples.wrong },
         ...Object.entries(examples.missed).sort((a, b) => b[1].length - a[1].length).map(([kind, keys]) => ({ key: `label-missed-${kind}`, title: `Missed: ${kindName(kind)}`, keys })),
@@ -1092,6 +1235,77 @@ export function AxesPage() {
       }
       if (looked.length > 0) await writeFile(out, 'labels.txt', reviewText(`Labelled photos ${request.id} gets wrong or misses`, afterLine, looked));
     }
+    // New answers for an earlier blind draw's photos, by number, which the user asked the agent to give: by the draw
+    // kept in this browser, or drawn again when it is exactly as recorded (drawn before draws were kept).
+    const notes = [...target.notes];
+    // The photos of an earlier blind draw, in their numbered order: as kept in this browser, or drawn again when it is
+    // exactly as recorded (drawn before draws were kept); why not, when neither.
+    const drawnKeys = async (from: string): Promise<string[] | string> => {
+      const kept = blindDrawOf(localStorage.getItem(BLIND_DRAWS_KEY), from);
+      if (kept !== null) return kept;
+      let recorded: unknown;
+      try {
+        recorded = JSON.parse(await (await (await (await folder.getDirectoryHandle(from, { create: false })).getFileHandle('blind-answers.json', { create: false })).getFile()).text());
+      } catch (error) {
+        return `${from}/blind-answers.json couldn’t be read (${error instanceof Error ? error.message : String(error)}).`;
+      }
+      if (!Array.isArray(recorded)) return `${from}/blind-answers.json isn’t a list.`;
+      const again = blindSample(matches, inUse, list.exceptions, photos, seen, recorded.length, from);
+      if (!sameBlindDraw(recorded as BlindAnswer[], again.answers)) {
+        return `${from} isn’t kept in this browser, and drawing it again gives other photos (labels were added or removed since), so its numbers no longer name the same photos.`;
+      }
+      localStorage.setItem(BLIND_DRAWS_KEY, rememberBlindDraw(localStorage.getItem(BLIND_DRAWS_KEY), from, again.keys));
+      return again.keys;
+    };
+    // The list and tuning as this browser has them, to ship (2026-11-26).
+    if (request.exportList) {
+      await writeFile(out, 'list.json', JSON.stringify(list, null, 2));
+      await writeFile(out, 'tuning.json', JSON.stringify(tuning, null, 2));
+      notes.push('Wrote the list in use (list.json) and its tuning (tuning.json).');
+    }
+    if (request.zoom) {
+      const keys = await drawnKeys(request.zoom.from);
+      if (typeof keys === 'string') return refuse([`"zoom": ${keys}`]);
+      const missing = request.zoom.numbers.filter((n) => keys[n - 1] === undefined);
+      if (missing.length > 0) return refuse([`"zoom": ${missing.map((n) => `#${n}`).join(', ')} isn’t in the draw of ${keys.length}.`]);
+      const { numbers, size } = request.zoom;
+      for (let start = 0; start < numbers.length; start += ZOOM_PER_SHEET) {
+        const page = start / ZOOM_PER_SHEET + 1;
+        setLab((l) => ({ ...l, message: `${request.id}: drawing zoom sheet ${page}…` }));
+        const sheet = [];
+        for (const n of numbers.slice(start, start + ZOOM_PER_SHEET)) {
+          const thumbUrl = worked.photos.get(keys[n - 1]!)?.thumbUrl ?? null;
+          sheet.push({ number: n, url: thumbUrl ? await preview(thumbUrl, size) : null });
+        }
+        await writeFile(out, `zoom-${String(page).padStart(2, '0')}.png`, await contactSheet(sheet, size, ZOOM_COLUMNS));
+      }
+      notes.push(`Drew ${numbers.length} photos of ${request.zoom.from} at ${size} px.`);
+    }
+    if (request.relabel) {
+      const from = request.relabel.from;
+      const keys = await drawnKeys(from);
+      if (typeof keys === 'string') return refuse([`"relabel": ${keys}`]);
+      const done = relabelBlind(keys, request.relabel.labels, labels, inUse);
+      if ('problem' in done) return refuse([`"relabel": ${done.problem}`]);
+      setLabels(done.labels);
+      notes.push(`Relabelled ${request.relabel.labels.length} photos of ${from}; the scores here are from before.`);
+    }
+    // Labelled photos for the agent to label blind: numbered sheets, and the user's answers in a file apart.
+    if (request.blind > 0 && Object.keys(seen).length > 0) {
+      const blind = blindSample(afterMatches, target.list.categories, target.list.exceptions, photos, seen, request.blind, request.id);
+      localStorage.setItem(BLIND_DRAWS_KEY, rememberBlindDraw(localStorage.getItem(BLIND_DRAWS_KEY), request.id, blind.keys));
+      for (let start = 0; start < blind.keys.length; start += LAB_SHEET_MAX) {
+        const page = start / LAB_SHEET_MAX + 1;
+        setLab((l) => ({ ...l, message: `${request.id}: drawing blind sheet ${page}…` }));
+        const sheet = [];
+        for (const [i, k] of blind.keys.slice(start, start + LAB_SHEET_MAX).entries()) {
+          const thumbUrl = worked.photos.get(k)?.thumbUrl ?? null;
+          sheet.push({ number: start + i + 1, url: thumbUrl ? await preview(thumbUrl, SHEET_CELL) : null });
+        }
+        await writeFile(out, `blind-${String(page).padStart(2, '0')}.png`, await contactSheet(sheet));
+      }
+      await writeFile(out, 'blind-answers.json', JSON.stringify(blind.answers, null, 2));
+    }
     // Review files of the categories asked for, with the change.
     let reviews: string[] = [];
     try {
@@ -1108,21 +1322,21 @@ export function AxesPage() {
       id: request.id,
       state: 'done',
       problems: [],
-      notes: target.notes,
+      notes,
       applied: request.apply,
       scoring: afterScoring,
       totals: { before: counts.totals, after: afterCounts.totals },
       categories: labCategoryLines(counts, afterCounts),
       moves,
       reviews,
-      labels: Object.keys(labels).length === 0 ? null : { before: scoreLabels(matches, inUse, list.exceptions, photos, labels), after: scoreLabels(afterMatches, target.list.categories, target.list.exceptions, photos, labels) },
+      labels: Object.keys(seen).length === 0 ? null : { before: scoreLabels(matches, inUse, list.exceptions, photos, seen), after: scoreLabels(afterMatches, target.list.categories, target.list.exceptions, photos, seen) },
       labelGroups,
-      labelParts: Object.keys(labels).length === 0 ? null : (() => {
-        const parts = labelParts(labels);
+      labelParts: Object.keys(seen).length === 0 ? null : (() => {
+        const parts = labelParts(seen);
         const both = (part: Labels) => ({ before: scoreLabels(matches, inUse, list.exceptions, photos, part), after: scoreLabels(afterMatches, target.list.categories, target.list.exceptions, photos, part) });
         return { random: both(parts.random), a: both(parts.a), b: both(parts.b) };
       })(),
-      edge: Object.keys(labels).length === 0 ? null : edgeScores(afterCounts, labels),
+      edge: Object.keys(seen).length === 0 ? null : edgeScores(afterCounts, seen),
     };
     await writeFile(out, 'result.json', JSON.stringify(result, null, 2));
     if (request.apply) {
@@ -1204,12 +1418,16 @@ export function AxesPage() {
       return {};
     }
   });
+  // The labels with near-duplicates' copied in (withDuplicates): what the scores, the edges and the samples count; the
+  // labelling screen and Label again use the labeller's own.
+  const seen = useMemo(() => withDuplicates(labels, moments), [labels, moments]);
+  const copiedText = useMemo(() => copiedLine(seen), [seen]);
   // The labels scored against suggestions [m] from a list: all of them and the random ones; null with no labels yet.
   const scored = useCallback((m: AxisMatch[] | null, categories: readonly AxisCategory[], exceptions: readonly PairException[]): LabelScorePair | null => {
     if (!worked || !m || Object.keys(labels).length === 0) return null;
     const photos = new Map([...worked.photos].map(([k, p]) => [k, { eligible: p.eligible, approved: p.approved }]));
-    return { all: scoreLabels(m, categories, exceptions, photos, labels), random: scoreLabels(m, categories, exceptions, photos, labelParts(labels).random) };
-  }, [worked, labels]);
+    return { all: scoreLabels(m, categories, exceptions, photos, seen), random: scoreLabels(m, categories, exceptions, photos, labelParts(seen).random) };
+  }, [worked, labels, seen]);
   // What the edits and settings waiting in a Save popup do to precision and recall.
   const editScores = useMemo(() => {
     if (!pendingEdit || !editWeighed) return null;
@@ -1230,20 +1448,61 @@ export function AxesPage() {
   }, [labels]);
   // The photos to label (the sample, when opened), and the ones labelled since, to go back through.
   // [random]: photos drawn at random from the library, whose labels are marked so (labelParts).
-  const [labelling, setLabelling] = useState<{ queue: string[]; history: string[]; random: boolean } | null>(null);
+  // [review]: answering random labels again (Review my random labels…).
+  const [labelling, setLabelling] = useState<{ queue: string[]; history: string[]; random: boolean; review: boolean } | null>(null);
   const openLabelling = (random: boolean) => {
     if (!worked || !matches || !counts) throw new Error('Labelling needs the suggestions worked out');
     const photos = new Map([...worked.photos].map(([k, p]) => [k, { eligible: p.eligible, approved: p.approved }]));
     if (!random) {
-      setLabelling({ queue: labelSample(matches, counts, inUse, list.exceptions, photos, labels, SAMPLE_SIZES, 1), history: [], random });
+      setLabelling({ queue: oneOfEachMoment(labelSample(matches, counts, inUse, list.exceptions, photos, seen, SAMPLE_SIZES, 1), moments), history: [], random, review: false });
       return;
     }
     // Drawn photos labelled before keep their verdict, now counted as random too; the rest are asked.
-    const { queue, reused } = randomSample(matches, photos, labels, RANDOM_SAMPLE_SIZE, 2);
-    setLabels((l) => ({ ...l, ...Object.fromEntries(reused.map((k) => [k, { ...l[k]!, random: true as const }])) }));
-    setLabelling({ queue, history: [], random });
+    // A drawn photo with a near-duplicate's label keeps it as its own, now random.
+    const { queue, reused } = randomSample(matches, photos, seen, RANDOM_SAMPLE_SIZE, 2);
+    setLabels((l) => ({ ...l, ...Object.fromEntries(reused.map((k) => [k, { verdict: seen[k]!.verdict, kind: seen[k]!.kind, random: true as const }])) }));
+    setLabelling({ queue: oneOfEachMoment(queue, moments), history: [], random, review: false });
   };
-  const labelKinds = useMemo(() => inUse.filter((c) => c.verdict === 'clutter' && c.axis !== 'baseline').map((c) => ({ id: c.id, label: c.label })), [inUse]);
+  // Unsure and taste, and clutter missed with no kind, to answer again now that the neutral subjects are kinds.
+  const againQueue = useMemo(() => {
+    if (!worked || !matches) return [];
+    const photos = new Map([...worked.photos].map(([k, p]) => [k, { eligible: p.eligible, approved: p.approved }]));
+    return labelAgainQueue(matches, inUse, list.exceptions, photos, labels);
+  }, [worked, matches, inUse, list.exceptions, labels]);
+  // The random labels to answer again, after the way of labelling changed; each shows its earlier answer.
+  const review = useMemo(() => {
+    if (!worked || !matches) return null;
+    const photos = new Map([...worked.photos].map(([k, p]) => [k, { eligible: p.eligible, approved: p.approved }]));
+    return reviewQueue(matches, photos, labels);
+  }, [worked, matches, labels]);
+  // The edge labels of one kind and verdict, to answer again (shop fronts labelled Signs before they were unsure).
+  const kindAgain = useMemo(() => {
+    if (!worked || !matches) return [];
+    const photos = new Map([...worked.photos].map(([k, p]) => [k, { eligible: p.eligible, approved: p.approved }]));
+    return kindAgainChoices(matches, photos, labels, inUse.filter(isLabelKind), inUse);
+  }, [worked, matches, labels, inUse]);
+  const [againKind, setAgainKind] = useState<string | null>(null);
+  const againChoice = kindAgain.find((c) => c.kind === againKind) ?? kindAgain[0];
+  // The labels with the review started over (answers kept), or null when nothing is reviewed yet.
+  const restarted = useMemo(() => reviewStartedOver(labels), [labels]);
+  const labelKinds = useMemo(() => inUse.filter(isLabelKind).map((c) => ({ id: c.id, label: c.label, verdict: c.verdict })), [inUse]);
+  // How the labelling screen asks, kept in this browser: a friend's laptop stays on simple.
+  const [labelMode, setLabelMode] = useState<LabelMode>(() => {
+    try {
+      return localStorage.getItem(LABEL_MODE_KEY) === 'simple' ? 'simple' : 'kinds';
+    } catch (error) {
+      console.warn('Photo Cleaner: the labelling mode kept in this browser couldn’t be read', error);
+      return 'kinds';
+    }
+  });
+  const chooseLabelMode = (mode: LabelMode) => {
+    setLabelMode(mode);
+    try {
+      localStorage.setItem(LABEL_MODE_KEY, mode);
+    } catch (error) {
+      setSaveProblem(`The labelling mode couldn't be kept in this browser (${String(error)}).`);
+    }
+  };
   const labelGuesses = useCallback((key: string) => {
     const row = rows?.get(key);
     if (!worked || !row) throw new Error('A photo to label is missing from the scores');
@@ -1259,7 +1518,7 @@ export function AxesPage() {
     const now = scored(matches, inUse, list.exceptions);
     return now ? scoresLine(now) : null;
   }, [scored, matches, inUse, list.exceptions]);
-  const edge = useMemo(() => (counts && Object.keys(labels).length > 0 ? edgeLines(edgeScores(counts, labels)) : null), [counts, labels]);
+  const edge = useMemo(() => (counts && Object.keys(seen).length > 0 ? edgeLines(edgeScores(counts, seen)) : null), [counts, seen]);
   // Copy scores: the numbers alone, for someone who labelled their own library to send back.
   const [scoresCopied, setScoresCopied] = useState<string | null>(null);
   const copyScores = () => {
@@ -1267,7 +1526,7 @@ export function AxesPage() {
     const photos = new Map([...worked.photos].map(([k, p]) => [k, { eligible: p.eligible, approved: p.approved }]));
     const text = scoresReport({
       version: extensionVersion(), matched: counts.photos, totals: counts.totals, changes: changesFromShipped, scoring, settings,
-      all: scoreLabels(matches, inUse, list.exceptions, photos, labels), random: scoreLabels(matches, inUse, list.exceptions, photos, labelParts(labels).random), edge: edgeScores(counts, labels),
+      all: scoreLabels(matches, inUse, list.exceptions, photos, seen), random: scoreLabels(matches, inUse, list.exceptions, photos, labelParts(seen).random), edge: edgeScores(counts, seen),
     });
     navigator.clipboard.writeText(text).then(() => setScoresCopied('Copied: numbers only, no photos.'), (error: unknown) => setScoresCopied(`Couldn't copy (${String(error)}).`));
   };
@@ -1279,13 +1538,17 @@ export function AxesPage() {
       <header>
         <h1>Photo Cleaner <span className="muted">/ clutter categories (developer tool)</span></h1>
         <p className="account mono">{account ? `Google Photos account: ${accountLabel(account, answer?.account?.email ?? null)}` : 'No account yet'}</p>
-        <p className="muted">
-          The AI compares each analysed photo with {axisDescriptionCount(list).toLocaleString()} short descriptions, grouped into categories ({axisListSummary(list)}),
-          and gives it its best subject (what it is of) and its best setting (where it is). Each category is either clutter, keep or neutral. A subject or setting counts only
-          when it leads the best one of another verdict by at least its minimum lead; too close, it has no say. Then an exception for that exact pair of subject and
-          setting decides first; otherwise a keeper keeps the photo; otherwise clutter offers it for the trash. A form (such as a screenshot) decides on its own. Hover
-          over a photo to see how it scored. Nothing is trashed from this page: it is for tuning the suggestions, and its list and settings stay in this browser.
-        </p>
+        {/* Folded: one line that says it is there, the whole of it for whoever opens it. */}
+        <details className="clutter-intro">
+          <summary>How it works <span className="muted small">· nothing is trashed from this page: it is for tuning the suggestions</span></summary>
+          <p className="muted">
+            The AI compares each analysed photo with {axisDescriptionCount(list).toLocaleString()} short descriptions, grouped into categories ({axisListSummary(list)}),
+            and gives it its best subject (what it is of) and its best setting (where it is). Each category is either clutter, keep or neutral. A subject or setting counts only
+            when it leads the best one of another verdict by at least its minimum lead; too close, it has no say. Then an exception for that exact pair of subject and
+            setting decides first; otherwise a keeper keeps the photo; otherwise clutter offers it for the trash. A check (such as Screenshots) decides on its own: its forms compete only among themselves, so a photo can be in several checks. Hover
+            over a photo to see how it scored. Nothing is trashed from this page: it is for tuning the suggestions, and its list and settings stay in this browser.
+          </p>
+        </details>
       </header>
       {/* The library, read and scored when the page opens: every photo against every description, the slow part. A saved change to the
           categories scores the same photos again by itself (only new descriptions go to the AI); the settings need no scoring at all. */}
@@ -1307,6 +1570,7 @@ export function AxesPage() {
       <section className="card">
         {loaded.notes.map((note) => <p key={note} className="warn small">{note}</p>)}
         {saveProblem && <p className="warn small">{saveProblem}</p>}
+        {momentsProblem && <p className="warn small">{momentsProblem}</p>}
         <AxisListView list={{ categories: [...inUse], exceptions: list.exceptions }} changes={changesFromShipped} copied={copied} open={listOpen} onToggle={setListOpen} onCopy={copyChanges} canReset={worked !== null && progress === null && editing === null} onReset={resetToShipped}>
           <AxisEditor editing={editing ?? applied} edited={editing !== null} onChange={setEditing} settings={settings} scoring={scoring} problems={editProblems} working={editWorking} canSave={worked !== null && progress === null} onSave={() => void saveEdits()} onDiscard={() => { setEditing(null); setEditProblems([]); }} />
         </AxisListView>
@@ -1339,7 +1603,7 @@ export function AxesPage() {
           </div>
           {inUse.some((c) => c.axis === 'form') && (
             <div className="row">
-              {leadField('form', 'minScore', 'Form: minimum score')}
+              {leadField('form', 'minScore', 'Checks: minimum score')}
               {leadField('form', 'margin', 'minimum lead')}
             </div>
           )}
@@ -1405,7 +1669,7 @@ export function AxesPage() {
           {/* Its parts fold away, closed until wanted. */}
           <details className="clutter-results-part">
           <summary>To suggest for deletion</summary>
-          {counts.forms.length > 0 && <p className="muted small">By form, decided on its own: a photo here can also be in a suggestion below.</p>}
+          {counts.forms.length > 0 && <p className="muted small">By check, each a system of its own: a photo here may also be in another check, in a suggestion below, or kept by subjects and settings.</p>}
           {counts.forms.map((c) => <AxisCategoryCard key={c.category.id} count={c} worked={worked} rows={rows} settings={settings} exceptions={list.exceptions} preview={preview} openAll={() => openAll(c)} />)}
           {suggested.length === 0 && <p className="muted">None by subject and setting with these settings.</p>}
           {suggested.map((c) => <AxisCategoryCard key={c.category.id} count={c} worked={worked} rows={rows} settings={settings} exceptions={list.exceptions} preview={preview} openAll={() => openAll(c)} />)}
@@ -1451,6 +1715,8 @@ export function AxesPage() {
           <div className="buttons clutter-show-all">
             <button disabled>Label edges and misses…</button>
             <button disabled>Label random photos…</button>
+            <button disabled>Label again: unsure or missing a kind…</button>
+            <button disabled>Label these again…</button>
             <button disabled>Copy scores</button>
             <span className="muted small">Once the library is read.</span>
           </div>
@@ -1462,9 +1728,23 @@ export function AxesPage() {
           <div className="buttons clutter-show-all">
             <button onClick={() => openLabelling(false)}>Label edges and misses…</button>
             <button onClick={() => openLabelling(true)}>Label random photos…</button>
+            <button disabled={!review || review.queue.length === 0} onClick={() => review && setLabelling({ queue: review.queue, history: [], random: true, review: true })}>
+              {review?.button ?? 'Review my random labels'}
+            </button>
+            <button disabled={restarted === null} onClick={() => restarted && setLabels(restarted)}>Start the review over</button>
+            <button disabled={againQueue.length === 0} onClick={() => setLabelling({ queue: againQueue, history: [], random: false, review: false })}>
+              Label again: unsure or missing a kind ({againQueue.length.toLocaleString()})…
+            </button>
+            <select aria-label="Which edge labels to answer again" disabled={!againChoice} value={againChoice?.kind ?? ''} onChange={(e) => setAgainKind(e.target.value)}>
+              {kindAgain.map((c) => <option key={c.kind} value={c.kind}>{c.option}</option>)}
+            </select>
+            <button disabled={!againChoice} onClick={() => againChoice && setLabelling({ queue: againChoice.queue, history: [], random: false, review: false })}>
+              Label these again…
+            </button>
             <button disabled={Object.keys(labels).length === 0} onClick={copyScores}>Copy scores</button>
             {scoresCopied && <span className="muted small">{scoresCopied}</span>}
             <span className="muted small">
+              {copiedText && <>{copiedText}. </>}
               {labelText ?? 'Your verdict on a sample of photos (keep, clutter and which kind, unsure), which the lab scores every change against. Random photos, drawn from the whole library, show its precision and recall.'}
             </span>
           </div>
@@ -1478,6 +1758,8 @@ export function AxesPage() {
       )}
       {labelling && (
         <LabelScreen
+          mode={labelMode}
+          onMode={chooseLabelMode}
           queue={labelling.queue}
           labels={labels}
           kinds={labelKinds}
@@ -1485,16 +1767,20 @@ export function AxesPage() {
           thumbUrl={labelThumb}
           preview={preview}
           onLabel={(key, label) => {
-            setLabels((l) => ({ ...l, [key]: labelling.random ? { ...label, random: true } : label }));
+            // A photo drawn at random stays so when labelled again (Label again…, or gone back to).
+            // In the review it is marked reviewed, so the review picks up where it left off.
+            setLabels((l) => ({ ...l, [key]: labelling.review ? reviewedLabel(label) : labelling.random || l[key]?.random ? { ...label, random: true } : label }));
             setLabelling((s) => (s ? { ...s, queue: s.queue.filter((k) => k !== key), history: [...s.history, key] } : s));
           }}
+          onSkip={(key) => setLabelling((s) => (s ? { ...s, queue: s.queue.filter((k) => k !== key), history: [...s.history, key] } : s))}
           onUndo={() => {
             const last = labelling.history.at(-1);
             if (last === undefined) return false;
-            setLabels((l) => Object.fromEntries(Object.entries(l).filter(([k]) => k !== last)));
+            // Its label stays (shown on the screen, replaced by a new answer): Back and then Close loses nothing.
             setLabelling((s) => (s ? { ...s, queue: [last, ...s.queue], history: s.history.slice(0, -1) } : s));
             return true;
           }}
+          onClear={(key) => setLabels((l) => Object.fromEntries(Object.entries(l).filter(([k]) => k !== key)))}
           onClose={() => setLabelling(null)}
         />
       )}
@@ -1648,7 +1934,7 @@ export function AxesFindsPage({ id }: { id: string }) {
                     options: () => {
                       // Not clutter any more on this tab's side, with the buffs applied from it: nothing to buff.
                       const match = matchAxes('', p.row, finds.scored, finds.overlap, tuned);
-                      const now = finds.side === 'form' ? formOutcome(match, categories) : axisOutcome(match, categories, finds.exceptions);
+                      const now = sideOutcome(match, categories, finds.exceptions, finds.side);
                       if (now.verdict !== 'clutter') return null;
                       return axisBuffsFor(p.row, finds.scored, finds.overlap, tuned, finds.exceptions, finds.side, MAX_BUFFS[finds.scoring]).map((b): BuffOption => ({ key: String(b.category), label: axisBuffButton(b), onChoose: b.by === null ? null : () => chooseBuff(b, p.mediaKey) }));
                     },
@@ -1682,12 +1968,12 @@ export function AxesFindsPage({ id }: { id: string }) {
         mediaKey: c.mediaKey,
         thumbUrl: buffing.thumbUrls.get(c.mediaKey) ?? null,
         caption: axisCaption(c, weighed.lists),
-        breakdowns: () => [...axisCards(row, finds.scored, finds.overlap, tuned, finds.exceptions, 'Now'), ...axisCards(row, finds.scored, finds.overlap, weighed.after, finds.exceptions, 'With the buff')],
+        breakdowns: () => comparedCards({ row, scored: finds.scored, overlap: finds.overlap, settings: tuned, exceptions: finds.exceptions }, { row, scored: finds.scored, overlap: finds.overlap, settings: weighed.after, exceptions: finds.exceptions }, ['Now', 'With the buff']),
         nudge,
       };
     };
     const chosenRow = buffing.rows.get(pending.mediaKey)!;
-    const chosen: Tile[] = [{ mediaKey: pending.mediaKey, thumbUrl: buffing.thumbUrls.get(pending.mediaKey) ?? null, caption: [{ text: weighed.stillOut ? `Left out of ${weighed.own.label}` : `Clutter in ${weighed.own.label} again`, kind: null, strong: true }], breakdowns: () => [...axisCards(chosenRow, finds.scored, finds.overlap, tuned, finds.exceptions, 'Now'), ...axisCards(chosenRow, finds.scored, finds.overlap, weighed.after, finds.exceptions, 'With the buff')] }];
+    const chosen: Tile[] = [{ mediaKey: pending.mediaKey, thumbUrl: buffing.thumbUrls.get(pending.mediaKey) ?? null, caption: [{ text: weighed.stillOut ? `Left out of ${weighed.own.label}` : `Clutter in ${weighed.own.label} again`, kind: null, strong: true }], breakdowns: () => comparedCards({ row: chosenRow, scored: finds.scored, overlap: finds.overlap, settings: tuned, exceptions: finds.exceptions }, { row: chosenRow, scored: finds.scored, overlap: finds.overlap, settings: weighed.after, exceptions: finds.exceptions }, ['Now', 'With the buff']) }];
     return { chosen, changes: changeGrids(weighed.effects, weighed.lists, tile) };
   }, [finds, buffing, tuned, weighed, pending, categories]);
 

@@ -7,7 +7,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as usage from '../../src/app/shared/usageClient';
 import { modelKey } from '../../src/app/ai/model';
-import { duplicatesStores, refreshReviewSummary, reviewDeps, trashQueueDeps, trashQueuePass } from '../../src/app/duplicates/session';
+import { duplicateMoments, duplicatesStores, refreshReviewSummary, reviewDeps, trashQueueDeps, trashQueuePass } from '../../src/app/duplicates/session';
 import { processTrashQueue } from '../../src/app/duplicates/trash';
 import { searchDeps, searchStores } from '../../src/app/search/session';
 import { ALL_PROTECTED } from '../../src/app/shared/preferences';
@@ -109,6 +109,21 @@ describe('Duplicates from a scan more than a day old', () => {
     const pass = await trashQueuePass('account-a', duplicates, () => NOW + 25 * 60 * 60 * 1000);
     expect(pass.waitingReason).toBe('Waiting: the library scan is out of date. Check for new photos to continue.');
     expect(google.trash.size).toBe(0);
+  });
+});
+
+describe('the moments of near-duplicates, for copying labels on the developer clutter page', () => {
+  it('lists every moment by the shared grouping rules, decided ones too', async () => {
+    const { duplicates, stores, review } = await library();
+    const queue = await review.loadQueue();
+    await stores.review.recordDecision('account-a', queue.pending[0]!.id, 'KEPT', [], queue.pending[0]!.members.map((m) => m.mediaKey), NOW);
+    expect((await review.loadQueue()).pending).toEqual([]);
+    const moments = await duplicateMoments('account-a', duplicates, () => NOW);
+    expect(moments.map((m) => [...m].sort())).toEqual([['lib-0', 'lib-1', 'lib-2']]);
+  });
+
+  it('lists none before a scan', async () => {
+    expect(await duplicateMoments('account-a', duplicatesStores(new IDBFactory()), () => NOW)).toEqual([]);
   });
 });
 

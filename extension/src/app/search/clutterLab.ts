@@ -7,7 +7,7 @@
 import { readAxisTuning, type AxisCategory, type AxisCounts, type AxisList, type AxisSettings, type AxisTuning } from './clutterAxes';
 import { readAxisList } from './clutterEdits';
 import type { CategoryCount, Scoring } from './clutter';
-import type { EdgeScore, LabelScores } from './clutterLabels';
+import type { BlindEdit, EdgeScore, LabelScores } from './clutterLabels';
 
 /**
  * What the agent asks for. [list]: the whole list of subjects, settings and forms to use (as
@@ -16,6 +16,14 @@ import type { EdgeScore, LabelScores } from './clutterLabels';
  * it, e.g. all of `margins`). [apply]: keep the change on the page afterwards, as Apply does; otherwise
  * it is only measured. [review]: the categories (ids) to save review files for, with the change.
  * [labelSheets]: contact sheets of the labelled photos offered wrongly and missed, by kind, with the change.
+ * [blind]: how many labelled photos to draw as numbered contact sheets (blind-NN.png) for the agent to label
+ * without seeing the user's answers, which go apart into blind-answers.json (clutterLabels.ts blindSample); 0 for none.
+ * [relabel]: new answers for photos of an earlier blind request ([from], its id), by their numbers there, which the page
+ * saves as the user's labels; for when the user asks the agent to relabel them (2026-11-26). Null for none.
+ * [zoom]: photos of an earlier blind request by number, drawn larger ([size] px a side) as zoom-NN.png, for a closer look
+ * at what a 192 px sheet hides (a cat in a dark window). Null for none.
+ * [exportList]: write the page's list (list.json, as AXIS_LIST) and tuning (tuning.json, as STARTING_AXIS_TUNING) as
+ * they are in this browser, to ship them; only descriptions and numbers, nothing about photos.
  */
 export interface LabRequest {
   id: string;
@@ -25,6 +33,10 @@ export interface LabRequest {
   apply: boolean;
   review: string[] | 'all';
   labelSheets: boolean;
+  blind: number;
+  relabel: { from: string; labels: BlindEdit[] } | null;
+  zoom: { from: string; numbers: number[]; size: number } | null;
+  exportList: boolean;
 }
 
 /** [text] (request.json) as a request, or why it can't be one, as the result file says it. */
@@ -42,6 +54,12 @@ export function readLabRequest(text: string): { request: LabRequest } | { proble
   if (r.settings !== undefined && r.settings !== null && (typeof r.settings !== 'object' || Array.isArray(r.settings))) return { problem: '"settings" must be an object of settings fields' };
   if (r.apply !== undefined && typeof r.apply !== 'boolean') return { problem: '"apply" must be true or false' };
   if (r.labelSheets !== undefined && typeof r.labelSheets !== 'boolean') return { problem: '"labelSheets" must be true or false' };
+  if (r.exportList !== undefined && typeof r.exportList !== 'boolean') return { problem: '"exportList" must be true or false' };
+  if (r.blind !== undefined && !(Number.isInteger(r.blind) && (r.blind as number) >= 0 && (r.blind as number) <= BLIND_MAX)) return { problem: `"blind" must be a whole number from 0 to ${BLIND_MAX}` };
+  const relabel = r.relabel === undefined || r.relabel === null ? null : readRelabel(r.relabel);
+  if (typeof relabel === 'string') return { problem: relabel };
+  const zoom = r.zoom === undefined || r.zoom === null ? null : readZoom(r.zoom);
+  if (typeof zoom === 'string') return { problem: zoom };
   const review = r.review === undefined ? [] : r.review;
   if (review !== 'all' && !(Array.isArray(review) && review.every((x) => typeof x === 'string'))) return { problem: '"review" must be "all" or a list of category ids' };
   if (r.list !== undefined && r.list !== null && (typeof r.list !== 'object' || Array.isArray(r.list))) return { problem: '"list" must be a list like AXIS_LIST: { categories, exceptions }' };
@@ -54,8 +72,44 @@ export function readLabRequest(text: string): { request: LabRequest } | { proble
       apply: r.apply === true,
       review: review as string[] | 'all',
       labelSheets: r.labelSheets === true,
+      blind: (r.blind as number | undefined) ?? 0,
+      relabel,
+      zoom,
+      exportList: r.exportList === true,
     },
   };
+}
+
+/** The most photos one zoom draws, and the sizes it draws them at (px a side). */
+export const ZOOM_MAX = 24;
+export const ZOOM_SIZES = { min: 192, max: 1024 };
+
+/** [raw] as a request's zoom, or why it can't be one. */
+function readZoom(raw: unknown): LabRequest['zoom'] | string {
+  const shape = `"zoom" must be { "from": the id of a blind request, "numbers": 1 to ${ZOOM_MAX} different numbers, "size": ${ZOOM_SIZES.min} to ${ZOOM_SIZES.max} }`;
+  const r = raw as Record<string, unknown> | null;
+  if (typeof r !== 'object' || r === null || Array.isArray(r) || typeof r.from !== 'string' || !/^[\w.-]+$/.test(r.from)) return shape;
+  const numbers = r.numbers;
+  if (!Array.isArray(numbers) || numbers.length === 0 || numbers.length > ZOOM_MAX || !numbers.every((n) => Number.isInteger(n) && n >= 1) || new Set(numbers).size !== numbers.length) return shape;
+  if (!Number.isInteger(r.size) || (r.size as number) < ZOOM_SIZES.min || (r.size as number) > ZOOM_SIZES.max) return shape;
+  return { from: r.from, numbers: numbers as number[], size: r.size as number };
+}
+
+/** [raw] as a request's relabel, or why it can't be one. */
+function readRelabel(raw: unknown): LabRequest['relabel'] | string {
+  const shape = '"relabel" must be { "from": the id of a blind request, "labels": [{ "number", "verdict": "keep", "clutter" or "unsure", "kind": an id or null }] }';
+  const r = raw as Record<string, unknown>;
+  if (typeof r !== 'object' || r === null || Array.isArray(r) || typeof r.from !== 'string' || !/^[\w.-]+$/.test(r.from) || !Array.isArray(r.labels) || r.labels.length === 0) return shape;
+  const labels: BlindEdit[] = [];
+  for (const raw of r.labels as unknown[]) {
+    const e = raw as Record<string, unknown> | null;
+    if (typeof e !== 'object' || e === null || !Number.isInteger(e.number) || (e.number as number) < 1) return shape;
+    if (e.verdict !== 'keep' && e.verdict !== 'clutter' && e.verdict !== 'unsure') return shape;
+    if (e.kind !== undefined && e.kind !== null && typeof e.kind !== 'string') return shape;
+    labels.push({ number: e.number as number, verdict: e.verdict, kind: (e.kind as string | undefined) ?? null });
+  }
+  if (new Set(labels.map((l) => l.number)).size !== labels.length) return '"relabel" names a number twice';
+  return { from: r.from, labels };
 }
 
 /**
@@ -128,6 +182,9 @@ export interface LabMoveGroup {
 
 /** The most photos of a moved group on its contact sheet: enough to judge a change, few enough to read cheaply. */
 export const LAB_SHEET_MAX = 24;
+
+/** The most photos a blind request draws ([LabRequest.blind]). */
+export const BLIND_MAX = 500;
 
 /** What the result file says: the request, what it did, and where its files are. */
 export interface LabResult {

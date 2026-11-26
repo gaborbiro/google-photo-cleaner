@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { AXIS_LIST, STARTING_AXIS_TUNING, countAxes, kindOf, matchAxes, apart, PLAIN_AXIS_SETTINGS, STARTING_AXIS_SETTINGS, type AxisCategory, type ScoredAxis } from '../../src/app/search/clutterAxes';
-import { labCategoryLines, labRefusal, labReviewIds, labTarget, readLabRequest } from '../../src/app/search/clutterLab';
+import { labCategoryLines, labRefusal, labReviewIds, labTarget, readLabRequest, type LabRequest } from '../../src/app/search/clutterLab';
 
 const v = (...xs: number[]) => Float32Array.from(xs);
 const cat = (id: string, axis: 'subject' | 'setting', verdict: 'clutter' | 'keep' | 'neutral', descriptions: string[]): AxisCategory => ({ id, label: id[0]!.toUpperCase() + id.slice(1), kind: kindOf(verdict), axis, verdict, descriptions });
 
 describe('the lab folder: requests an agent writes for the developer page', () => {
   it('reads a request, with what it leaves out kept as it is', () => {
-    expect(readLabRequest('{"id":"r1"}')).toEqual({ request: { id: 'r1', list: null, scoring: null, settings: null, apply: false, review: [], labelSheets: false } });
-    const full = { id: 'r2', scoring: 'raw', settings: { margins: { screenshots: 0.03 } }, apply: true, review: 'all', labelSheets: true, list: AXIS_LIST };
+    expect(readLabRequest('{"id":"r1"}')).toEqual({ request: { id: 'r1', list: null, scoring: null, settings: null, apply: false, review: [], labelSheets: false, blind: 0, relabel: null, zoom: null, exportList: false } });
+    const full = { id: 'r2', scoring: 'raw', settings: { margins: { screenshots: 0.03 } }, apply: true, review: 'all', labelSheets: true, blind: 40, relabel: { from: 'bl05', labels: [{ number: 3, verdict: 'unsure', kind: null }, { number: 82, verdict: 'clutter', kind: 'other' }] }, zoom: { from: 'bl05', numbers: [90, 7], size: 512 }, exportList: true, list: AXIS_LIST };
     expect(readLabRequest(JSON.stringify(full))).toEqual({ request: full });
   });
 
@@ -21,6 +21,26 @@ describe('the lab folder: requests an agent writes for the developer page', () =
     expect(problem('{"id":"r","settings":[1]}')).toBe('"settings" must be an object of settings fields');
     expect(problem('{"id":"r","apply":"yes"}')).toBe('"apply" must be true or false');
     expect(problem('{"id":"r","labelSheets":1}')).toBe('"labelSheets" must be true or false');
+    expect(problem('{"id":"r","exportList":"yes"}')).toBe('"exportList" must be true or false');
+    expect(problem('{"id":"r","blind":2.5}')).toBe('"blind" must be a whole number from 0 to 500');
+    expect(problem('{"id":"r","blind":501}')).toBe('"blind" must be a whole number from 0 to 500');
+    const shape = '"relabel" must be { "from": the id of a blind request, "labels": [{ "number", "verdict": "keep", "clutter" or "unsure", "kind": an id or null }] }';
+    expect(problem('{"id":"r","relabel":{"from":"../bl05","labels":[{"number":1,"verdict":"keep"}]}}')).toBe(shape);
+    expect(problem('{"id":"r","relabel":{"from":"bl05","labels":[]}}')).toBe(shape);
+    expect(problem('{"id":"r","relabel":{"from":"bl05","labels":[{"number":0,"verdict":"keep"}]}}')).toBe(shape);
+    expect(problem('{"id":"r","relabel":{"from":"bl05","labels":[{"number":1,"verdict":"taste"}]}}')).toBe(shape);
+    expect(problem('{"id":"r","relabel":{"from":"bl05","labels":[{"number":1,"verdict":"keep","kind":3}]}}')).toBe(shape);
+    expect(problem('{"id":"r","relabel":{"from":"bl05","labels":[{"number":1,"verdict":"keep"},{"number":1,"verdict":"unsure"}]}}')).toBe('"relabel" names a number twice');
+    // A kind left out is none.
+    expect((readLabRequest('{"id":"r","relabel":{"from":"bl05","labels":[{"number":1,"verdict":"unsure"}]}}') as { request: LabRequest }).request.relabel).toEqual({ from: 'bl05', labels: [{ number: 1, verdict: 'unsure', kind: null }] });
+    const zoom = '"zoom" must be { "from": the id of a blind request, "numbers": 1 to 24 different numbers, "size": 192 to 1024 }';
+    expect(problem('{"id":"r","zoom":{"from":"bl05","numbers":[90],"size":100}}')).toBe(zoom);
+    expect(problem('{"id":"r","zoom":{"from":"bl05","numbers":[90],"size":2048}}')).toBe(zoom);
+    expect(problem('{"id":"r","zoom":{"from":"bl05","numbers":[],"size":512}}')).toBe(zoom);
+    expect(problem('{"id":"r","zoom":{"from":"bl05","numbers":[90,90],"size":512}}')).toBe(zoom);
+    expect(problem('{"id":"r","zoom":{"from":"bl05","numbers":[0],"size":512}}')).toBe(zoom);
+    expect(problem(JSON.stringify({ id: 'r', zoom: { from: 'bl05', numbers: Array.from({ length: 25 }, (_, i) => i + 1), size: 512 } }))).toBe(zoom);
+    expect(problem('{"id":"r","zoom":{"from":"../x","numbers":[1],"size":512}}')).toBe(zoom);
     expect(problem('{"id":"r","review":"some"}')).toBe('"review" must be "all" or a list of category ids');
     expect(problem('{"id":"r","list":[]}')).toBe('"list" must be a list like AXIS_LIST: { categories, exceptions }');
   });

@@ -239,6 +239,10 @@ body.review main.calibration { gap: var(--space-5); }
 .calibration header { display: flex; flex-direction: column; gap: var(--space-2); }
 /* As much room under the account line as over it, from the title. */
 .calibration header .account { margin: var(--space-2) 0; }
+/* The page's intro, folded to one line under the account. */
+.clutter-intro { margin-bottom: var(--space-4); }
+.clutter-intro > summary { cursor: pointer; }
+.clutter-intro > p { margin: var(--space-2) 0 0; max-width: 80ch; }
 .calibration .card { gap: var(--space-3); }
 table.calibration-table { max-width: 820px; margin-top: var(--space-3); }
 input[type='file'] { font: inherit; color: var(--pc-muted); }
@@ -404,7 +408,9 @@ button.settings-tab-button { margin-left: auto; display: inline-flex; align-item
 .clutter-categories > .buttons { margin-bottom: var(--space-5); }
 .clutter-categories h3 { margin: var(--space-4) 0 var(--space-1); }
 /* Subjects, Settings, Form…: easy to find in a long list, with clear room above. */
-h3.clutter-axis-heading { font-size: 24px; line-height: 32px; font-weight: 700; margin: var(--space-8) 0 var(--space-2); padding-bottom: var(--space-2); border-bottom: 2px solid var(--pc-accent); }
+/* Subjects, Settings, Form, Baseline and Exceptions: each folds; the accent rule sets them apart. */
+.clutter-axis-heading { font-size: 18px; line-height: 26px; font-weight: 700; margin: var(--space-6) 0 0; padding-bottom: var(--space-2); border-bottom: 2px solid var(--pc-accent); cursor: pointer; }
+.clutter-axis-part[open] > .clutter-axis-heading { margin-bottom: var(--space-2); }
 .clutter-list { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-1) var(--space-4); margin: var(--space-2) 0 0; }
 .clutter-list > div { display: contents; }
 .clutter-list dd { margin: 0; color: var(--pc-muted); }
@@ -481,6 +487,7 @@ details[open]:has(> .clutter-sample-title) { padding-bottom: var(--space-6); }
 .clutter-finds { padding-bottom: 80vh; }
 /* A closed category in the editor: its descriptions after its name, small and quiet. */
 .clutter-closed-note { margin-left: var(--space-3); font-size: 12px; font-weight: 400; color: var(--pc-muted); }
+.clutter-kind-clutter { color: var(--pc-trash); }
 .clutter-kind-counterweight { color: var(--pc-keep); }
 .clutter-kind-neutral { color: var(--pc-muted); }
 /* Pairs of subject and setting, with what each comes to. */
@@ -509,19 +516,24 @@ details[open]:has(> .clutter-sample-title) { padding-bottom: var(--space-6); }
 .clutter-viewer-scores tr.neutral td { color: var(--pc-muted); }
 .clutter-viewer-scores p.clutter-card-heading { font-weight: 650; margin-bottom: 6px; }
 .clutter-viewer-scores p.clutter-card-title.clutter-card-side { font-weight: 400; font-size: inherit; border-bottom: none; padding-bottom: 0; margin-bottom: 6px; }
-.clutter-viewer-scores p.clutter-card-title { font-size: 15px; font-weight: 650; color: var(--pc-text); margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--pc-border); }
-.clutter-viewer-scores .clutter-card-scoring + .clutter-card-scoring { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--pc-border); }
+.clutter-viewer-scores p.clutter-card-title { font-size: 15px; font-weight: 650; color: var(--pc-text); margin-bottom: 4px; }
+.clutter-viewer-scores .clutter-card-scoring + .clutter-card-scoring { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--pc-border); }
 @media (max-width: 760px) { .clutter-viewer-body { flex-direction: column; } .clutter-viewer-scores { flex: 0 0 40%; } }
 /* The labelling screen: the photo with its count and question on the left, the answers beside it in a column of
    the full height (lots of kinds). Sizes follow the window's height, so the kinds fit without scrolling where they can. */
 /* Touch as well as keys: large targets, no double-tap zoom. */
-.clutter-labeller { touch-action: manipulation; padding: clamp(8px, 2vh, var(--space-6)); --label-gap: clamp(4px, 0.8vh, 10px); --label-font: clamp(13px, 1.7vh, 17px); --label-h: clamp(30px, 4.6vh, 56px); }
+/* Edge to edge, on a solid background: the page behind doesn't show through. */
+/* .viewer as well: the viewer's own padding and see-through background come later in this file. */
+.viewer.clutter-labeller { touch-action: manipulation; padding: 0; background: #090b10; --label-gap: clamp(4px, 0.8vh, 10px); --label-font: clamp(13px, 1.7vh, 17px); --label-h: clamp(30px, 4.6vh, 56px); }
 .clutter-labeller .clutter-viewer-body { gap: clamp(8px, 1.5vw, var(--space-4)); }
 .clutter-label-main { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--label-gap); }
 /* The count and the question wrap rather than squeeze, on any width. */
-.clutter-label-info { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: var(--label-font); }
+.clutter-label-info { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: var(--label-font); padding: 4px 8px 0; }
 /* The column beside the photo: Keep, Clutter and its kinds, Unsure, then Back and Close at its foot. */
-.clutter-label-side { flex: 0 0 clamp(300px, 40%, 560px); display: flex; flex-direction: column; gap: var(--label-gap); min-height: 0; }
+/* It scrolls as a whole when the kinds don't fit (a fieldset doesn't shrink below its grid in Chrome); the padding
+   keeps the earlier answer's ring inside the scrolled edge. */
+.clutter-label-side { flex: 0 0 clamp(300px, 40%, 560px); display: flex; flex-direction: column; gap: var(--label-gap); min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 5px; }
+.clutter-label-side > * { flex-shrink: 0; }
 .clutter-labeller button { font-size: var(--label-font); }
 /* The developer page's Settings, folded away until wanted: the summary reads as the card's heading. */
 .clutter-settings > summary { font-size: 20px; font-weight: 600; cursor: pointer; }
@@ -534,18 +546,52 @@ details[open]:has(> .clutter-sample-title) { padding-bottom: var(--space-6); }
 /* The three answers: Keep, Clutter (a box holding its kinds) and Unsure. */
 .clutter-labeller .clutter-answer { flex: 0 0 auto; min-height: var(--label-h); font-size: calc(var(--label-font) + 1px); padding: 0 14px; text-align: left; }
 button.clutter-answer.keep { border: 2px solid var(--pc-keep); }
-.clutter-kinds-box { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--label-gap); margin: 0; padding: 2px 10px 10px; border: 2px solid var(--pc-trash); border-radius: var(--radius-control); }
+/* "What is it?": every subject, apart from the answers, so it borders on neither keep nor clutter. */
+.clutter-kinds-box { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--label-gap); margin: 0; padding: 2px 10px 10px; border: 2px solid var(--pc-border); border-radius: var(--radius-control); }
+/* The kind that goes with Keep or Clutter, on the answers themselves. */
+.clutter-answer-kind { color: var(--pc-muted); }
 .clutter-kinds-box legend { font-size: calc(var(--label-font) + 1px); padding: 0 6px; }
 .clutter-label-nav { display: flex; gap: var(--label-gap); }
+/* Simple answers: one Clutter, bordered like the kinds' box it stands for. */
+button.clutter-answer.clutter { border: 2px solid var(--pc-trash); }
+/* Simple answers: the AI's guess at the kind, small, apart from the answers. */
+.clutter-labeller .clutter-kind-hint { margin: 0; color: var(--pc-muted); }
+/* Simple mode, for anyone, at the top of the answers: a switch, off by default. */
+.clutter-switch { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; flex-wrap: wrap; }
+.clutter-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.clutter-switch-track { position: relative; flex: 0 0 auto; width: 40px; height: 22px; border-radius: 11px; background: var(--pc-border); transition: background 0.15s; }
+.clutter-switch-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--pc-text); transition: transform 0.15s; }
+.clutter-switch input:checked + .clutter-switch-track { background: var(--pc-accent); }
+.clutter-switch input:checked + .clutter-switch-track::after { transform: translateX(18px); background: var(--pc-on-accent); }
+.clutter-switch input:focus-visible + .clutter-switch-track { outline: 2px solid var(--pc-accent); outline-offset: 2px; }
 .clutter-labeller .clutter-label-nav button { flex: 1; min-height: var(--label-h); }
 /* Two columns: ↑ ↓ move a row (KIND_COLUMNS in clutterAxes.tsx). */
-.clutter-kinds { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: max-content; gap: var(--label-gap); align-content: start; }
+/* Not a scroller of its own: the column around it scrolls, and a grid that held on to the wheel stopped it. */
+.clutter-kinds { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: max-content; gap: var(--label-gap); align-content: start; }
 .clutter-labeller .clutter-kinds button { min-height: calc(var(--label-h) * 0.75); padding: 4px 10px; text-align: left; line-height: 1.25; }
+/* The kinds after Keep or Clutter, bordered in that answer's colour; the answer pressed stays lit above them. */
+.clutter-kinds-box.keep { border-color: var(--pc-keep); }
+.clutter-kinds-box.clutter { border-color: var(--pc-trash); }
+.clutter-labeller button.clutter-answer.keep.asking { background: color-mix(in srgb, var(--pc-keep) 25%, transparent); }
+.clutter-labeller button.clutter-answer.clutter.asking { background: color-mix(in srgb, var(--pc-trash) 25%, transparent); }
 .clutter-kinds-note { margin: 0; font-size: calc(var(--label-font) - 2px); }
 .clutter-kinds button.selected { background: var(--pc-accent); border-color: var(--pc-accent); color: var(--pc-on-accent); }
+/* Keep and Unsure, reached with the arrows: highlighted the same way (Keep keeps its green border). */
+.clutter-labeller button.clutter-answer.selected { background: var(--pc-accent); color: var(--pc-on-accent); }
+/* A photo gone back to: the answer given before, ringed (the highlight, which Enter takes, may sit elsewhere). */
+.clutter-labeller button.chosen { outline: 3px solid var(--pc-text); outline-offset: 2px; font-weight: 650; }
+/* In the kinds' grid, which scrolls and so clips what lies outside a button: the ring just inside its edge. */
+.clutter-kinds button.chosen { outline: none; box-shadow: inset 0 0 0 3px var(--pc-text); }
+.clutter-labeller .clutter-earlier { margin: 0; color: var(--pc-muted); }
 .clutter-kinds kbd, .clutter-labeller kbd { font-family: var(--font-mono, monospace); font-weight: 700; margin-right: 6px; opacity: 0.7; }
 /* Narrow: the photo above, the answers below it, scrolling inside their box. */
-@media (max-width: 760px) { .clutter-labeller .clutter-viewer-body { flex-direction: column; } .clutter-label-main { flex: 0 0 35%; } .clutter-label-side { flex: 1 1 auto; } }
+/* Two halves of the same width, so the answers are always in the same place (2026-11-25: the eyes went back and
+   forth between the photo and answers far to the right). The photo hugs the middle, next to the answers: a
+   photo narrower than its half (portrait) sits at its right edge. The answers start at the top, with the kinds
+   open or not, so they never move. */
+.clutter-labeller .clutter-label-main, .clutter-labeller .clutter-label-side { flex: 1 1 0; }
+.clutter-labeller .viewer-photo { justify-content: flex-end; }
+@media (max-width: 760px) { .clutter-labeller .clutter-viewer-body { flex-direction: column; } .clutter-labeller .clutter-label-main { flex: 0 0 35%; } .clutter-labeller .clutter-label-side { flex: 1 1 auto; } .clutter-labeller .viewer-photo { justify-content: center; } }
 .clutter-card.right { left: calc(100% + 8px); }
 .clutter-card.left { right: calc(100% + 8px); }
 .clutter-card p { margin: 0; }
@@ -553,8 +599,11 @@ button.clutter-answer.keep { border: 2px solid var(--pc-keep); }
 /* A title, set apart from the rows under it, which can be grey too: bold for a part ("Now", "With the buff"); plain
    for a side ("Setting: Streets and buildings, … · counts"), in the text colour no row has. */
 .clutter-card p.clutter-card-title.clutter-card-side { font-weight: 400; font-size: inherit; border-bottom: none; padding-bottom: 0; margin-bottom: 6px; }
-.clutter-card p.clutter-card-title { font-size: 15px; font-weight: 650; color: var(--pc-text); margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--pc-border); }
-.clutter-card-scoring + .clutter-card-scoring { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--pc-border); }
+.clutter-card p.clutter-card-title { font-size: 15px; font-weight: 650; color: var(--pc-text); margin-bottom: 4px; }
+.clutter-card-scoring + .clutter-card-scoring { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--pc-border); }
+/* A part of the section above: no divider (comparedCards in dev/clutterAxes.tsx). */
+.clutter-card-scoring + .clutter-card-scoring.clutter-card-joined,
+.clutter-viewer-scores .clutter-card-scoring + .clutter-card-scoring.clutter-card-joined { margin-top: 4px; padding-top: 0; border-top: none; }
 .clutter-card table { border-collapse: collapse; margin-bottom: 6px; }
 .clutter-card td { padding: 1px 8px 1px 0; border-bottom: none; }
 .clutter-card .mono { font-size: 13px; }
@@ -635,3 +684,15 @@ button.clutter-answer.keep { border: 2px solid var(--pc-keep); }
 
 /* The review tab's own pieces below the tabs. */
 .other-accounts { margin-top: var(--space-5); }
+
+/* What a change left as it was, folded under one line (comparedCards in dev/clutterAxes.tsx). */
+.clutter-card-fold > summary { cursor: pointer; margin-bottom: 6px; color: var(--pc-text); }
+
+/* A description (the words the AI model scores a photo against), set apart from the page's own text. */
+.clutter-term { font-style: italic; }
+/* A category's name, in its verdict's colour wherever it is named; a description is italic (.clutter-term). */
+.clutter-name.clutter { color: var(--pc-trash); }
+.clutter-name.counterweight { color: var(--pc-keep); }
+.clutter-name.neutral { color: var(--pc-muted); }
+/* The hover card's colour key, each part in its own colour. */
+.clutter-card-legend { font-size: 12px; margin-top: 8px; }

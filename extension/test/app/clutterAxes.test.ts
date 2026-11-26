@@ -3,6 +3,7 @@ import { leadText, type ClutterPhoto } from '../../src/app/search/clutter';
 import {
   AXIS_LIST,
   PLAIN_AXIS_SETTINGS,
+  STARTING_AXIS_SETTINGS,
   STARTING_AXIS_TUNING,
   apart,
   descriptionOverlap,
@@ -11,6 +12,8 @@ import {
   reviewText,
   type Overlap,
   axisBreakdown,
+  axisComparison,
+  categoryParts,
   axisBuffButton,
   axisBuffsFor,
   axisCaption,
@@ -24,7 +27,10 @@ import {
   axisSummary,
   clutterIn,
   countAxes,
-  formOutcome,
+  checkOutcome,
+  checkOutcomes,
+  checksOf,
+  DEFAULT_CHECK,
   groupPairs,
   kindOf,
   matchAxes,
@@ -35,7 +41,7 @@ import {
   type PairException,
   type ScoredAxis,
 } from '../../src/app/search/clutterAxes';
-import { addAxisCategory, draftOf, draftProblems, exceptionChanges, exceptionProblems, listChanges, listOf, readAxisList, saveAxisList, setAxis, setVerdict } from '../../src/app/search/clutterEdits';
+import { addAxisCategory, draftOf, draftProblems, exceptionChanges, exceptionProblems, listChanges, listOf, draftChecks, draftSections, isShipped, readAxisList, saveAxisList, setAxis, setCheck, setVerdict, verdictChoices, verdictsFor } from '../../src/app/search/clutterEdits';
 
 const v = (...xs: number[]) => Float32Array.from(xs);
 /** No overlap between any of [scored]'s descriptions: pooling as if each stood apart. */
@@ -148,12 +154,12 @@ describe('clutter by subject and setting', () => {
     const breakdown = axisBreakdown(v(0.6, 0.65, 0.3, 0.7, 0.4, 0.3, 0), scored, free(scored), { ...settings, descriptionWeights: { 'a selfie': 0.01 } }, [], 2);
     expect(breakdown.outcome).toBe('Kept: People keeps');
     // The lead is against the best of another verdict: People (keep) against Products, Shops (neutral) against Museums.
-    expect(breakdown.sides.map((s) => s.title)).toEqual(['Subject: People, 0.0600 ahead of Products · counts', 'Setting: Shops, 0.3000 ahead of Museums · counts']);
-    expect(axisBreakdown(v(0.6, 0.61, 0.3, 0.7, 0.4, 0.3, 0), scored, free(scored), settings, [], 2).sides[0]!.title).toBe('Subject: People, 0.0100 ahead of Products · too close, no say');
+    expect(breakdown.sides.map((s) => s.title)).toEqual(['Subject: People, 0.0600 ahead of Products (needs 0.02) · counts', 'Setting: Shops, 0.3000 ahead of Museums (needs 0.02) · counts']);
+    expect(axisBreakdown(v(0.6, 0.61, 0.3, 0.7, 0.4, 0.3, 0), scored, free(scored), settings, [], 2).sides[0]!.title).toBe('Subject: People, 0.0100 ahead of Products (needs 0.02) · too close, no say');
     // A keeper heard close behind the top is named.
     const party = axisBreakdown(v(0.3, 0.684, 0.3, 0.3, 0.4, 0.641, 0.686), scored, free(scored), settings, [], 2);
     expect(party.outcome).toBe('Kept: People keeps (close to the top)');
-    expect(party.sides[0]!.title).toBe('Subject: Food, 0.0020 ahead of People · too close, no say · People close behind, keeps');
+    expect(party.sides[0]!.title).toBe('Subject: Food, 0.0020 ahead of People (needs 0.02) · too close, no say · People close behind, keeps');
     expect(breakdown.sides[0]!.rows.map((r) => [r.label, r.kind, r.score, r.weight])).toEqual([['People', 'counterweight', '0.660', '+0.010'], ['Products', 'clutter', '0.600', null]]);
     expect(breakdown.sides[1]!.rows[0]).toMatchObject({ label: 'Shops', kind: 'neutral' });
   });
@@ -174,7 +180,7 @@ describe('clutter by subject and setting', () => {
     expect(outcome(row, [], withAxisBuff(settings, 'a selfie', 0.06)).verdict).toBe('keep');
     expect(axisBuffButton(people0)).toBe(`Buff People (subject) “a selfie” +${people0.by!.toFixed(4)}`);
     // A label that already names its side isn't named twice; too far behind, the button says the largest buff of the scoring.
-    expect(axisBuffButton({ ...people0, label: 'Travel (subject)' })).toBe(`Buff Travel (subject) “a selfie” +${people0.by!.toFixed(4)}`);
+    expect(axisBuffButton({ ...people0, label: 'Celebrations (subject)' })).toBe(`Buff Celebrations (subject) “a selfie” +${people0.by!.toFixed(4)}`);
     expect(axisBuffButton({ ...people0, by: null, max: 3 })).toBe('People (subject) “a selfie”: more than +3 needed');
     expect(() => axisBuffsFor(v(0.6, 0.65, 0.3, 0.7, 0.4, 0.3, 0), scored, free(scored), settings, [], 'content', 0.2)).toThrow('Only a photo that is clutter');
   });
@@ -196,10 +202,10 @@ describe('clutter by subject and setting', () => {
       '',
       '#3 (Riskiest) 0.650 · lead 0.0500 · “a selfie”',
       '  Kept: People keeps',
-      '  Subject: People, 0.0500 ahead of Products · counts',
+      '  Subject: People, 0.0500 ahead of Products (needs 0.02) · counts',
       '    0.650 People · a selfie [keep]',
       '    0.600 Products · a product on a shelf [clutter]',
-      '  Setting: Shops, 0.3000 ahead of Museums · counts',
+      '  Setting: Shops, 0.3000 ahead of Museums (needs 0.02) · counts',
       '    0.700 Shops · a supermarket aisle [neutral]',
       '    0.400 Museums · a museum room [keep]',
       '',
@@ -284,7 +290,8 @@ describe('clutter by subject and setting', () => {
     expect(new Set(descriptions).size).toBe(descriptions.length);
     expect(AXIS_LIST.categories.every((c) => c.kind === kindOf(c.verdict))).toBe(true);
     // 2026-11-23: Everyday objects folded into Things to buy; Close-up, no clear place added; paper clutter in keep settings.
-    expect(axisListSummary(AXIS_LIST)).toBe('35 subjects, 14 settings, 2 forms and 1 baseline, 40 exceptions');
+    // 2026-11-26: Accidental shots a form in a Quality check against Intended photos; Architecture and interiors added.
+    expect(axisListSummary(AXIS_LIST)).toBe('35 subjects, 14 settings, 4 forms in 2 checks and 1 baseline, 40 exceptions');
     // Each exception names a clutter subject and a keep setting of the list.
     const byId = new Map(AXIS_LIST.categories.map((c) => [c.id, c]));
     expect(AXIS_LIST.exceptions.every((e) => byId.get(e.subject)?.axis === 'subject' && byId.get(e.setting)?.axis === 'setting' && byId.get(e.setting)?.verdict === 'keep')).toBe(true);
@@ -292,7 +299,8 @@ describe('clutter by subject and setting', () => {
     // A phrase in two categories (as an edit can leave it) counts once.
     const twice = { categories: [{ ...AXIS_LIST.categories[0]!, descriptions: ['a', 'b'] }, { ...AXIS_LIST.categories[1]!, descriptions: ['b', 'c'] }], exceptions: [] };
     expect(axisDescriptionCount(twice)).toBe(3);
-    expect(axisSections(AXIS_LIST.categories).map((s) => [s.axis, s.categories.length])).toEqual([['subject', 35], ['setting', 14], ['form', 2], ['baseline', 1]]);
+    // The forms in one section per check: Screenshots, then Quality.
+    expect(axisSections(AXIS_LIST.categories).map((s) => [s.axis, s.categories.length])).toEqual([['subject', 35], ['setting', 14], ['form', 2], ['form', 2], ['baseline', 1]]);
     const named = (id: string) => AXIS_LIST.categories.find((c) => c.id === id)!;
     // Screenshots are a form, against Not a screenshot: as a setting they won wherever no place fitted.
     // Photos of screens stay a subject.
@@ -322,8 +330,8 @@ describe('form: screenshots, decided on their own', () => {
   const fPeople = cat('people', 'subject', 'keep', ['a selfie']);
   const fProducts = cat('products', 'subject', 'clutter', ['a product on a shelf']);
   const fShops = cat('shops', 'setting', 'neutral', ['a supermarket aisle']);
-  const shots = cat('screenshots', 'form', 'clutter', ['a screenshot of a chat']);
-  const notShots = { ...cat('photos', 'form', 'neutral', ['a person holding a phone']), label: 'Not a screenshot' };
+  const shots = { ...cat('screenshots', 'form', 'clutter', ['a screenshot of a chat']), check: 'Screenshots' };
+  const notShots = { ...cat('photos', 'form', 'neutral', ['a person holding a phone']), label: 'Not a screenshot', check: 'Screenshots' };
   const list = [fPeople, fProducts, fShops, shots, notShots];
   const formScored: ScoredAxis[] = list.map((category, i) => ({ category, vectors: [v(...list.map((_, j) => (i === j ? 1 : 0)))] }));
   const match = (row: Float32Array, s = settings) => matchAxes('p', row, formScored, free(formScored), s);
@@ -331,19 +339,75 @@ describe('form: screenshots, decided on their own', () => {
   it('says screenshot only when Screenshots is clearly ahead of Not a screenshot, whatever the subject and setting come to', () => {
     // A real screenshot of a chat: 0.7 against 0.58. A screenshot, and its content (a product, in a shop) is clutter too.
     const chat = match(v(0.3, 0.7, 0.6, 0.7, 0.58));
-    expect(formOutcome(chat, list)).toEqual({ verdict: 'clutter', category: 3, reason: 'Screenshots is clutter' });
+    expect(checkOutcome(chat, list, 'Screenshots')).toEqual({ verdict: 'clutter', category: 3, reason: 'Screenshots is clutter' });
     expect(axisOutcome(chat, list, []).verdict).toBe('clutter');
     // A friend holding a phone: Screenshots 0.647, Not a screenshot 0.68: not a screenshot, named as such.
     const friend = match(v(0.7, 0.3, 0.6, 0.647, 0.68));
-    expect(formOutcome(friend, list)).toEqual({ verdict: 'none', category: 4, reason: 'Not a screenshot' });
+    expect(checkOutcome(friend, list, 'Screenshots')).toEqual({ verdict: 'none', category: 4, reason: 'Not a screenshot' });
     // Keepers don't stop it: a screenshot of a selfie is kept by People, and still a screenshot.
     const selfieShot = match(v(0.7, 0.3, 0.6, 0.7, 0.58));
     expect(axisOutcome(selfieShot, list, []).verdict).toBe('keep');
-    expect(formOutcome(selfieShot, list).verdict).toBe('clutter');
+    expect(checkOutcome(selfieShot, list, 'Screenshots').verdict).toBe('clutter');
+    // Its outcome says what happens to it: offered, by its check, not "Kept".
+    const breakdownOf = (row: Float32Array, s = settings) => axisBreakdown(row, formScored, free(formScored), s, [], 2).outcome;
+    expect(breakdownOf(v(0.7, 0.3, 0.6, 0.7, 0.58))).toBe('Offered by its check: Screenshots · subject and setting: People keeps');
+    expect(breakdownOf(v(0.3, 0.7, 0.6, 0.7, 0.58))).toBe('Offered by its check: Screenshots · subject and setting: Products is clutter');
+    // Neither: no subject reaches the minimum score, so no keeper is heard and no clutter counts.
+    expect(breakdownOf(v(0.3, 0.45, 0.6, 0.7, 0.58), { ...settings, subject: { minScore: 0.5, margin: 0.02 } })).toBe('Offered by its check: Screenshots · subject and setting: nothing that counts says clutter');
+    expect(breakdownOf(v(0.7, 0.3, 0.6, 0.647, 0.68))).toBe('Kept: People keeps · Screenshots check: Not a screenshot');
     // Too close: neither, named with its best.
-    expect(formOutcome(match(v(0.3, 0.7, 0.6, 0.6, 0.59)), list)).toEqual({ verdict: 'none', category: 3, reason: 'Screenshots, too close' });
-    // With no form in the list, there is none.
-    expect(matchAxes('p', v(0.3, 0.7, 0.6), formScored.slice(0, 3), free(formScored.slice(0, 3)), settings).form).toBeNull();
+    expect(checkOutcome(match(v(0.3, 0.7, 0.6, 0.6, 0.59)), list, 'Screenshots')).toEqual({ verdict: 'none', category: 3, reason: 'Screenshots, too close' });
+    // With no form in the list, there are no checks; a check not in the list comes to nothing.
+    expect(matchAxes('p', v(0.3, 0.7, 0.6), formScored.slice(0, 3), free(formScored.slice(0, 3)), settings).checks).toEqual([]);
+    expect(checkOutcome(chat, list, 'Poor quality')).toEqual({ verdict: 'none', category: null, reason: 'no Poor quality check in the list' });
+  });
+
+  it('splits a line into category names, in their verdict’s kind, and descriptions, the same way everywhere', () => {
+    const parts = (text: string) => categoryParts(text, list).map((p) => [p.text, p.kind, p.term]);
+    expect(parts('Products is clutter')).toEqual([['Products', 'clutter', false], [' is clutter', null, false]]);
+    // A check's name isn't its category's; a description is set apart; a keeper green, a neutral grey.
+    expect(parts('Screenshots check: Not a screenshot · “a screenshot of a chat” · People keeps · Shops')).toEqual([
+      ['Screenshots check: ', null, false],
+      ['Not a screenshot', 'neutral', false],
+      [' · “', null, false],
+      ['a screenshot of a chat', null, true],
+      ['” · ', null, false],
+      ['People', 'counterweight', false],
+      [' keeps · ', null, false],
+      ['Shops', 'neutral', false],
+    ]);
+    // Whole words only: no name inside another word.
+    expect(parts('Peoples')).toEqual([['Peoples', null, false]]);
+  });
+
+  it('compares a photo under two settings or lists, saying once what didn’t change', () => {
+    const row = v(0.7, 0.3, 0.6, 0.7, 0.69);
+    const input = (s = settings, sc = formScored) => ({ row, scored: sc, overlap: free(sc), settings: s, exceptions: [] });
+    const buffed = { ...settings, descriptionWeights: { 'a screenshot of a chat': 0.02 } };
+    const c = axisComparison(input(), input(buffed), ['Now', 'With the buff'], 3);
+    expect(c.summary).toEqual({ before: ['People keeps', 'Screenshots check: Screenshots, too close'], after: ['People keeps', 'Screenshots check: Screenshots is clutter'] });
+    expect(c.changed).toEqual([
+      {
+        title: 'Screenshots check: Screenshots too close → counts',
+        before: 'Screenshots, 0.0100 ahead of Not a screenshot (needs 0.02) · too close, no say',
+        after: 'Screenshots, 0.0300 ahead of Not a screenshot (needs 0.02) · counts',
+        // The side's whole scoring, before and after: not only what moved (2026-11-25).
+        beforeRows: [expect.objectContaining({ label: 'Screenshots', score: '0.700', weight: null }), expect.objectContaining({ label: 'Not a screenshot', score: '0.690' })],
+        rows: [expect.objectContaining({ label: 'Screenshots', score: '0.720', weight: '+0.020' }), expect.objectContaining({ label: 'Not a screenshot', score: '0.690' })],
+      },
+    ]);
+    expect(c.unchangedLine).toBe('Unchanged: subject People (counts, keeps) · setting Shops (counts)');
+    expect(c.unchanged.map((x) => x.name)).toEqual(['Subject', 'Setting']);
+    // Nothing changed: one breakdown, no fold.
+    const same = axisComparison(input(), input(), ['Now', 'With the buff'], 3);
+    expect(same.summary).toEqual({ before: ['People keeps', 'Screenshots check: Screenshots, too close'], after: null });
+    expect([same.changed, same.unchangedLine, same.unchanged.length]).toEqual([[], null, 3]);
+    // A description replaced: the side changed though its outcome didn't, and both its scorings are shown.
+    const reworded = formScored.map((x) => (x.category.id === 'photos' ? { ...x, category: { ...x.category, descriptions: ['a photo of a room'] } } : x));
+    const r = axisComparison(input(), input(settings, reworded), ['Now', 'With the edits'], 3);
+    expect(r.changed.map((x) => [x.title, x.beforeRows.map((y) => y.description), x.rows.map((y) => y.description)])).toEqual([
+      ['Screenshots check: Screenshots too close, unchanged', ['a screenshot of a chat', 'a person holding a phone'], ['a screenshot of a chat', 'a photo of a room']],
+    ]);
   });
 
   it('counts screenshots as a suggestion of their own, a photo also in one by subject and setting', () => {
@@ -356,24 +420,107 @@ describe('form: screenshots, decided on their own', () => {
     expect(counts.forms.map((c) => [c.category.id, c.trashable.map((p) => p.mediaKey)])).toEqual([['screenshots', ['chat', 'selfie shot']]]);
     expect(counts.clutter.find((c) => c.category.id === 'products')!.trashable.map((p) => p.mediaKey)).toEqual(['chat']);
     expect(counts.clutter.map((c) => c.category.id)).not.toContain('screenshots');
-    expect(counts.totals).toBe('Clutter 1 (33%) · kept 2 (67%) · neither 0 (0%) · and clutter because of form 2 (67%)');
+    expect(counts.totals).toBe('Clutter 1 (33%) · kept 2 (67%) · neither 0 (0%) · and clutter in a check 2 (67%)');
   });
 
   it('buffs Not a screenshot to leave a photo out of Screenshots, and Stay brings it back; effects say which side', () => {
     const row = v(0.3, 0.7, 0.6, 0.65, 0.62);
-    const buffs = axisBuffsFor(row, formScored, free(formScored), settings, [], 'form', 0.2);
+    const buffs = axisBuffsFor(row, formScored, free(formScored), settings, [], { check: 'Screenshots' }, 0.2);
     expect(buffs.map((b) => [b.label, b.axis, b.description])).toEqual([['Not a screenshot', 'form', 'a person holding a phone']]);
     expect(buffs[0]!.by).toBeCloseTo(0.0101, 3);
     const after = withAxisBuff(settings, 'a person holding a phone', buffs[0]!.by!);
     expect(clutterIn(row, formScored, free(formScored), after, [], 3)).toBe(false);
     const lists = { before: list, after: list, exceptions: { before: [], after: [] } };
     const effects = axisEffects([match(row)], [match(row, after)], lists, new Map([['p', trashable]]));
-    expect(effects.leaves.map((c) => [c.side, c.fromDescription])).toEqual([['form', 'a screenshot of a chat']]);
-    expect(axisCaption(effects.leaves[0]!, lists).map((part) => part.text).join('')).toBe('Screenshots → Screenshots, too close');
+    expect(effects.leaves.map((c) => [c.side, c.fromDescription])).toEqual([[{ check: 'Screenshots' }, 'a screenshot of a chat']]);
+    // Products still offers it: the caption names every category that does, the check's own outcome in brackets (2026-11-25).
+    expect(axisCaption(effects.leaves[0]!, lists).map((part) => part.text).join('')).toBe('Products, Screenshots → Products (Screenshots, too close)');
     // The buff left it just under the minimum lead: Stay needs only the smallest step to bring it back.
     expect(axisStayRaise(row, formScored, free(formScored), after, [], 3, 'a screenshot of a chat', 0.2)).toBe(0.0001);
     // Products, the content, is clutter all along: no change on that side.
     expect(effects.leaves.filter((c) => c.side === 'content')).toEqual([]);
+  });
+});
+
+describe('checks: each a competition of its own', () => {
+  // People (keep) | Shops (neutral) | Screenshots check: Screenshots (clutter), Not a screenshot (neutral) |
+  // Poor quality check: Accidental shots (clutter), Night lights (neutral).
+  const people = cat('people', 'subject', 'keep', ['a selfie']);
+  const shops = cat('shops', 'setting', 'neutral', ['a supermarket aisle']);
+  const shots = { ...cat('screenshots', 'form', 'clutter', ['a phone screenshot']), check: 'Screenshots' };
+  const notShots = { ...cat('photos', 'form', 'neutral', ['a photo of a room']), label: 'Not a screenshot', check: 'Screenshots' };
+  const accidental = { ...cat('accidental', 'form', 'clutter', ['a blurry photo']), label: 'Accidental shots', check: 'Poor quality' };
+  const night = { ...cat('night', 'form', 'neutral', ['city lights at night']), label: 'Night lights', check: 'Poor quality' };
+  const list = [people, shops, shots, notShots, accidental, night];
+  const scored: ScoredAxis[] = list.map((category, i) => ({ category, vectors: [v(...list.map((_, j) => (i === j ? 1 : 0)))] }));
+  const match = (row: Float32Array) => matchAxes('p', row, scored, free(scored), settings);
+
+  it('decides each check apart: a photo can be in two, and a counterweight holds back its own check only', () => {
+    expect(checksOf(list)).toEqual(['Screenshots', 'Poor quality']);
+    // A blurry screenshot: both checks offer it.
+    const both = match(v(0.3, 0.3, 0.7, 0.6, 0.7, 0.6));
+    expect(checkOutcomes(both, list).map((o) => o.reason)).toEqual(['Screenshots is clutter', 'Accidental shots is clutter']);
+    expect(axisBreakdown(v(0.7, 0.3, 0.7, 0.6, 0.7, 0.6), scored, free(scored), settings, [], 2).outcome).toBe('Offered by its checks: Screenshots, Accidental shots · subject and setting: People keeps');
+    // Not a screenshot high: it holds back Screenshots, not Accidental shots; before checks, the higher of the two forms took the photo.
+    const room = match(v(0.3, 0.3, 0.6, 0.75, 0.7, 0.6));
+    expect(checkOutcomes(room, list).map((o) => o.reason)).toEqual(['Not a screenshot', 'Accidental shots is clutter']);
+    // Night lights high: it holds back Accidental shots only.
+    expect(checkOutcomes(match(v(0.3, 0.3, 0.7, 0.6, 0.6, 0.65)), list).map((o) => o.reason)).toEqual(['Screenshots is clutter', 'Night lights']);
+    // Counted in each, offered once in the totals.
+    const counts = countAxes([both], list, [], new Map([['p', trashable]]), settings);
+    expect(counts.forms.map((c) => [c.category.id, c.trashable.length])).toEqual([['screenshots', 1], ['accidental', 1]]);
+    expect(counts.totals).toBe('Clutter 0 (0%) · kept 1 (100%) · neither 0 (0%) · and clutter in a check 1 (100%)');
+    // Its outcome lines: the checks' results apart by dots, since a result has commas of its own ("…, too close").
+    expect(axisBreakdown(v(0.3, 0.3, 0.7, 0.6, 0.7, 0.6), scored, free(scored), settings, [], 2).lines).toEqual(['People keeps', 'Screenshots check: Screenshots is clutter · Poor quality check: Accidental shots is clutter']);
+    // The breakdown has a side per check.
+    expect(axisBreakdown(v(0.3, 0.3, 0.7, 0.6, 0.7, 0.6), scored, free(scored), settings, [], 2).sides.map((s) => s.name)).toEqual(['Subject', 'Setting', 'Screenshots check', 'Poor quality check']);
+  });
+
+  it('buffs only its own check\u2019s counterweights, and a change tells each check apart', () => {
+    const row = v(0.3, 0.3, 0.7, 0.6, 0.7, 0.6);
+    expect(axisBuffsFor(row, scored, free(scored), settings, [], { check: 'Poor quality' }, 0.2).map((b) => b.label)).toEqual(['Night lights']);
+    expect(axisBuffsFor(row, scored, free(scored), settings, [], { check: 'Screenshots' }, 0.2).map((b) => b.label)).toEqual(['Not a screenshot']);
+    // Accidental shots moved out of Poor quality into Screenshots: there it competes with Screenshots, which is higher.
+    const moved = list.map((c) => (c.id === 'accidental' ? { ...c, check: 'Screenshots' } : c));
+    const movedScored: ScoredAxis[] = moved.map((category, i) => ({ category, vectors: scored[i]!.vectors }));
+    const after = matchAxes('p', v(0.3, 0.3, 0.72, 0.6, 0.7, 0.6), movedScored, free(movedScored), settings);
+    const before = matchAxes('p', v(0.3, 0.3, 0.72, 0.6, 0.7, 0.6), scored, free(scored), settings);
+    const effects = axisEffects([before], [after], { before: list, after: moved, exceptions: { before: [], after: [] } }, new Map([['p', trashable]]));
+    expect(effects.leaves.map((c) => c.side)).toEqual([{ check: 'Poor quality' }]);
+    expect(effects.joins).toEqual([]);
+  });
+
+  it('follows a form into a check of another name: still offered is no change, and the comparison pairs the checks', () => {
+    // Before checks had names: all four forms in one, "Form", where the higher of Screenshots and Accidental shots took the photo.
+    const one = list.map((c) => (c.axis === 'form' ? { ...c, check: 'Form' } : c));
+    const oneScored: ScoredAxis[] = one.map((category, i) => ({ category, vectors: scored[i]!.vectors }));
+    const row = v(0.3, 0.3, 0.75, 0.6, 0.7, 0.6);
+    const [before, after] = [matchAxes('p', row, oneScored, free(oneScored), settings), match(row)];
+    const effects = axisEffects([before], [after], { before: one, after: list, exceptions: { before: [], after: [] } }, new Map([['p', trashable]]));
+    // Screenshots offers it in both: no change. Accidental shots, apart now, offers it too: it joins.
+    expect(effects.leaves).toEqual([]);
+    expect(effects.moves).toEqual([]);
+    expect(effects.joins.map((c) => [c.side, c.before.verdict, c.after.reason])).toEqual([[{ check: 'Poor quality' }, 'none', 'Accidental shots is clutter']]);
+    // Screenshots offered it all along: its caption says so, not "not suggested".
+    const lists = { before: one, after: list, exceptions: { before: [], after: [] } };
+    expect(axisCaption(effects.joins[0]!, lists).map((p) => p.text).join('')).toBe('Screenshots → Screenshots, Accidental shots');
+    // The comparison: the Form check pairs with both checks it was split into, named before and after.
+    const input = (sc: ScoredAxis[], r = row) => ({ row: r, scored: sc, overlap: free(sc), settings, exceptions: [] });
+    const c = axisComparison(input(oneScored), input(scored), ['Now', 'With the edits'], 3);
+    expect(c.changed.map((x) => x.title)).toEqual([
+      'Screenshots check: Screenshots counts, unchanged',
+      'Poor quality check: Accidental shots counts; was Screenshots counts',
+    ]);
+    // Its line before is another check's, so it says which.
+    expect(c.changed.map((x) => x.before.split(':')[0])).toEqual(['in the Form check', 'in the Form check']);
+    // Each shows its check's whole scoring with the edits, and the Form check's before.
+    expect(c.changed.map((x) => x.rows.map((r) => r.label))).toEqual([['Screenshots', 'Not a screenshot'], ['Accidental shots', 'Night lights']]);
+    expect(c.changed[0]!.beforeRows.map((r) => r.label)).toEqual(['Screenshots', 'Accidental shots', 'Not a screenshot']);
+    // A check gone altogether is named, not left out.
+    const noChecks = list.filter((x) => x.axis !== 'form');
+    const noScored: ScoredAxis[] = noChecks.map((category, i) => ({ category, vectors: [v(...noChecks.map((_, j) => (i === j ? 1 : 0)))] }));
+    const g = axisComparison(input(oneScored), input(noScored, v(0.3, 0.3)), ['Now', 'With the edits'], 3);
+    expect(g.changed.map((x) => [x.title, x.after])).toEqual([['Form check: Screenshots counts; gone with the edits', 'none']]);
   });
 });
 
@@ -447,7 +594,7 @@ describe('pooling, where descriptions that overlap share a vote', () => {
     const b = axisBreakdown(skyline, poolScored, alike, pooling, [], 3);
     expect(b.outcome).toBe('Kept: Views keeps (close to the top)');
     // Pooled, Tools leads by only 0.0173: too close to count, and Views is heard.
-    expect(b.sides[0]!.title).toBe(`Subject: Tools, ${leadText(0.66 - (0.63 + 0.02 * Math.log(1 + 0.1 + Math.exp(-0.25))))} ahead of Views (pooled 0.660 against 0.643) · too close, no say · Views close behind, keeps`);
+    expect(b.sides[0]!.title).toBe(`Subject: Tools, ${leadText(0.66 - (0.63 + 0.02 * Math.log(1 + 0.1 + Math.exp(-0.25))))} ahead of Views (pooled; needs 0.02) · too close, no say · Views close behind, keeps`);
     // Views scores as its best description, a city view, which votes 1; Sights' landmark 0.78.
     expect(b.sides[0]!.rows.map((r) => [r.label, r.vote])).toEqual([['Tools', '1.00'], ['Views', '1.00'], ['Sights', '0.78']]);
     // No pooling, no votes.
@@ -508,12 +655,12 @@ describe('the floor: clutter must score clearly above “a photo”', () => {
     expect(verdict(v(0.66, 0.5, 0.6, 0.61), floored)).toBe('clutter');
     // A keeper is never held back by the floor.
     expect(verdict(v(0.5, 0.62, 0.6, 0.61), floored)).toBe('keep');
-    expect(axisBreakdown(weak, s4, apart(4), floored, [], 2).sides[0]!.title).toBe('Subject: Products, 0.1200 ahead of People · 0.0100 above “a photo”, needs 0.02 · below the floor, no say');
+    expect(axisBreakdown(weak, s4, apart(4), floored, [], 2).sides[0]!.title).toBe('Subject: Products, 0.1200 ahead of People (needs 0.02) · 0.0100 above “a photo”, needs 0.02 · below the floor, no say');
   });
 
   it('gives the baseline no side of its own, and refuses a floor with no baseline in the list', () => {
     const m = matchAxes('p', v(0.62, 0.5, 0.6, 0.61), s4, apart(4), settings);
-    expect(Object.keys(m)).toEqual(['mediaKey', 'subject', 'setting', 'form']);
+    expect(Object.keys(m)).toEqual(['mediaKey', 'subject', 'setting', 'checks']);
     expect(() => matchAxes('p', v(0.62, 0.5, 0.6), s4.slice(0, 3), apart(3), floored)).toThrow('The floor needs a baseline description');
     expect(floorProblem({ raw: floored, evened: PLAIN_AXIS_SETTINGS.evened }, list.slice(0, 3))).toBe('The floor is on (raw), and needs a baseline description such as “a photo”: keep one, or turn the floor off first.');
     expect(floorProblem({ raw: floored, evened: PLAIN_AXIS_SETTINGS.evened }, list)).toBeNull();
@@ -536,7 +683,8 @@ describe("the page's saved settings, one set per scoring", () => {
   it('reads settings saved before evening out as the raw ones, with no pooling or floor, and says so', () => {
     const old = { subject: { minScore: 0, margin: 0.04 }, setting: { minScore: 0, margin: 0.02 }, form: { minScore: 0, margin: 0.02 }, margins: { repairs: 0.04 }, categoryWeights: {}, descriptionWeights: { 'a selfie': 0.01 } };
     const { tuning, notes } = readAxisTuning(JSON.stringify(old), list);
-    expect(tuning).toEqual({ scoring: 'raw', settings: { raw: { ...old, pooling: 0, baseline: null }, evened: PLAIN_AXIS_SETTINGS.evened } });
+    // The evened-out ones start as shipped (plain until 2026-11-26, when the page's were shipped).
+    expect(tuning).toEqual({ scoring: 'raw', settings: { raw: { ...old, pooling: 0, baseline: null }, evened: STARTING_AXIS_SETTINGS.evened } });
     expect(notes).toEqual(['The settings were saved before evening out came to subject and setting: they are the raw settings now, and the evened-out ones start afresh.']);
   });
 
@@ -568,6 +716,60 @@ describe('editing subjects and settings', () => {
       ['custom-faces', 'subject', 'keep', 'counterweight'],
     ]);
     expect(listChanges(categories, list)).toEqual(['Repairs is now a setting', 'Shops is now clutter', 'Added subject Faces (keep)']);
+  });
+
+  it('gives a form clutter or neutral only: forms are a system apart, where keep means nothing', () => {
+    expect(verdictsFor('subject')).toEqual(['clutter', 'keep', 'neutral']);
+    expect(verdictsFor('setting')).toEqual(['clutter', 'keep', 'neutral']);
+    expect(verdictsFor('form')).toEqual(['clutter', 'neutral']);
+    expect(verdictsFor('baseline')).toEqual(['neutral']);
+    // The picker offers what the axis allows, and a verdict it doesn't allow while it is still there.
+    expect(verdictChoices('form', 'neutral')).toEqual(['clutter', 'neutral']);
+    expect(verdictChoices('form', 'keep')).toEqual(['clutter', 'neutral', 'keep']);
+    // A keeper made a form is named at Save, not put right silently; and a kept list with a keep form is refused.
+    const draft = setAxis(draftOf(categories), 'people', 'form');
+    expect(draftProblems(draft)).toContain('People is a form, which offers a photo or holds others back, apart from subjects and settings: make it clutter or neutral.');
+    expect(readAxisList(JSON.stringify({ categories: listOf(draft).list, exceptions: [] }), { categories, exceptions: [] }).notes[0]).toContain('People is a form');
+  });
+
+  it('puts each form in a check, keeps it through saving, and says what moved between checks', () => {
+    const shots = { ...cat('screenshots', 'form', 'clutter', ['a phone screenshot']), check: 'Screenshots' };
+    const notShots = { ...cat('photos', 'form', 'neutral', ['a photo of a room']), check: 'Screenshots' };
+    const withForms = [...categories, shots, notShots];
+    let draft = draftOf(withForms);
+    expect(draftChecks(draft)).toEqual(['Screenshots']);
+    // A subject made a form joins the list's first check; a new name starts a check of its own; a new form joins the list's first.
+    draft = setAxis(draft, 'repairs', 'form');
+    draft = setCheck(draft, 'repairs', 'Poor quality');
+    draft = addAxisCategory(draft, 'Night', 'form', 'neutral');
+    expect(draft.filter((c) => c.axis === 'form').map((c) => [c.id, c.check])).toEqual([['repairs', 'Poor quality'], ['screenshots', 'Screenshots'], ['photos', 'Screenshots'], ['custom-night', 'Poor quality']]);
+    // A check named when adding: the new form goes there; a new name starts a check.
+    const named = addAxisCategory(draft, 'Sharp', 'form', 'neutral', ' Screenshots ');
+    expect(named.find((c) => c.id === 'custom-sharp')!.check).toBe('Screenshots');
+    expect(addAxisCategory(draft, 'Memes', 'form', 'clutter', 'Forwarded').find((c) => c.id === 'custom-memes')!.check).toBe('Forwarded');
+    expect(draftChecks(addAxisCategory(draft, 'Memes', 'form', 'clutter', 'Forwarded'))).toContain('Forwarded');
+    expect(draftSections(draft, { subject: 'S', setting: 'T', baseline: 'B' }).map((x) => [x.key, x.categories.map((c) => c.id)])).toEqual([
+      ['subject', ['products', 'people', 'food']],
+      ['setting', ['shops', 'museums', 'carparks']],
+      ['check Poor quality', ['repairs', 'custom-night']],
+      ['check Screenshots', ['screenshots', 'photos']],
+      ['baseline', []],
+    ]);
+    const { list } = listOf(draft);
+    expect(list.find((c) => c.id === 'repairs')).toMatchObject({ axis: 'form', check: 'Poor quality' });
+    // Only forms carry a check.
+    expect(list.find((c) => c.id === 'products')).not.toHaveProperty('check');
+    expect(listChanges(withForms, list)).toEqual(['Repairs is now a form in the Poor quality check', 'Added form Night (neutral) in the Poor quality check']);
+    expect(listChanges(withForms, listOf(setCheck(draftOf(withForms), 'photos', 'Other')).list)).toEqual(['Photos is now in the Other check']);
+    expect(isShipped(listOf(setCheck(draftOf(withForms), 'photos', 'Other')).list, withForms)).toBe(false);
+    // A check with no name is named at Save; only a form can be put in a check.
+    expect(draftProblems(setCheck(draftOf(withForms), 'photos', ' '))).toContain('Photos has no check: name the check it is in.');
+    expect(() => setCheck(draftOf(withForms), 'products', 'X')).toThrow('only forms are in a check');
+    // A list kept before checks: its forms are in one check, as they competed before; a check on a subject is refused.
+    const legacy = readAxisList(JSON.stringify({ categories: [...categories, cat('screenshots', 'form', 'clutter', ['a phone screenshot']), cat('photos', 'form', 'neutral', ['a photo of a room'])], exceptions: [] }), { categories, exceptions: [] });
+    expect([legacy.notes, checksOf(legacy.list.categories)]).toEqual([[], [DEFAULT_CHECK]]);
+    const odd = readAxisList(JSON.stringify({ categories: categories.map((c) => (c.id === 'products' ? { ...c, check: 'X' } : c)), exceptions: [] }), { categories, exceptions: [] });
+    expect(odd.notes[0]).toContain('isn’t a list of subjects and settings');
   });
 
   it('names what must be put right: both axes, some clutter, and exceptions that name what is there', () => {

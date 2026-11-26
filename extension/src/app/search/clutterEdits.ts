@@ -4,7 +4,7 @@
 // the edits as text, to make them permanent in clutterAxes.ts.
 
 import { withWeight, type Scoring } from './clutter';
-import { kindOf, type Axis, type AxisCategory, type AxisList, type AxisSettings, type AxisTuning, type PairException, type Verdict } from './clutterAxes';
+import { checkOf, checkTitle, DEFAULT_CHECK, kindOf, type Axis, type AxisCategory, type AxisList, type AxisSettings, type AxisTuning, type PairException, type Verdict } from './clutterAxes';
 
 /** A description being edited: its words, and what they were in the list the draft started from (null when added here). */
 export interface DraftDescription {
@@ -18,6 +18,8 @@ export interface DraftCategory {
   label: string;
   axis: Axis;
   verdict: Verdict;
+  /** A form's check ([AxisCategory.check]); null for a subject, setting or baseline. Kept while it is moved to another axis and back. */
+  check: string | null;
   descriptions: DraftDescription[];
 }
 
@@ -25,7 +27,7 @@ export type Draft = DraftCategory[];
 
 /** A draft of [list], to edit. */
 export function draftOf(list: readonly AxisCategory[]): Draft {
-  return list.map((c) => ({ id: c.id, label: c.label, axis: c.axis, verdict: c.verdict, descriptions: c.descriptions.map((text) => ({ text, was: text })) }));
+  return list.map((c) => ({ id: c.id, label: c.label, axis: c.axis, verdict: c.verdict, check: c.axis === 'form' ? checkOf(c) : null, descriptions: c.descriptions.map((text) => ({ text, was: text })) }));
 }
 
 /** The list a draft makes, and the descriptions reworded in it (the words before → after), so their weights carry over. */
@@ -37,6 +39,7 @@ export function listOf(draft: Draft): { list: AxisCategory[]; renames: Record<st
     kind: kindOf(c.verdict),
     axis: c.axis,
     verdict: c.verdict,
+    ...(c.axis === 'form' ? { check: (c.check ?? DEFAULT_CHECK).trim() } : {}),
     descriptions: c.descriptions.map((d) => {
       const text = d.text.trim();
       if (d.was !== null && d.was !== text) renames[d.was] = text;
@@ -113,9 +116,53 @@ export function renameCategory(draft: Draft, id: string, label: string): Draft {
   return changed(draft, id, (c) => ({ ...c, label }));
 }
 
-/** A draft's category made [axis]: what a photo is of, where it is, what kind of image, or a baseline. */
+/** A draft's category made [axis]: what a photo is of, where it is, what kind of image, or a baseline. A verdict the axis can't have is named at Save ([draftProblems]). */
 export function setAxis(draft: Draft, id: string, axis: Axis): Draft {
-  return changed(draft, id, (c) => ({ ...c, axis }));
+  return changed(draft, id, (c) => ({ ...c, axis, check: axis === 'form' && c.check === null ? firstCheck(draft) : c.check }));
+}
+
+/** The check a form joins when none is named: the list's first, or [DEFAULT_CHECK]. */
+function firstCheck(draft: Draft): string {
+  return draft.find((c) => c.axis === 'form' && c.check !== null)?.check ?? DEFAULT_CHECK;
+}
+
+/** A draft's form put in the check named [check]: a new name starts a check of its own. */
+export function setCheck(draft: Draft, id: string, check: string): Draft {
+  const category = categoryIn(draft, id);
+  if (category.axis !== 'form') throw new Error(`${category.label} is a ${category.axis}: only forms are in a check`);
+  return changed(draft, id, (c) => ({ ...c, check }));
+}
+
+/** The checks of [draft]'s forms, in the order their first form comes. */
+export function draftChecks(draft: Draft): string[] {
+  return [...new Set(draft.filter((c) => c.axis === 'form').map((c) => c.check ?? DEFAULT_CHECK))];
+}
+
+/** The editor's parts: subjects, settings, each check's forms, the baseline. */
+export function draftSections(draft: Draft, headings: Record<'subject' | 'setting' | 'baseline', string>): { key: string; axis: Axis; title: string; categories: DraftCategory[] }[] {
+  const of = (axis: Axis) => draft.filter((c) => c.axis === axis);
+  const checks = draftChecks(draft);
+  return [
+    { key: 'subject', axis: 'subject', title: headings.subject, categories: of('subject') },
+    { key: 'setting', axis: 'setting', title: headings.setting, categories: of('setting') },
+    ...(checks.length === 0 ? [{ key: 'form', axis: 'form' as const, title: 'Checks: none yet', categories: [] }] : checks.map((check) => ({ key: `check ${check}`, axis: 'form' as const, title: checkTitle(check), categories: of('form').filter((c) => (c.check ?? DEFAULT_CHECK) === check) }))),
+    { key: 'baseline', axis: 'baseline', title: headings.baseline, categories: of('baseline') },
+  ];
+}
+
+/**
+ * The verdicts a category of [axis] may have. Forms are a system of their own, apart from subjects and
+ * settings: a form offers a photo (clutter) or is a counterweight (neutral), and keep means nothing there
+ * (2026-11-25). A baseline decides nothing.
+ */
+export function verdictsFor(axis: Axis): Verdict[] {
+  return axis === 'form' ? ['clutter', 'neutral'] : axis === 'baseline' ? ['neutral'] : ['clutter', 'keep', 'neutral'];
+}
+
+/** The verdicts to pick from for a category of [axis] that has [current]: those it may have, and [current] too when it may not, so it shows until it is changed ([draftProblems] names it). */
+export function verdictChoices(axis: Axis, current: Verdict): Verdict[] {
+  const allowed = verdictsFor(axis);
+  return allowed.includes(current) ? allowed : [...allowed, current];
 }
 
 /** A draft's category given [verdict]: clutter, keep or neutral; its kind follows. */
@@ -123,13 +170,16 @@ export function setVerdict(draft: Draft, id: string, verdict: Verdict): Draft {
   return changed(draft, id, (c) => ({ ...c, verdict }));
 }
 
-/** [draft] with a new category named [label] at the end of its axis, with an id of its own and no descriptions yet. */
-export function addAxisCategory(draft: Draft, label: string, axis: Axis, verdict: Verdict): Draft {
+/**
+ * [draft] with a new category named [label] at the end of its axis, with an id of its own and no descriptions yet.
+ * A form goes in [check], or when none is given the list's first check.
+ */
+export function addAxisCategory(draft: Draft, label: string, axis: Axis, verdict: Verdict, check: string | null = null): Draft {
   const base = `custom-${label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'category'}`;
   const ids = new Set(draft.map((c) => c.id));
   let id = base;
   for (let i = 2; ids.has(id); i++) id = `${base}-${i}`;
-  const category: DraftCategory = { id, label, axis, verdict, descriptions: [] };
+  const category: DraftCategory = { id, label, axis, verdict, check: axis === 'form' ? check?.trim() || firstCheck(draft) : null, descriptions: [] };
   const last = draft.map((c) => c.axis).lastIndexOf(axis);
   return last < 0 ? [...draft, category] : [...draft.slice(0, last + 1), category, ...draft.slice(last + 1)];
 }
@@ -149,7 +199,7 @@ export function withBaseline(draft: Draft): Draft {
   const same = (d: DraftDescription) => d.text.trim().toLowerCase() === BASELINE_DESCRIPTION;
   const moved = draft.flatMap((c) => c.descriptions.filter(same));
   const rest = draft.map((c) => ({ ...c, descriptions: c.descriptions.filter((d) => !same(d)) }));
-  return [...rest, { id, label: 'Any photo', axis: 'baseline', verdict: 'neutral', descriptions: moved.length > 0 ? [moved[0]!] : [{ text: BASELINE_DESCRIPTION, was: null }] }];
+  return [...rest, { id, label: 'Any photo', axis: 'baseline', verdict: 'neutral', check: null, descriptions: moved.length > 0 ? [moved[0]!] : [{ text: BASELINE_DESCRIPTION, was: null }] }];
 }
 
 /**
@@ -177,6 +227,8 @@ export function draftProblems(draft: Draft): string[] {
     else labels.set(label.toLowerCase(), (labels.get(label.toLowerCase()) ?? 0) + 1);
     if (c.descriptions.length === 0) problems.push(`${label || 'A category'} has no descriptions.`);
     if (c.axis === 'baseline' && c.verdict !== 'neutral') problems.push(`${label || 'A baseline'} is a baseline, which decides nothing: make it neutral.`);
+    if (c.axis === 'form' && (c.check ?? DEFAULT_CHECK).trim() === '') problems.push(`${label || 'A form'} has no check: name the check it is in.`);
+    if (c.axis === 'form' && !verdictsFor('form').includes(c.verdict)) problems.push(`${label || 'A form'} is a form, which offers a photo or holds others back, apart from subjects and settings: make it clutter or neutral.`);
     for (const d of c.descriptions) {
       const text = d.text.trim();
       if (text === '') {
@@ -217,7 +269,7 @@ export function exceptionProblems(draft: Draft, exceptions: readonly PairExcepti
 
 /** Whether [list] is the same as [shipped]: the same categories, names, axes, verdicts and descriptions, in the same order. */
 export function isShipped(list: readonly AxisCategory[], shipped: readonly AxisCategory[]): boolean {
-  const form = (l: readonly AxisCategory[]) => JSON.stringify(l.map((c) => [c.id, c.label, c.axis, c.verdict, c.descriptions]));
+  const form = (l: readonly AxisCategory[]) => JSON.stringify(l.map((c) => [c.id, c.label, c.axis, c.verdict, c.axis === 'form' ? checkOf(c) : null, c.descriptions]));
   return form(list) === form(shipped);
 }
 
@@ -234,10 +286,12 @@ export function listChanges(from: readonly AxisCategory[], list: readonly AxisCa
   const homeAfter = new Map(list.flatMap((c) => c.descriptions.map((d) => [d, c] as const)));
   for (const c of list) {
     const was = before.get(c.id);
-    if (!was) lines.push(`Added ${c.axis} ${c.label} (${c.verdict})`);
+    const check = c.axis === 'form' ? checkOf(c) : null;
+    if (!was) lines.push(`Added ${c.axis} ${c.label} (${c.verdict})${check === null ? '' : ` in the ${check} check`}`);
     else {
       if (was.label !== c.label) lines.push(`Renamed ${was.label} to ${c.label}`);
-      if (was.axis !== c.axis) lines.push(`${c.label} is now a ${c.axis}`);
+      if (was.axis !== c.axis) lines.push(`${c.label} is now a ${c.axis}${check === null ? '' : ` in the ${check} check`}`);
+      else if (check !== null && checkOf(was) !== check) lines.push(`${c.label} is now in the ${check} check`);
       if (was.verdict !== c.verdict) lines.push(`${c.label} is now ${c.verdict}`);
     }
   }
@@ -377,7 +431,7 @@ export function readAxisList(text: string | null, shipped: AxisList): { list: Ax
   }
   const isCategory = (c: unknown): c is AxisCategory => {
     const x = c as Partial<AxisCategory> | null;
-    return typeof x === 'object' && x !== null && typeof x.id === 'string' && typeof x.label === 'string' && AXES.includes(x.axis as Axis) && (x.verdict === 'clutter' || x.verdict === 'keep' || x.verdict === 'neutral') && x.kind === kindOf(x.verdict) && Array.isArray(x.descriptions) && x.descriptions.every((d) => typeof d === 'string');
+    return typeof x === 'object' && x !== null && typeof x.id === 'string' && typeof x.label === 'string' && AXES.includes(x.axis as Axis) && (x.verdict === 'clutter' || x.verdict === 'keep' || x.verdict === 'neutral') && x.kind === kindOf(x.verdict) && Array.isArray(x.descriptions) && x.descriptions.every((d) => typeof d === 'string') && (x.check === undefined || (x.axis === 'form' && typeof x.check === 'string'));
   };
   const isException = (e: unknown): e is PairException => {
     const x = e as Partial<PairException> | null;

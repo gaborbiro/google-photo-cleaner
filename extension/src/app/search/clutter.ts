@@ -348,7 +348,9 @@ export interface ChangeSummary {
 /** A piece of a caption, with the kind of category it names (null when it names none), so the page can colour keepers. */
 export interface CaptionPart {
   text: string;
-  kind: CategoryKind | null;
+  kind: CategoryKind | 'neutral' | null;
+  /** A description: shown apart, as everywhere on the developer page. */
+  term?: boolean;
   /** Shown bold: where a photo goes ("Products → kept (People)"). */
   strong?: boolean;
 }

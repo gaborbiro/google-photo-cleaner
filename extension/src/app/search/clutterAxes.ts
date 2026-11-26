@@ -11,7 +11,9 @@
 // A third side, FORM, says what kind of image it is (Screenshots, against Not a screenshot), apart from
 // what it shows: it doesn't touch keep or clutter, and a form that is clutter is a suggestion of its own,
 // so a screenshot of a receipt is in Screenshots and in Receipts (2026-11-20: "a phone screenshot", as a
-// setting, made a friend holding a phone at a bar clutter).
+// setting, made a friend holding a phone at a bar clutter). Forms are in CHECKS (2026-11-25): each check is a
+// competition of its own (Screenshots against Not a screenshot), so a photo can be in two checks, and a
+// counterweight holds back its own check only.
 // Decided 2026-11-20; see docs/cleanup-roadmap.md.
 // 2026-11-21: scores raw or evened out (each scoring with its own settings); pooling, where descriptions
 // that rise and fall together across the library share one vote ([Overlap]); and a floor: clutter must
@@ -41,7 +43,7 @@ import {
 
 /** baseline: no verdict and no side of its own; what any photo scores, for the floor ([AxisSettings.baseline]). */
 export type Axis = 'subject' | 'setting' | 'form' | 'baseline';
-/** The two sides whose verdicts decide keep or clutter; form is decided on its own ([formOutcome]). */
+/** The two sides whose verdicts decide keep or clutter; forms are decided in their checks ([checkOutcome]). */
 export type ContentAxis = 'subject' | 'setting';
 export type Verdict = 'clutter' | 'keep' | 'neutral';
 
@@ -49,7 +51,33 @@ export type Verdict = 'clutter' | 'keep' | 'neutral';
 export interface AxisCategory extends Category {
   axis: Axis;
   verdict: Verdict;
+  /**
+   * A form's check: the forms of one check compete among themselves only, apart from subjects, settings and
+   * other checks (2026-11-25: a photo can be a screenshot and an accidental shot; Not a screenshot holds
+   * back Screenshots only). Missing on a form kept before checks existed: [DEFAULT_CHECK]. Only on forms.
+   */
+  check?: string;
 }
+
+/** The check of a form saved before checks existed: they all competed in one, as they do in it. */
+export const DEFAULT_CHECK = 'Form';
+
+/** The check a form belongs to. */
+export function checkOf(category: AxisCategory): string {
+  if (category.axis !== 'form') throw new Error(`${category.label} is a ${category.axis}, not in a check`);
+  return category.check ?? DEFAULT_CHECK;
+}
+
+/** The checks of [categories], in the order their first form comes. */
+export function checksOf(categories: readonly AxisCategory[]): string[] {
+  return [...new Set(categories.filter((c) => c.axis === 'form').map(checkOf))];
+}
+
+/** Where a photo's outcome is decided: by subject and setting ('content'), or in one check. */
+export type Side = 'content' | { check: string };
+
+/** The side [category]'s photos are decided on. */
+export const sideOf = (category: AxisCategory): Side => (category.axis === 'form' ? { check: checkOf(category) } : 'content');
 
 /** An exception to the rule for one exact pair: this subject in this setting is clutter, or kept. */
 export interface PairException {
@@ -68,7 +96,7 @@ export const kindOf = (verdict: Verdict): CategoryKind => (verdict === 'clutter'
 
 const subject = (id: string, label: string, verdict: Verdict, descriptions: string[]): AxisCategory => ({ id, label, kind: kindOf(verdict), axis: 'subject', verdict, descriptions });
 const setting = (id: string, label: string, verdict: Verdict, descriptions: string[]): AxisCategory => ({ id, label, kind: kindOf(verdict), axis: 'setting', verdict, descriptions });
-const form = (id: string, label: string, verdict: Verdict, descriptions: string[]): AxisCategory => ({ id, label, kind: kindOf(verdict), axis: 'form', verdict, descriptions });
+const form = (check: string, id: string, label: string, verdict: Verdict, descriptions: string[]): AxisCategory => ({ id, label, kind: kindOf(verdict), axis: 'form', verdict, descriptions, check });
 const baseline = (id: string, label: string, descriptions: string[]): AxisCategory => ({ id, label, kind: 'counterweight', axis: 'baseline', verdict: 'neutral', descriptions });
 
 /**
@@ -83,6 +111,9 @@ const baseline = (id: string, label: string, descriptions: string[]): AxisCatego
  * a hand"); no "a photo of the floor" or "of a ceiling" (they matched church interiors and frescoes).
  * 2026-11-23: tuned on the developer page against 999 labels, 266 of them random (lab e01–e37, docs/clutter-lab.md):
  * random precision 97.9%, recall 52.3%. Before a second library has been checked (docs/clutter-rules.md).
+ * 2026-11-26: the developer page's list after a week of labelling against the rule book (docs/clutter-rules.md):
+ * Architecture and interiors and Outfits and looks keep, Accidental shots a form against Intended photos, landmarks
+ * seen as views.
  */
 export const AXIS_LIST: AxisList = {
   categories: [
@@ -99,7 +130,7 @@ export const AXIS_LIST: AxisList = {
     ]),
     subject('menus', 'Menus', 'clutter', ['a restaurant menu', 'a menu board in a cafe']),
     subject('tickets', 'Tickets and passes', 'clutter', ['a paper ticket', 'a printed boarding pass', 'a boarding pass on a phone screen', 'a paper train ticket', 'an event ticket']),
-    subject('products', 'Products', 'clutter', ['a product on a shop shelf', 'a price tag', 'a product label', 'product packaging', 'groceries in a shop']),
+    subject('products', 'Products', 'clutter', ['a product on a shop shelf', 'a price tag', 'a product label', 'product packaging', 'groceries in a shop', 'a product displayed in a store']),
     // Things at home (labels, lab r16): photos of an object held up or set on a table, to show someone, to buy it
     // again or to give it away. Most people take these; "household items around the home" held them back as
     // neutral. 11 more found for 1 more wrong in 783 labels. 2026-11-23: Everyday objects (neutral) folded in,
@@ -107,7 +138,8 @@ export const AXIS_LIST: AxisList = {
     subject('homeitems', 'Things to buy, sell or show', 'clutter', [
       'a single object on a table, photographed to show someone', 'an almost empty bottle or packet', 'an item laid out to be sold online',
       'a charger, cable or battery pack', 'a household product photographed at home', 'a tool on a workbench', 'tools laid out for a repair',
-      'furniture in a room', 'kitchen appliances', 'household items around the home', 'a bookshelf full of books',
+      // No "a bookshelf full of books" (2026-11-26): it took bookshops and libraries.
+      'furniture in a room', 'kitchen appliances', 'household items around the home',
     ]),
     // Flat viewings and moving (labels, lab r21): rooms photographed to compare flats or to show the state of a
     // place when moving in or out, and the boxes and vans of a move; once the move is done they're clutter.
@@ -132,40 +164,42 @@ export const AXIS_LIST: AxisList = {
       'a meme with text', 'a cartoon', 'a motivational quote image', 'a greeting image with text', 'a funny picture from the internet',
       'a cartoon image with a caption', 'text written over a picture', 'a greeting card image with flowers and text', 'a joke picture with a punchline',
     ]),
-    subject('accidental', 'Accidental shots', 'clutter', ['a blurry photo taken by accident', 'a dark photo with nothing visible']),
     // A person on stairs (lab r16): Things at home took a person on a staircase at home.
     // A person in a room, holding up a picture (lab r22d): Flat viewings took a person in a kitchen and one holding
     // a framed picture in a show flat. 3 fewer wrong for 8 less clutter found in 561 labels.
-    // An audience, a person at a desk (lab r9, raw scores): people in a wide shot lost to what was in front of
-    // them, audiences at talks went to Whiteboards and people at their desks to Screen photos. "A person working
-    // at a desk" also keeps desk setups with nobody in them: the safe side, to refine later.
+    // An audience (lab r9, raw scores): people in a wide shot lost to what was in front of them, audiences at talks
+    // went to Whiteboards. "A person working at a desk" kept desk setups with nobody in them; "a person working"
+    // and "friends working together" keep the people without the desks (2026-11-26).
     subject('people', 'People', 'keep', [
       'a portrait of a person', 'a group of people smiling', 'a selfie', 'people at a party', 'a couple together', 'a family photo', 'friends together', 'photo of a person holding a phone',
-      'a mirror selfie', 'grandparents with their grandchildren', 'people sharing a meal', 'people dancing', 'a pregnant belly', 'an audience at a talk or show', 'a person working at a desk',
+      'a mirror selfie', 'grandparents with their grandchildren', 'people sharing a meal', 'people dancing', 'a pregnant belly', 'an audience at a talk or show',
       'a person on stairs or in a hallway', 'a person standing in a room at home', 'a person holding up a picture or poster',
       // 2026-11-23 (lab e03): people at a meal or a café went to Food and drink and Things to buy; a person on a
       // train or posing by a car went to Transport and Vehicles.
       'a person eating or drinking', 'a selfie with a drink or food', 'friends at a table in a cafe or restaurant', 'a person sitting alone at a cafe table',
       'a person sitting on a train or bus', 'a person posing next to a car',
+      'friends working together', 'a person working',
     ]),
     // "A child using a tablet or computer": children at computers went to Photos of screens. "In a shopping trolley" (lab e03): to Products.
     subject('children', 'Children', 'keep', [
       'a baby', 'a child playing', 'a toddler', 'children at a birthday party', "a child's drawing", 'a child using a tablet or computer', 'a child in school uniform', 'a school play or performance',
       'a child in a shopping trolley',
     ]),
-    subject('celebrations', 'Celebrations (subject)', 'keep', [
+    subject('celebrations', 'Festive things', 'keep', [
       'a birthday cake with candles', 'a decorated Christmas tree', 'wrapped presents', 'balloons and party decorations', 'a wedding cake', 'fireworks in the night sky',
       'a Halloween costume or carved pumpkin', 'people raising glasses in a toast', 'festival lights and lanterns', 'painted Easter eggs',
     ]),
     subject('animals', 'Pets and animals', 'keep', ['a dog', 'a cat', 'a pet', 'a bird', 'an animal', 'a horse', 'farm animals', 'fish in an aquarium', 'a butterfly or insect']),
-    subject('journeys', 'Travel (subject)', 'keep', ['a view from a train window', 'a view from an airplane window', 'a meal on a tray table on a plane or train', 'a view from a ship or ferry', 'a road trip through open country']),
-    // Views are what a photo is of: as a setting, "a landscape" crowded out the landmark in a skyline.
-    subject('views', 'Views and scenery', 'keep', [
+    subject('journeys', 'Journeys', 'keep', ['a view from a train window', 'a view from an airplane window', 'a meal on a tray table on a plane or train', 'a view from a ship or ferry', 'a road trip through open country']),
+    // Views are what a photo is of: as a setting, "a landscape" crowded out the landmark in a skyline. A famous
+    // landmark is seen as a view (2026-11-26), not as art.
+    subject('views', 'Views, scenery and landmarks', 'keep', [
       'a city skyline', 'a view over a river or harbour', 'a view from a high viewpoint', 'a landscape', 'a sunset', 'an aerial view from above', 'city lights at night', 'a starry night sky', 'a rainbow or dramatic clouds',
+      'a famous landmark',
     ]),
     // The fresco: the Sistine Chapel went to Signs, a painted ceiling to Accidental shots. The object on display: a museum warship's engine went to Things to fix.
-    subject('landmarks', 'Landmarks, sights and art', 'keep', [
-      'a famous landmark', 'a historic monument or statue', 'art in a museum', 'a sculpture', 'a painted ceiling or fresco', 'stained glass windows', 'street art or a mural', 'a historic object on display',
+    subject('landmarks', 'Monuments and art', 'keep', [
+      'a historic monument or statue', 'art in a museum', 'a sculpture', 'a painted ceiling or fresco', 'stained glass windows', 'street art or a mural', 'a historic object on display',
     ]),
     subject('hobbies', 'Hobbies and things made', 'keep', ['a handmade craft project', 'knitting or sewing', 'a painting or drawing in progress', 'a Lego or model build', 'a musical instrument', 'a board game being played']),
     subject('memories', 'Old photos and keepsakes', 'keep', [
@@ -179,24 +213,30 @@ export const AXIS_LIST: AxisList = {
     // Neutral, not keep: greeting images with flowers are memes.
     subject('plants', 'Plants and flowers', 'neutral', ['a flower in bloom', 'a bouquet of flowers', 'a houseplant', 'a tree in blossom']),
     subject('vehicles', 'Vehicles', 'neutral', ['a classic car', 'a motorbike', 'a boat', 'a bicycle', 'a train', 'an aeroplane']),
-    subject('clothes', 'Clothes and looks', 'neutral', ['clothes on a hanger', 'a pair of shoes', 'an outfit laid out', 'painted fingernails', 'jewellery or a watch']),
+    // Keep (2026-11-26): outfits and looks are a person's, people differ on them (docs/clutter-rules.md), and as
+    // neutral they let a clutter subject win. Clothes on a hanger, shoes and jewellery not worn are things in a shop.
+    // ("warn" as on the page, where it was measured; to correct with the next tuning.)
+    subject('clothes', 'Outfits and looks', 'keep', ['a pair of shoes warn', 'an outfit laid out', 'painted fingernails', 'jewellery or a watch warn']),
     subject('health', 'Health and body', 'neutral', ['a close-up of skin', 'an injury or bruise', 'a plaster cast or bandage']),
     // A subject for buildings (lab r8–r9): without one, shop fronts, station halls and buildings went to Signs and
     // Parking. Its own descriptions: "a shop front with its sign" stays a setting (Streets), whose places it
     // describes; taken from there, keep settings were heard on street photos instead.
     subject('buildings', 'Buildings and shop fronts', 'neutral', ['the front of a building', 'a station or airport hall', 'a shop front']),
+    // Striking interiors (2026-11-26, docs/clutter-rules.md): a museum's hall, a converted warehouse, a stylish bar.
+    // Not offices, coworking spaces or shopping centres. (Its id is the page's, which labels and weights name.)
+    subject('custom-architecture-and-interiors', 'Architecture and interiors', 'keep', ['a converted factory or warehouse venue', 'a striking venue', 'a cosy café interior', 'a stylish bar']),
     setting('carparks', 'Car parks', 'clutter', ['a car park', 'a multi-storey car park', 'an underground car park']),
     setting('shops', 'Shops', 'neutral', ['a supermarket aisle', 'inside a shop', 'a shopping centre', 'a street market']),
     setting('eating', 'Restaurants, cafés and bars', 'neutral', ['a cafe', 'inside a restaurant', 'a bar or pub']),
     // Neutral: tickets, boarding passes, timetables and warning lights are photographed here. Selfies and window views are kept by their subject.
     setting('transport', 'Transport and stations', 'neutral', ['inside a car', 'inside a train', 'inside an airplane cabin', 'an airport terminal', 'a train station platform', 'a bus stop']),
-    setting('travel', 'Travel (setting)', 'keep', ['a hotel room', 'a holiday resort', 'a cruise ship']),
+    setting('travel', 'Holidays and hotels', 'keep', ['a hotel room', 'a holiday resort', 'a cruise ship']),
     // The stone wall: old walls went to "a damaged wall". The cloister: a cloister corridor nearly went to Accidental shots.
     setting('heritage', 'Museums and historic places', 'keep', [
       'a museum room', 'an ancient building, ruin or stone wall', 'an art gallery', 'inside a cathedral or church', 'a temple, mosque or synagogue', 'a castle or palace', 'a historic old town', 'a cloister or monastery courtyard',
     ]),
     setting('nature', 'Nature', 'keep', ['a beach', 'mountains', 'a forest', 'a lake', 'a garden', 'a river or waterfall', 'the open sea', 'countryside and farmland', 'deep snow in winter', 'a desert', 'a park with trees']),
-    setting('occasions', 'Celebrations (setting)', 'keep', ['a wedding', 'a Christmas celebration', 'a family dinner', 'a graduation', 'a funeral', 'a baby shower', 'a christening or baptism', 'a religious festival']),
+    setting('occasions', 'Occasions', 'keep', ['a wedding', 'a Christmas celebration', 'a family dinner', 'a graduation', 'a funeral', 'a baby shower', 'a christening or baptism', 'a religious festival']),
     // "A water adventure" found every diving, snorkelling and fishing photo in Search; "underwater": a diver went to Accidental shots; the protest went to Signs.
     setting('adventures', 'Adventures and events', 'keep', [
       'an outdoor adventure', 'a water adventure', 'a sky adventure', 'a sports game', 'a concert', 'a party', 'a zoo', 'a playground', 'an art exhibition',
@@ -211,8 +251,15 @@ export const AXIS_LIST: AxisList = {
     // game", a TV "the open sea", and the keep setting kept it (2026-11-23, lab e35: random recall 44% → 52%).
     setting('closeup', 'Close-up, no clear place', 'neutral', ['a close-up of an object', 'an object filling the frame', 'a close-up of a screen']),
     // A form again (2026-11-21): as a setting, Screenshots won wherever no place fitted (selfies, hands, close-ups).
-    form('screenshots', 'Screenshots', 'clutter', [
+    form('Screenshots', 'screenshots', 'Screenshots', 'clutter', [
       'a phone screenshot', 'screenshot of a text message', 'a screenshot of a chat conversation', 'a screenshot of a web page', 'a screenshot of an app', 'a screenshot of a social media post', 'a screenshot of a computer desktop',
+    ]),
+    // Accidental shots, a form since 2026-11-26: whether a photo was taken on purpose is about the shot, not what
+    // it shows, so it is decided against Intended photos, not against the subjects (a blurred selfie is still a selfie).
+    form('Quality', 'accidental', 'Accidental shots', 'clutter', [
+      'a blurry photo taken by accident', 'a dark photo with nothing visible', 'an out of focus blurry photo', 'a motion-blurred photo, shaky camera', 'an almost completely black photo',
+      'a photo taken inside a pocket, dark and blurred', 'a finger covering the camera lens', 'a photo of the floor taken by accident', 'a photo of the ceiling taken by accident',
+      'a dark grainy photo where nothing can be made out',
     ]),
     // What the AI takes for a screenshot without being one. A phone in someone's hand; and (2026-11-21,
     // lab r1–r4, raw scores) camera photos of things, rooms and desks, which took the edge of Screenshots:
@@ -220,9 +267,13 @@ export const AXIS_LIST: AxisList = {
     // form side keepers don't stop it). With them its Riskiest held no photo anyone would keep; the cost, a
     // few real screenshots of posts at the very edge. "A screenshot of a news article" was tried for those
     // and dropped: it took photographed printed pages.
-    form('photos', 'Not a screenshot', 'neutral', [
+    form('Screenshots', 'photos', 'Not a screenshot', 'neutral', [
       'a person holding a phone', "a photo of a phone in someone's hand", 'people at a table with their phones', 'a photo taken with a camera',
       'a photo of a product in a shop', 'a close-up photo of an object', 'a photo of a room', 'people sitting at a computer', 'a laptop on a table',
+    ]),
+    form('Quality', 'custom-intended-photos', 'Intended photos', 'neutral', [
+      'a city lit up at night', 'a sharp, well-lit photo', 'a clear photo of people', 'a clear photo of a place', 'a clear photo of an object', 'an ordinary everyday photo',
+      'a person posing for the camera', 'people inside a room', 'the inside of a shop or office', 'a room with furniture', 'clear text',
     ]),
     baseline('baseline', 'Any photo', ['a photo', 'a picture']),
   ],
@@ -278,13 +329,16 @@ export const STARTING_AXIS_SETTINGS: Record<Scoring, AxisSettings> = {
     margins: {
       products: 0.005, documents: 0.01, viewings: 0.01, groceries: 0.01, codes: 0.01, menus: 0.01, receipts: 0.01, notes: 0.01, readings: 0.01, screens: 0.01,
       signs: 0.035, repairs: 0.035, parcels: 0.035,
+      // Accidental shots, a form since 2026-11-26, needs a clear lead over Intended photos.
+      accidental: 0.03,
     },
     categoryWeights: { products: 0.02, homeitems: 0.015, viewings: 0.015, screens: 0.01, memes: 0.005 },
     descriptionWeights: { 'a page of printed text': 0.0034, 'a child playing': 0.0335 },
     pooling: 0.02,
     baseline: null,
   },
-  evened: PLAIN_AXIS_SETTINGS.evened,
+  // Not in use (raw is): as left on the developer page (2026-11-26), for whoever tries evened-out scores next.
+  evened: { ...PLAIN_AXIS_SETTINGS.evened, margins: { products: 0.1 }, pooling: 0.3, baseline: 0.3 },
 };
 
 /** Where pooling starts when it is turned on, per scoring. */
@@ -440,8 +494,12 @@ export interface AxisMatch {
   mediaKey: string;
   subject: AxisPick;
   setting: AxisPick;
-  /** Null when the list has no form categories. */
-  form: AxisPick | null;
+  /** One per check ([checksOf]), in its order: its best form against its forms of another verdict. */
+  checks: CheckPick[];
+}
+
+export interface CheckPick extends AxisPick {
+  check: string;
 }
 
 /**
@@ -462,8 +520,8 @@ export function matchAxes(mediaKey: string, row: Float32Array, scored: ScoredAxi
   const floorAt = highest(baselines);
   if (settings.baseline !== null && floorAt === null) throw new Error('The floor needs a baseline description (“a photo”) in the list');
   const floor = floorAt === null ? null : scores[floorAt]!.score;
-  const pick = (axis: SideAxis): AxisPick | null => {
-    const on = scored.map((_, i) => i).filter((i) => scored[i]!.category.axis === axis);
+  const pick = (axis: SideAxis, check: string | null = null): AxisPick | null => {
+    const on = scored.map((_, i) => i).filter((i) => scored[i]!.category.axis === axis && (check === null || checkOf(scored[i]!.category) === check));
     if (on.length === 0) return null;
     const best = highest(on)!;
     const { score, description } = scores[best]!;
@@ -500,7 +558,8 @@ export function matchAxes(mediaKey: string, row: Float32Array, scored: ScoredAxi
   const subjectPick = pick('subject');
   const settingPick = pick('setting');
   if (!subjectPick || !settingPick) throw new Error(`Matching needs at least one ${subjectPick ? 'setting' : 'subject'} category`);
-  return { mediaKey, subject: subjectPick, setting: settingPick, form: pick('form') };
+  const checks = checksOf(scored.map((s) => s.category)).map((check): CheckPick => ({ ...pick('form', check)!, check }));
+  return { mediaKey, subject: subjectPick, setting: settingPick, checks };
 }
 
 /** What a photo comes to: clutter (in [category], the one that made it so), kept (by [category]), or neither. */
@@ -540,33 +599,43 @@ export function axisOutcome(match: AxisMatch, categories: readonly AxisCategory[
 function pickOf(match: AxisMatch, categories: readonly AxisCategory[], category: number): AxisPick {
   const axis = categories[category]!.axis;
   if (axis === 'baseline') throw new Error(`${categories[category]!.label} is a baseline: it decides nothing on its own`);
-  const pick = match[axis];
+  const pick = axis === 'form' ? match.checks.find((c) => c.check === checkOf(categories[category]!)) : match[axis];
   if (!pick) throw new Error(`The photo has no ${categories[category]!.axis} to measure ${categories[category]!.label} by`);
   return pick;
 }
 
 /**
- * What a photo's form comes to, on its own: clutter (a suggestion of its own) when the best form counts
- * (clearly ahead of every form of another verdict) and is clutter; otherwise none, with [Outcome.category]
- * the best form, to name it. Keepers don't stop it.
+ * What a photo comes to in [check], on its own: clutter (a suggestion of its own) when the check's best form
+ * counts (clearly ahead of every form of the check of another verdict) and is clutter; otherwise none, with
+ * [Outcome.category] the best form, to name it, or null when the list has no such check. Keepers don't stop it.
  */
-export function formOutcome(match: AxisMatch, categories: readonly AxisCategory[]): Outcome {
-  const f = match.form;
-  if (!f) return { verdict: 'none', category: null, reason: 'no form in the list' };
+export function checkOutcome(match: AxisMatch, categories: readonly AxisCategory[], check: string): Outcome {
+  const f = match.checks.find((c) => c.check === check);
+  if (!f) return { verdict: 'none', category: null, reason: `no ${check} check in the list` };
   const label = categories[f.best]!.label;
   if (f.counts && categories[f.best]!.verdict === 'clutter') return { verdict: 'clutter', category: f.best, reason: `${label} is clutter` };
   return { verdict: 'none', category: f.best, reason: f.counts ? label : `${label}, too close` };
 }
 
-/** The outcome that decides whether [category] has a photo: its form for a form, otherwise the subject-and-setting rule. */
+/** What the photo comes to in each check, in their order. */
+export function checkOutcomes(match: AxisMatch, categories: readonly AxisCategory[]): Outcome[] {
+  return match.checks.map((c) => checkOutcome(match, categories, c.check));
+}
+
+/** The outcome of [match] on [side]. */
+export function sideOutcome(match: AxisMatch, categories: readonly AxisCategory[], exceptions: readonly PairException[], side: Side): Outcome {
+  return side === 'content' ? axisOutcome(match, categories, exceptions) : checkOutcome(match, categories, side.check);
+}
+
+/** The outcome that decides whether [category] has a photo: its check for a form, otherwise the subject-and-setting rule. */
 function outcomeFor(match: AxisMatch, categories: readonly AxisCategory[], exceptions: readonly PairException[], category: number): Outcome {
-  return categories[category]!.axis === 'form' ? formOutcome(match, categories) : axisOutcome(match, categories, exceptions);
+  return sideOutcome(match, categories, exceptions, sideOf(categories[category]!));
 }
 
 export interface AxisCounts {
   /** Clutter subjects and settings, each with the photos it makes clutter, largest first. */
   clutter: CategoryCount[];
-  /** Clutter forms (Screenshots), each with its photos, largest first: suggestions of their own, a photo also in one above. */
+  /** Clutter forms (Screenshots), each with its photos, largest first: each check's suggestions of their own, a photo also in one above or in another check. */
   forms: CategoryCount[];
   /** Keep categories, each with the photos it keeps, largest first. */
   keepers: CategoryCount[];
@@ -587,26 +656,29 @@ export function countAxes(matches: AxisMatch[], categories: readonly AxisCategor
     const outcome = axisOutcome(m, categories, exceptions);
     const photo = photos.get(m.mediaKey);
     const trashable = photo !== undefined && photo.eligible && !photo.approved;
-    for (const pick of [m.subject, m.setting, m.form]) {
-      if (!pick || pick.counts || categories[pick.best]!.verdict !== 'clutter') continue;
+    for (const pick of [m.subject, m.setting, ...m.checks]) {
+      if (pick.counts || categories[pick.best]!.verdict !== 'clutter') continue;
       counts[pick.best]!.closeCalls++;
       const needs = settings[categories[pick.best]!.axis as SideAxis];
       if (!trashable || pick.score < needs.minScore) continue;
       // Would it be clutter here if this pick counted?
-      const counting = { ...m, [categories[pick.best]!.axis]: { ...pick, counts: true } } as AxisMatch;
+      const counting: AxisMatch =
+        pick === m.subject ? { ...m, subject: { ...pick, counts: true } } : pick === m.setting ? { ...m, setting: { ...pick, counts: true } } : { ...m, checks: m.checks.map((c) => (c === pick ? { ...c, counts: true } : c)) };
       const would = outcomeFor(counting, categories, exceptions, pick.best);
       if (would.verdict === 'clutter' && would.category === pick.best) counts[pick.best]!.justMissed.push({ mediaKey: m.mediaKey, description: phrase(categories[pick.best], pick.description), score: pick.score, lead: pick.lead });
     }
-    // The form: a suggestion of its own, whatever the subject and setting come to.
-    const formed = formOutcome(m, categories);
-    if (formed.verdict === 'clutter') {
-      screenshots++;
+    // Each check: a suggestion of its own, whatever the subject, the setting and the other checks come to.
+    let checked = false;
+    for (const f of m.checks) {
+      const formed = checkOutcome(m, categories, f.check);
+      if (formed.verdict !== 'clutter') continue;
+      checked = true;
       const count = counts[formed.category!]!;
-      const f = m.form!;
       if (!photo || !photo.eligible) count.protectedOrUnknown++;
       else if (photo.approved) count.approved++;
       else count.trashable.push({ mediaKey: m.mediaKey, description: phrase(categories[f.best], f.description), score: f.score, lead: f.lead });
     }
+    if (checked) screenshots++;
     if (outcome.verdict === 'none' || outcome.category === null) {
       neither++;
       continue;
@@ -634,7 +706,7 @@ export function countAxes(matches: AxisMatch[], categories: readonly AxisCategor
     clutter: counts.filter((c) => (c.category as AxisCategory).verdict === 'clutter' && (c.category as AxisCategory).axis !== 'form').sort(bySize),
     forms: counts.filter((c) => (c.category as AxisCategory).verdict === 'clutter' && (c.category as AxisCategory).axis === 'form').sort(bySize),
     keepers: counts.filter((c) => (c.category as AxisCategory).verdict === 'keep' && (c.category as AxisCategory).axis !== 'form').sort(bySize),
-    totals: `Clutter ${n(clutter)}${share(clutter)} · kept ${n(kept)}${share(kept)} · neither ${n(neither)}${share(neither)}${categories.some((c) => c.axis === 'form') ? ` · and clutter because of form ${n(screenshots)}${share(screenshots)}` : ''}`,
+    totals: `Clutter ${n(clutter)}${share(clutter)} · kept ${n(kept)}${share(kept)} · neither ${n(neither)}${share(neither)}${categories.some((c) => c.axis === 'form') ? ` · and clutter in a check ${n(screenshots)}${share(screenshots)}` : ''}`,
     photos: matches.length,
   };
 }
@@ -669,8 +741,28 @@ export function pairRows(matches: AxisMatch[], categories: readonly AxisCategory
 export interface AxisBreakdown {
   /** "Clutter: Products is clutter", "Kept: People keeps", "Neither: nothing that counts says clutter". */
   outcome: string;
+  /** The outcome as plain lines, for a comparison: the subject and setting's ("Products is clutter"), then each check's ("Screenshots check: Not a screenshot · Quality check: Intended photos"). */
+  lines: string[];
   /** Each side's rows, and how many descriptions were left out below them (for a photo opened large). */
-  sides: { title: string; rows: BreakdownRow[]; more: number }[];
+  sides: BreakdownSide[];
+}
+
+/** One side of a photo's breakdown: its title and rows, and what it came to, to compare it with another list's ([axisComparison]). */
+export interface BreakdownSide {
+  title: string;
+  /** [title] without the side's name: "Screenshots, 0.0286 ahead of Not a screenshot (…) · counts". */
+  detail: string;
+  rows: BreakdownRow[];
+  more: number;
+  /** 'Subject', 'Setting' or a check's ('Screenshots check'). */
+  name: string;
+  /** Its best category's name, and whether it counts ('counts', 'too close', 'below the floor'). */
+  best: string;
+  status: string;
+  /** The keep category heard on this side, or null. */
+  keeper: string | null;
+  /** The check this side is, or null for subject and setting. */
+  check: string | null;
 }
 
 /** A photo opened large lists each side's best descriptions: this share of them, but never fewer than [LARGE_MIN_ROWS]. */
@@ -693,16 +785,15 @@ export function axisBreakdown(row: Float32Array, scored: ScoredAxis[], overlap: 
   const starts = descriptionStarts(scored as ScoredCategory[]);
   const all = weightedDescriptionScores(row, scored as ScoredCategory[], settings);
   // What a side lists: each category as its best description, or every description.
-  const entries = (axis: SideAxis) =>
-    categories.flatMap((c, i) => (c.axis !== axis ? [] : shown === 'large' ? c.descriptions.map((_, d) => ({ i, description: d, score: all[starts[i]! + d]! })) : [{ i, description: scores[i]!.description, score: scores[i]!.score }]));
+  const entries = (on: (c: AxisCategory) => boolean) =>
+    categories.flatMap((c, i) => (!on(c) ? [] : shown === 'large' ? c.descriptions.map((_, d) => ({ i, description: d, score: all[starts[i]! + d]! })) : [{ i, description: scores[i]!.description, score: scores[i]!.score }]));
   const floor = categories.map((c, i) => ({ c, i })).filter(({ c }) => c.axis === 'baseline').sort((a, b) => scores[b.i]!.score - scores[a.i]!.score)[0];
   const weight = (c: AxisCategory, d: string) => {
     const w = (settings.categoryWeights[c.id] ?? 0) + (settings.descriptionWeights[d] ?? 0);
     return w === 0 ? null : `${w > 0 ? '+' : '−'}${w.toFixed(3).replace('-', '')}`;
   };
-  const side = (axis: SideAxis) => {
-    const pick = match[axis]!;
-    const listed = entries(axis);
+  const side = (pick: AxisPick, on: (c: AxisCategory) => boolean, name: string, check: string | null = null): BreakdownSide => {
+    const listed = entries(on);
     const keep = shown === 'large' ? Math.max(LARGE_MIN_ROWS, Math.ceil(listed.length * LARGE_SHARE)) : shown;
     const rows = listed
       .sort((a, b) => b.score - a.score)
@@ -713,20 +804,177 @@ export function axisBreakdown(row: Float32Array, scored: ScoredAxis[], overlap: 
         const vote = pick.votes.get(starts[s.i]! + s.description);
         return { label: c.label, kind: verdictKind(c.verdict), score: s.score.toFixed(3), description, weight: weight(c, description), vote: vote === undefined ? null : vote.toFixed(2) };
       });
-    const name = axis === 'subject' ? 'Subject' : axis === 'setting' ? 'Setting' : 'Form';
-    const against = pick.rival === null ? 'nothing of another verdict' : `${leadText(pick.lead)} ahead of ${categories[pick.rival]!.label}`;
-    const pools = settings.pooling > 0 && pick.rivalScore !== null ? ` (pooled ${pick.ownScore.toFixed(3)} against ${pick.rivalScore.toFixed(3)})` : '';
+    // The lead, how it is measured (pooled scores, when pooling is on) and the minimum it needs, together (2026-11-25).
+    const best = categories[pick.best]!;
+    const needs = settings.margins[best.id] ?? settings[best.axis as SideAxis].margin;
+    const against = pick.rival === null ? 'nothing of another verdict' : `${leadText(pick.lead)} ahead of ${categories[pick.rival]!.label} (${settings.pooling > 0 ? 'pooled; ' : ''}needs ${needs})`;
     const clutter = categories[pick.best]!.verdict === 'clutter';
     const aboveFloor = clutter && settings.baseline !== null && pick.baselineGap !== null && floor ? ` · ${leadText(pick.baselineGap)} above “${floor.c.descriptions[scores[floor.i]!.description]}”, needs ${settings.baseline}` : '';
     const keeper = pick.keeper && pick.keeper.index !== pick.best ? ` · ${categories[pick.keeper.index]!.label} close behind, keeps` : '';
     const belowFloor = clutter && settings.baseline !== null && pick.baselineGap !== null && pick.baselineGap < settings.baseline;
-    const status = pick.counts ? 'counts' : belowFloor ? 'below the floor, no say' : 'too close, no say';
-    return { title: `${name}: ${categories[pick.best]!.label}, ${against}${pools}${aboveFloor} · ${status}${keeper}`, rows, more: shown === 'large' ? Math.max(0, listed.length - keep) : 0 };
+    const status = pick.counts ? 'counts' : belowFloor ? 'below the floor' : 'too close';
+    const say = pick.counts ? '' : ', no say';
+    const detail = `${categories[pick.best]!.label}, ${against}${aboveFloor} · ${status}${say}${keeper}`;
+    return {
+      title: `${name}: ${detail}`,
+      detail,
+      rows,
+      more: shown === 'large' ? Math.max(0, listed.length - keep) : 0,
+      name,
+      best: categories[pick.best]!.label,
+      status,
+      keeper: pick.keeper ? categories[pick.keeper.index]!.label : null,
+      check,
+    };
   };
-  const word = outcome.verdict === 'clutter' ? 'Clutter' : outcome.verdict === 'keep' ? 'Kept' : 'Neither';
-  const formed = formOutcome(match, categories);
-  const formLine = match.form ? ` · form: ${formed.verdict === 'clutter' ? `${formed.reason}, a suggestion of its own` : formed.reason}` : '';
-  return { outcome: `${word}: ${outcome.reason}${formLine}`, sides: [side('subject'), side('setting'), ...(match.form ? [side('form')] : [])] };
+  const sides = [
+    side(match.subject, (c) => c.axis === 'subject', 'Subject'),
+    side(match.setting, (c) => c.axis === 'setting', 'Setting'),
+    ...match.checks.map((p) => side(p, (c) => c.axis === 'form' && checkOf(c) === p.check, `${p.check} check`, p.check)),
+  ];
+  const checks = match.checks.map((c) => [c.check, checkOutcome(match, categories, c.check)] as const);
+  const lines = [outcome.reason, ...(checks.length > 0 ? [checks.map(([check, o]) => `${check} check: ${o.reason}`).join(' · ')] : [])];
+  return { outcome: outcomeLine(outcome, checks, categories), lines, sides };
+}
+
+/**
+ * The photo's outcome in words, saying what happens to it: a check offers it whatever the subject and
+ * setting come to, so then that comes first, not "Kept" (2026-11-25: "Kept" read as left out of the
+ * suggestions), and the subject and setting's own result after it as a separate one, not as overruled
+ * ("Offered by its check: Screenshots · subject and setting: People keeps").
+ */
+function outcomeLine(outcome: Outcome, checks: readonly (readonly [string, Outcome])[], categories: readonly AxisCategory[]): string {
+  const content = `${outcome.verdict === 'clutter' ? 'Clutter' : outcome.verdict === 'keep' ? 'Kept' : 'Neither'}: ${outcome.reason}`;
+  const offered = checks.filter(([, o]) => o.verdict === 'clutter').map(([, o]) => categories[o.category!]!.label);
+  if (offered.length === 0) return [content, ...checks.map(([check, o]) => `${check} check: ${o.reason}`)].join(' · ');
+  const by = `by its ${offered.length === 1 ? 'check' : 'checks'}: ${offered.join(', ')}`;
+  return `Offered ${by} · subject and setting: ${outcome.reason}`;
+}
+
+/** A piece of a line of text: a category's name (in its verdict's colour), a description (set apart), or the words around them. */
+export interface TextPart {
+  text: string;
+  /** A category's name: its verdict's kind, as in the rows; null for anything else. */
+  kind: BreakdownRow['kind'] | null;
+  /** A description: the words the AI model scores photos against. */
+  term: boolean;
+}
+
+/**
+ * [text] in pieces, each name and description of [categories] apart ("Things to buy, sell or show is clutter"),
+ * so a page sets them apart the same way everywhere (2026-11-25). Whole words only, longest first; a check's
+ * name ("Screenshots check") isn't a category's.
+ */
+export function categoryParts(text: string, categories: readonly AxisCategory[]): TextPart[] {
+  const found = new Map<string, Omit<TextPart, 'text'>>();
+  for (const c of categories) {
+    for (const d of c.descriptions) found.set(d, { kind: null, term: true });
+    if (c.axis !== 'baseline') found.set(c.label, { kind: verdictKind(c.verdict), term: false });
+  }
+  const names = [...found.keys()].filter((l) => l.length > 0).sort((a, b) => b.length - a.length);
+  if (names.length === 0) return [{ text, kind: null, term: false }];
+  const escaped = names.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const pattern = new RegExp(`(?<![\\p{L}\\p{N}])(?:${escaped.join('|')})(?![\\p{L}\\p{N}])(?! check)`, 'gu');
+  const parts: TextPart[] = [];
+  let at = 0;
+  for (const m of text.matchAll(pattern)) {
+    if (m.index > at) parts.push({ text: text.slice(at, m.index), kind: null, term: false });
+    parts.push({ text: m[0], ...found.get(m[0])! });
+    at = m.index + m[0].length;
+  }
+  if (at < text.length) parts.push({ text: text.slice(at), kind: null, term: false });
+  return parts;
+}
+
+/** What a breakdown is worked out from: a photo's scores, with a list and its settings. */
+export interface BreakdownInput {
+  row: Float32Array;
+  scored: ScoredAxis[];
+  overlap: Overlap;
+  settings: AxisSettings;
+  exceptions: readonly PairException[];
+}
+
+/** A side that a change moved: what it came to before and after, and only its rows that moved. */
+export interface ChangedSide {
+  /** What changed, under the side's name: "Screenshots check: Screenshots too close → counts", "Quality check: Accidental shots counts; was Screenshots counts". */
+  title: string;
+  /** What the side came to before and after, without its name, which the heading gives ("Accidental shots, 0.0086 ahead of … · too close, no say"), or "none". */
+  before: string;
+  after: string;
+  /** Its whole scoring before and after, as the breakdown lists it: a side that changed is shown in full both times (2026-11-25). */
+  beforeRows: BreakdownRow[];
+  rows: BreakdownRow[];
+}
+
+/**
+ * A photo's breakdown under two lists or settings ([names]: "Now", "With the edits"), said once where they
+ * agree: a summary line of both outcomes, the sides that changed in full before and after, and the
+ * rest once ([unchanged]). A side changed when its best category, whether it counts, its keeper or its rows
+ * moved; pooled scores alone shifting (pooling regroups when a description goes) don't count. With nothing
+ * changed, [changed] is empty and [unchanged] is the whole breakdown (2026-11-25).
+ */
+export interface AxisComparison {
+  /** The outcome before, and after when it differs (null when the same), each as [AxisBreakdown.lines]: shown with ↓ between, not named (2026-11-25). */
+  summary: { before: string[]; after: string[] | null };
+  changed: ChangedSide[];
+  /** "Unchanged: subject Landmarks, sights and art (too close, keeps) · setting Museums and historic places (counts)", or null when every side changed or nothing did. */
+  unchangedLine: string | null;
+  /** The sides that didn't change, as they are with the edits. */
+  unchanged: BreakdownSide[];
+}
+
+const sideOutcomeText = (s: BreakdownSide) => `${s.best} ${s.status}${s.keeper && s.keeper !== s.best ? `, ${s.keeper} keeps` : ''}`;
+
+export function axisComparison(before: BreakdownInput, after: BreakdownInput, names: readonly [string, string], shown: number | 'large'): AxisComparison {
+  const [a, b] = [before, after].map((x) => axisBreakdown(x.row, x.scored, x.overlap, x.settings, x.exceptions, shown)) as [AxisBreakdown, AxisBreakdown];
+  const rowKey = (r: BreakdownRow) => `${r.label}\u0000${r.description}`;
+  const same = (x: BreakdownSide, y: BreakdownSide) =>
+    x.best === y.best && x.status === y.status && x.keeper === y.keeper && JSON.stringify(x.rows.map((r) => [rowKey(r), r.score, r.weight])) === JSON.stringify(y.rows.map((r) => [rowKey(r), r.score, r.weight]));
+  const changed: ChangedSide[] = [];
+  const unchanged: BreakdownSide[] = [];
+  // A check is the same check before and after when it has the same name, or else when it holds the same
+  // categories (a form moved to a check of another name): its clutter ones first, then any.
+  const formsIn = (x: BreakdownInput, check: string, clutterOnly: boolean) =>
+    new Set(x.scored.filter((c) => c.category.axis === 'form' && checkOf(c.category) === check && (!clutterOnly || c.category.verdict === 'clutter')).map((c) => c.category.id));
+  const shares = (x: BreakdownSide, y: BreakdownSide, clutterOnly: boolean) => {
+    const ours = formsIn(after, y.check!, clutterOnly);
+    return [...formsIn(before, x.check!, clutterOnly)].some((id) => ours.has(id));
+  };
+  const used = new Set<BreakdownSide>();
+  const partner = (y: BreakdownSide): BreakdownSide | undefined => {
+    if (y.check === null) return a.sides.find((x) => x.name === y.name);
+    // A check split in two pairs with both.
+    const checks = a.sides.filter((x) => x.check !== null);
+    return checks.find((x) => x.check === y.check) ?? checks.find((x) => shares(x, y, true)) ?? checks.find((x) => shares(x, y, false));
+  };
+  const later = names[1].toLowerCase();
+  for (const y of b.sides) {
+    const x = partner(y);
+    if (x) used.add(x);
+    if (x && x.name === y.name && same(x, y)) {
+      unchanged.push(y);
+      continue;
+    }
+    // The heading says what changed, under the side's name with the change; the lines below say before and after (2026-11-25).
+    const moved = !x
+      ? sideOutcomeText(y)
+      : sideOutcomeText(x) === sideOutcomeText(y)
+        ? `${sideOutcomeText(y)}, unchanged`
+        : x.best === y.best && x.keeper === y.keeper
+          ? `${y.best} ${x.status} → ${y.status}`
+          : `${sideOutcomeText(y)}; was ${sideOutcomeText(x)}`;
+    // From a check of another name (one split in two, a form moved): which check the line before is, since it isn't this one.
+    const beforeLine = !x ? 'none' : x.check !== null && x.check !== y.check ? `in the ${x.name}: ${x.detail}` : x.detail;
+    changed.push({ title: `${y.name}: ${moved}`, before: beforeLine, after: y.detail, beforeRows: x?.rows ?? [], rows: y.rows });
+  }
+  // A check that is gone with the change, none of its categories in a check after it.
+  for (const x of a.sides.filter((s) => !used.has(s))) {
+    changed.push({ title: `${x.name}: ${sideOutcomeText(x)}; gone ${later}`, before: x.detail, after: 'none', beforeRows: x.rows, rows: [] });
+  }
+  const summary = { before: a.lines, after: a.outcome === b.outcome ? null : b.lines };
+  const unchangedLine = changed.length === 0 || unchanged.length === 0 ? null : `Unchanged: ${unchanged.map((s) => `${s.name.toLowerCase()} ${s.best} (${s.status}${s.keeper ? `, ${s.keeper === s.best ? 'keeps' : `${s.keeper} keeps`}` : ''})`).join(' · ')}`;
+  return { summary, changed, unchangedLine, unchanged };
 }
 
 /** One photo in a review sheet: its number on the contact sheet, the sample it is from, its caption and how it scored. */
@@ -775,17 +1023,13 @@ export interface AxisBuff {
   max: number;
 }
 
-/** The outcome of [row] with [settings]: by subject and setting ('content'), or by its form. */
-function outcomeOf(row: Float32Array, scored: ScoredAxis[], overlap: Overlap, settings: AxisSettings, exceptions: readonly PairException[], side: 'content' | 'form'): Outcome {
+/** The outcome of [row] with [settings] on [side]: by subject and setting, or in a check. */
+function outcomeOf(row: Float32Array, scored: ScoredAxis[], overlap: Overlap, settings: AxisSettings, exceptions: readonly PairException[], side: Side): Outcome {
   const match = matchAxes('', row, scored, overlap, settings);
-  const categories = scored.map((s) => s.category);
-  return side === 'form' ? formOutcome(match, categories) : axisOutcome(match, categories, exceptions);
+  return sideOutcome(match, scored.map((s) => s.category), exceptions, side);
 }
 
-/** The side a category's photos are decided on. */
-const sideOf = (category: AxisCategory): 'content' | 'form' => (category.axis === 'form' ? 'form' : 'content');
-
-/** Whether a photo is clutter in category [category] with [settings], subject, setting or form. */
+/** Whether a photo is clutter in category [category] with [settings], subject, setting or form (in its check). */
 export function clutterIn(row: Float32Array, scored: ScoredAxis[], overlap: Overlap, settings: AxisSettings, exceptions: readonly PairException[], category: number): boolean {
   const o = outcomeOf(row, scored, overlap, settings, exceptions, sideOf(scored[category]!.category));
   return o.verdict === 'clutter' && o.category === category;
@@ -794,15 +1038,15 @@ export function clutterIn(row: Float32Array, scored: ScoredAxis[], overlap: Over
 /**
  * For a photo that is clutter on [side], what could leave it out, each with the smallest weight on its
  * best description for this photo that does: for subject and setting ('content'), each keep category (so
- * the clutter is too close to count, or the keeper is heard and keep wins); for form, each form that isn't
- * clutter (Not a screenshot). Smallest first; none larger than [max] ([MAX_BUFFS] of the scoring).
+ * the clutter is too close to count, or the keeper is heard and keep wins); in a check, each of its forms
+ * that isn't clutter (Not a screenshot). Smallest first; none larger than [max] ([MAX_BUFFS] of the scoring).
  */
-export function axisBuffsFor(row: Float32Array, scored: ScoredAxis[], overlap: Overlap, settings: AxisSettings, exceptions: readonly PairException[], side: 'content' | 'form', max: number): AxisBuff[] {
+export function axisBuffsFor(row: Float32Array, scored: ScoredAxis[], overlap: Overlap, settings: AxisSettings, exceptions: readonly PairException[], side: Side, max: number): AxisBuff[] {
   const now = outcomeOf(row, scored, overlap, settings, exceptions, side);
   if (now.verdict !== 'clutter' || now.category === null) throw new Error('Only a photo that is clutter can be buffed out of it');
   const scores = weightedScores(row, scored as ScoredCategory[], settings);
   const buffs = scored.flatMap(({ category }, i): AxisBuff[] => {
-    const helps = side === 'form' ? category.axis === 'form' && category.verdict !== 'clutter' : (category.axis === 'subject' || category.axis === 'setting') && category.verdict === 'keep';
+    const helps = side === 'content' ? (category.axis === 'subject' || category.axis === 'setting') && category.verdict === 'keep' : category.axis === 'form' && checkOf(category) === side.check && category.verdict !== 'clutter';
     if (!helps) return [];
     const description = category.descriptions[scores[i]!.description]!;
     const by = smallestStep((step) => outcomeOf(row, scored, overlap, withAxisBuff(settings, description, step), exceptions, side).verdict !== 'clutter', max);
@@ -823,22 +1067,27 @@ export function axisStayRaise(row: Float32Array, scored: ScoredAxis[], overlap: 
 
 /**
  * A buff's button: "Buff People (subject) “a selfie” +0.0063", or why there is none. The side is named
- * after the label unless the label already says it ("Travel (subject)").
+ * after the label unless the label already says it (an edited one such as "Pets (subject)").
  */
 export function axisBuffButton(buff: AxisBuff): string {
   const name = buff.label.endsWith(`(${buff.axis})`) ? buff.label : `${buff.label} (${buff.axis})`;
   return buff.by === null ? `${name} “${buff.description}”: more than +${buff.max} needed` : `Buff ${name} “${buff.description}” +${buff.by.toFixed(4)}`;
 }
 
-/** A photo whose outcome a change alters, before and after, by subject and setting ('content') or by its form. */
+/** A photo whose outcome a change alters, before and after, by subject and setting ('content') or in a check. */
 export interface AxisChange {
-  side: 'content' | 'form';
+  side: Side;
   mediaKey: string;
   before: Outcome;
   after: Outcome;
   /** The description it scored as in the clutter category it was in, if it was clutter: the one Stay raises. */
   fromDescription: string | null;
   score: number;
+  /**
+   * Every category that offers the photo before and after, by subject and setting and in each check: a photo
+   * that joins one check while another still offers it was never "not suggested" (2026-11-25).
+   */
+  offered: { before: string[]; after: string[] };
 }
 
 export interface AxisEffects {
@@ -857,6 +1106,28 @@ export interface AxisLists {
   exceptions: { before: readonly PairException[]; after: readonly PairException[] };
 }
 
+/** The clutter forms that offer [match]'s photo, by id, each with its check and outcome there. */
+function offeredBy(match: AxisMatch, list: readonly AxisCategory[]): Map<string, { check: string; outcome: Outcome }> {
+  const offered = new Map<string, { check: string; outcome: Outcome }>();
+  for (const check of checksOf(list)) {
+    const outcome = checkOutcome(match, list, check);
+    if (outcome.verdict === 'clutter') offered.set(list[outcome.category!]!.id, { check, outcome });
+  }
+  return offered;
+}
+
+/**
+ * Where [match]'s photo stands, not offered, for form [id] in [list]: its check's outcome there (the check
+ * it is in, or else [check]), or nothing when neither is in [list]. Never clutter: offered by another form,
+ * it is still not offered by this one.
+ */
+function otherwise(match: AxisMatch, list: readonly AxisCategory[], id: string, check: string): Outcome {
+  const form = list.find((c) => c.id === id && c.axis === 'form');
+  const its = form ? checkOf(form) : checksOf(list).includes(check) ? check : null;
+  const outcome = its === null ? null : checkOutcome(match, list, its);
+  return outcome && outcome.verdict !== 'clutter' ? outcome : { verdict: 'none', category: null, reason: 'not in a check' };
+}
+
 /** What a change does to the photos that may be trashed: [before] and [after] are the same photos in the same order. */
 export function axisEffects(before: AxisMatch[], after: AxisMatch[], lists: AxisLists, photos: Map<string, ClutterPhoto>): AxisEffects {
   if (before.length !== after.length) throw new Error(`Both must match the same photos (${before.length} and ${after.length})`);
@@ -866,18 +1137,31 @@ export function axisEffects(before: AxisMatch[], after: AxisMatch[], lists: Axis
     if (a.mediaKey !== b.mediaKey) throw new Error('Both must match the same photos in the same order');
     const photo = photos.get(b.mediaKey);
     if (!photo || !photo.eligible || photo.approved) return;
-    const compare = (side: 'content' | 'form', was: Outcome, now: Outcome) => {
+    const offers = (m: AxisMatch, list: readonly AxisCategory[], exceptions: readonly PairException[]) => {
+      const content = axisOutcome(m, list, exceptions);
+      return [...(content.verdict === 'clutter' ? [content] : []), ...checkOutcomes(m, list).filter((o) => o.verdict === 'clutter')].map((o) => list[o.category!]!.label);
+    };
+    const offered = { before: offers(b, lists.before, lists.exceptions.before), after: offers(a, lists.after, lists.exceptions.after) };
+    const compare = (side: Side, was: Outcome, now: Outcome) => {
       const wasClutter = was.verdict === 'clutter';
       const isClutter = now.verdict === 'clutter';
       if (!wasClutter && !isClutter) return;
       const fromDescription = wasClutter ? phrase(lists.before[was.category!], pickOf(b, lists.before, was.category!).description) : null;
-      const change = (score: number): AxisChange => ({ side, mediaKey: b.mediaKey, before: was, after: now, fromDescription, score });
+      const change = (score: number): AxisChange => ({ side, mediaKey: b.mediaKey, before: was, after: now, fromDescription, score, offered });
       if (wasClutter && !isClutter) effects.leaves.push(change(pickOf(b, lists.before, was.category!).score));
       else if (!wasClutter && isClutter) effects.joins.push(change(pickOf(a, lists.after, now.category!).score));
       else if (lists.before[was.category!]!.id !== lists.after[now.category!]!.id) effects.moves.push(change(pickOf(a, lists.after, now.category!).score));
     };
     compare('content', axisOutcome(b, lists.before, lists.exceptions.before), axisOutcome(a, lists.after, lists.exceptions.after));
-    compare('form', formOutcome(b, lists.before), formOutcome(a, lists.after));
+    // The checks, followed by category, not by check name: a form moved to another check, still offering the
+    // photo, changes nothing (2026-11-25: all of Screenshots showed as leaving when it got a check of its own).
+    const [was, now] = [offeredBy(b, lists.before), offeredBy(a, lists.after)];
+    const gone = [...was].filter(([id]) => !now.has(id)).map(([, o]) => o);
+    const come = [...now].filter(([id]) => !was.has(id)).map(([, o]) => o);
+    const paired = Math.min(gone.length, come.length);
+    for (let k = 0; k < paired; k++) compare({ check: come[k]!.check }, gone[k]!.outcome, come[k]!.outcome);
+    for (const g of gone.slice(paired)) compare({ check: g.check }, g.outcome, otherwise(a, lists.after, lists.before[g.outcome.category!]!.id, g.check));
+    for (const c of come.slice(paired)) compare({ check: c.check }, otherwise(b, lists.before, lists.after[c.outcome.category!]!.id, c.check), c.outcome);
   });
   const order = (list: readonly AxisCategory[], pick: (c: AxisChange) => number) => (x: AxisChange, y: AxisChange) => pick(x) - pick(y) || y.score - x.score;
   effects.leaves.sort(order(lists.before, (c) => c.before.category!));
@@ -901,17 +1185,25 @@ export function axisGroups(changes: AxisChange[], list: readonly AxisCategory[],
   return [...by].sort(([a], [b]) => a - b).map(([i, group]) => ({ key: list[i]!.id, title: `${list[i]!.label} · ${n(group.length)}`, changes: group }));
 }
 
-/** What an outcome says, in a caption: "Products", "kept (People)", "not suggested", or for a form its best ("Not a screenshot"). */
-function outcomeParts(o: Outcome, list: readonly AxisCategory[], side: 'content' | 'form'): CaptionPart[] {
+/** What an outcome says, in a caption: "Products", "kept (People)", "not suggested", or in a check its best ("Not a screenshot"). */
+function outcomeParts(o: Outcome, list: readonly AxisCategory[], side: Side): CaptionPart[] {
   if (o.verdict === 'clutter') return [{ text: list[o.category!]!.label, kind: 'clutter', strong: true }];
   if (o.verdict === 'keep') return [{ text: 'kept', kind: null, strong: true }, { text: ' (', kind: null }, { text: list[o.category!]!.label, kind: 'counterweight' }, { text: ')', kind: null }];
-  if (side === 'form' && o.category !== null) return [{ text: o.reason, kind: null, strong: true }];
+  if (side !== 'content' && o.category !== null) return [{ text: o.reason, kind: null, strong: true }];
   return [{ text: 'not suggested', kind: null, strong: true }];
 }
 
 /** Where a photo goes, in bold, then why: 'Products → kept (People)', 'not suggested → Screen photos', 'Screenshots → Not a screenshot'. */
 export function axisCaption(change: AxisChange, lists: AxisLists): CaptionPart[] {
-  return [...outcomeParts(change.before, lists.before, change.side), { text: ' → ', kind: null, strong: true }, ...outcomeParts(change.after, lists.after, change.side)];
+  // Offered by another category too, before or after: every category that offers it, not "not suggested".
+  // A check's own outcome stays, in brackets, where it names something ("Products (Screenshots, too close)").
+  const part = (o: Outcome, list: readonly AxisCategory[], offered: string[]): CaptionPart[] => {
+    const all: CaptionPart = { text: offered.join(', '), kind: 'clutter', strong: true };
+    if (o.verdict === 'clutter') return offered.length > 1 ? [all] : outcomeParts(o, list, change.side);
+    if (offered.length === 0) return outcomeParts(o, list, change.side);
+    return change.side !== 'content' && o.category !== null ? [all, { text: ` (${o.reason})`, kind: null }] : [all];
+  };
+  return [...part(change.before, lists.before, change.offered.before), { text: ' → ', kind: null, strong: true }, ...part(change.after, lists.after, change.offered.after)];
 }
 
 /** What [what] does, in parts the popup shows on lines of their own. */
@@ -928,14 +1220,19 @@ export function axisSummary(what: string, effects: AxisEffects, lists: AxisLists
   };
 }
 
-/** The categories by axis, for the page: subjects, settings, then forms. */
-export function axisSections(categories: readonly AxisCategory[]): { axis: Axis; title: string; categories: AxisCategory[] }[] {
+/** The categories by axis, for the page: subjects, settings, then each check's forms. */
+export function axisSections(categories: readonly AxisCategory[]): { axis: Axis; check: string | null; title: string; categories: AxisCategory[] }[] {
   return [
-    { axis: 'subject', title: 'Subjects: what a photo is of', categories: categories.filter((c) => c.axis === 'subject') },
-    { axis: 'setting', title: 'Settings: where it is', categories: categories.filter((c) => c.axis === 'setting') },
-    { axis: 'form', title: 'Form: what kind of image it is, decided on its own', categories: categories.filter((c) => c.axis === 'form') },
-    { axis: 'baseline', title: 'Baseline: what any photo scores, for the floor', categories: categories.filter((c) => c.axis === 'baseline') },
+    { axis: 'subject', check: null, title: 'Subjects: what a photo is of', categories: categories.filter((c) => c.axis === 'subject') },
+    { axis: 'setting', check: null, title: 'Settings: where it is', categories: categories.filter((c) => c.axis === 'setting') },
+    ...checksOf(categories).map((check) => ({ axis: 'form' as const, check, title: checkTitle(check), categories: categories.filter((c) => c.axis === 'form' && checkOf(c) === check) })),
+    { axis: 'baseline', check: null, title: 'Baseline: what any photo scores, for the floor', categories: categories.filter((c) => c.axis === 'baseline') },
   ];
+}
+
+/** A check's heading: "Check: Screenshots, a system of its own: its clutter forms offer a photo whatever anything else decides; its neutral ones hold them back". */
+export function checkTitle(check: string): string {
+  return `Check: ${check}, a system of its own: its clutter forms offer a photo whatever anything else decides; its neutral ones hold them back`;
 }
 
 /** How many different descriptions (phrases) the list's categories have, each counted once. */
@@ -943,14 +1240,14 @@ export function axisDescriptionCount(list: AxisList): number {
   return new Set(list.categories.flatMap((c) => c.descriptions)).size;
 }
 
-/** "21 subjects, 7 settings, 2 forms and 1 baseline, 1 exception"; an axis with none is left out, but for subjects and settings. */
+/** "21 subjects, 7 settings, 2 forms in 1 check and 1 baseline, 1 exception"; an axis with none is left out, but for subjects and settings. */
 export function axisListSummary(list: AxisList): string {
   const count = (axis: Axis, one: string, many: string) => {
     const k = list.categories.filter((c) => c.axis === axis).length;
     return `${k} ${k === 1 ? one : many}`;
   };
   const has = (axis: Axis) => list.categories.some((c) => c.axis === axis);
-  const parts = [count('subject', 'subject', 'subjects'), count('setting', 'setting', 'settings'), ...(has('form') ? [count('form', 'form', 'forms')] : []), ...(has('baseline') ? [count('baseline', 'baseline', 'baselines')] : [])];
+  const parts = [count('subject', 'subject', 'subjects'), count('setting', 'setting', 'settings'), ...(has('form') ? [`${count('form', 'form', 'forms')} in ${checksOf(list.categories).length === 1 ? '1 check' : `${checksOf(list.categories).length} checks`}`] : []), ...(has('baseline') ? [count('baseline', 'baseline', 'baselines')] : [])];
   const exceptions = list.exceptions.length;
   return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]!}${exceptions > 0 ? `, ${exceptions} ${exceptions === 1 ? 'exception' : 'exceptions'}` : ''}`;
 }

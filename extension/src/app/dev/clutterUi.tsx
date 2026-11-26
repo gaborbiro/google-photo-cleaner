@@ -4,6 +4,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { hoverCardTop, stayButton, stayTitle, typedNumber, type Breakdown, type CaptionPart, type CategoryKind, type ChangeSummary } from '../search/clutter';
+import type { TextPart } from '../search/clutterAxes';
 
 /** Photos scored between pauses, so the page keeps drawing while it works. */
 export const CHUNK = 500;
@@ -46,6 +47,19 @@ export interface TitledBreakdown {
   /** A subject's, setting's or form's title, shown plain under a part's bold one ("Now", "With the buff"). */
   side?: boolean;
   breakdown: Breakdown;
+  /** [title] in pieces, its category names apart, to set them apart; without it, [title] as it is. */
+  titleParts?: TextPart[];
+  /** Part of the section above it: no divider between them (a comparison's "Now" and "With the edits" lines). */
+  joined?: boolean;
+  /** Parts shown folded under [Fold.summary] (what a change left as it was). */
+  fold?: Fold;
+}
+
+export interface Fold {
+  summary: string;
+  /** [summary] in pieces, as [TitledBreakdown.titleParts]. */
+  summaryParts?: TextPart[];
+  parts: TitledBreakdown[];
 }
 
 /** The gap kept between a hover card and the window's edges. */
@@ -67,13 +81,24 @@ export function BreakdownCard({ breakdowns, side }: { breakdowns: TitledBreakdow
   );
 }
 
+/** A line in pieces, its category names set apart as in the rows. */
+function Parts({ parts }: { parts: TextPart[] }) {
+  return <>{parts.map((p, i) => (p.kind !== null ? <span key={i} className={`clutter-name ${p.kind}`}>{p.text}</span> : p.term ? <span key={i} className="clutter-term">{p.text}</span> : p.text))}</>;
+}
+
 /** How a photo scored, side by side: in a hover card, or beside a photo opened large. */
-function Breakdowns({ breakdowns }: { breakdowns: TitledBreakdown[] }) {
+function Breakdowns({ breakdowns, legend = true }: { breakdowns: TitledBreakdown[]; legend?: boolean }) {
   return (
     <>
-      {breakdowns.map(({ title, side, breakdown }, i) => (
-        <div key={`${i} ${title ?? ''}`} className="clutter-card-scoring">
-          {title && <p className={side ? 'clutter-card-title clutter-card-side' : 'clutter-card-title'}>{title}</p>}
+      {breakdowns.map(({ title, titleParts, side, breakdown, fold, joined }, i) => (
+        <div key={`${i} ${title ?? ''}`} className={joined ? 'clutter-card-scoring clutter-card-joined' : 'clutter-card-scoring'}>
+          {fold && (
+            <details className="clutter-card-fold">
+              <summary className="clutter-card-title clutter-card-side">{fold.summaryParts ? <Parts parts={fold.summaryParts} /> : fold.summary}</summary>
+              <Breakdowns breakdowns={fold.parts} legend={false} />
+            </details>
+          )}
+          {title && <p className={side ? 'clutter-card-title clutter-card-side' : 'clutter-card-title'}>{titleParts ? <Parts parts={titleParts} /> : title}</p>}
           {breakdown.heading && <p className="clutter-card-heading">{breakdown.heading}</p>}
           {breakdown.rows.length > 0 && (
             <table>
@@ -81,7 +106,7 @@ function Breakdowns({ breakdowns }: { breakdowns: TitledBreakdown[] }) {
                 {breakdown.rows.map((r) => (
                   <tr key={`${r.label} ${r.description}`} className={r.kind}>
                     <td className="mono">{r.score}</td>
-                    <td>{r.label}<span className="muted"> · {r.description}{r.weight && ` (weight ${r.weight})`}{r.vote && ` · vote ${r.vote}`}</span></td>
+                    <td><span className={`clutter-name ${r.kind}`}>{r.label}</span><span className="muted"> · </span><span className="muted clutter-term">{r.description}</span><span className="muted">{r.weight && ` (weight ${r.weight})`}{r.vote && ` · vote ${r.vote}`}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -90,7 +115,11 @@ function Breakdowns({ breakdowns }: { breakdowns: TitledBreakdown[] }) {
           {breakdown.more && <p className="muted">{breakdown.more}.</p>}
         </div>
       ))}
-      <p className="muted">Green: counterweights, or what keeps a photo; grey: neither.</p>
+      {legend && (
+        <p className="small clutter-card-legend">
+          <span className="clutter-kind-clutter">Red: clutter</span>; <span className="clutter-kind-counterweight">green: counterweights, or what keeps a photo</span>; <span className="clutter-kind-neutral">grey: neither</span>.
+        </p>
+      )}
     </>
   );
 }
@@ -268,7 +297,7 @@ export function Caption({ parts }: { parts: CaptionPart[] }) {
   return (
     <>
       {parts.map((p, i) => {
-        const text = p.kind ? <span key={i} className={`clutter-kind-${p.kind}`}>{p.text}</span> : p.text;
+        const text = p.kind ? <span key={i} className={`clutter-kind-${p.kind}`}>{p.text}</span> : p.term ? <span key={i} className="clutter-term">{p.text}</span> : p.text;
         return p.strong ? <strong key={i}>{text}</strong> : text;
       })}
     </>
@@ -387,6 +416,36 @@ export function AddField({ label, placeholder, onAdd, children }: { label: strin
       {children}
       <button onClick={add}>{label}</button>
     </div>
+  );
+}
+
+/**
+ * A text field whose value counts only when it is committed: on Enter or on leaving the field, and only when
+ * it changed; Escape puts it back. For a value the page regroups by, such as a form's check, which would move
+ * the field away at the first letter typed (2026-11-25).
+ */
+export function CommitField({ value, label, list, className, onCommit }: { value: string; label: string; list?: string; className?: string; onCommit: (text: string) => void }) {
+  const [text, setText] = useState(value);
+  useEffect(() => {
+    setText(value);
+  }, [value]);
+  const commit = () => {
+    if (text !== value) onCommit(text);
+  };
+  return (
+    <input
+      type="text"
+      aria-label={label}
+      list={list}
+      className={className}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') setText(value);
+      }}
+    />
   );
 }
 
